@@ -1,8 +1,8 @@
-// LabProject.cpp : 응용 프로그램에 대한 진입점을 정의합니다.
+// RaisingPet.cpp : 응용 프로그램에 대한 진입점을 정의합니다.
 //
 
 #include "stdafx.h"
-#include "LabProject.h"
+#include "RaisingPet.h"
 #include "GameFramework.h"
 
 #define MAX_LOADSTRING 100
@@ -28,12 +28,12 @@ int APIENTRY _tWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPTSTR lpCm
 	HACCEL hAccelTable;
 
 	::LoadString(hInstance, IDS_APP_TITLE, szTitle, MAX_LOADSTRING);
-	::LoadString(hInstance, IDC_LABPROJECT045, szWindowClass, MAX_LOADSTRING);
+	::LoadString(hInstance, IDC_RAISINGPET, szWindowClass, MAX_LOADSTRING);
 	MyRegisterClass(hInstance);
 
 	if (!InitInstance(hInstance, nCmdShow)) return(FALSE);
 
-	hAccelTable = ::LoadAccelerators(hInstance, MAKEINTRESOURCE(IDC_LABPROJECT045));
+	hAccelTable = ::LoadAccelerators(hInstance, MAKEINTRESOURCE(IDC_RAISINGPET));
 
 	while (1)
 	{
@@ -67,10 +67,10 @@ ATOM MyRegisterClass(HINSTANCE hInstance)
 	wcex.cbClsExtra = 0;
 	wcex.cbWndExtra = 0;
 	wcex.hInstance = hInstance;
-	wcex.hIcon = ::LoadIcon(hInstance, MAKEINTRESOURCE(IDI_LABPROJECT045));
+	wcex.hIcon = ::LoadIcon(hInstance, MAKEINTRESOURCE(IDI_RAISINGPET));
 	wcex.hCursor = ::LoadCursor(NULL, IDC_ARROW);
 	wcex.hbrBackground = (HBRUSH)(COLOR_WINDOW + 1);
-	wcex.lpszMenuName = NULL;//MAKEINTRESOURCE(IDC_LABPROJECT045);
+	wcex.lpszMenuName = NULL;//MAKEINTRESOURCE(IDC_RAISINGPET);
 	wcex.lpszClassName = szWindowClass;
 	wcex.hIconSm = ::LoadIcon(wcex.hInstance, MAKEINTRESOURCE(IDI_SMALL));
 
