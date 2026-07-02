@@ -107,14 +107,3 @@ public:
 
 	void LoadMeshFromFile(ID3D12Device *pd3dDevice, ID3D12GraphicsCommandList *pd3dCommandList, char *pstrFileName);
 };
-
-/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-class CCubeMesh : public CMesh
-{
-public:
-	CCubeMesh(ID3D12Device* device, ID3D12GraphicsCommandList* cmdList,
-		float fWidth = 1.0f, float fHeight = 1.0f, float fDepth = 1.0f);
-
-	virtual ~CCubeMesh();
-};
