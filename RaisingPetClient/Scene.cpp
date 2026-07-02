@@ -147,7 +147,7 @@ void CGameScene::BuildObjects(ID3D12Device* pd3dDevice, ID3D12GraphicsCommandLis
 
 	const PET_ASSET_DESC petAssets[] =
 	{
-		{ "TheCA", "Assets/TheCA/TheCAMesh.obj", L"Assets/TheCA/TheCATexture.dds", 5.0f, -25.0f, 0.0f },
+		{ "TheCA", "Assets/TheCA/TheCAMesh.obj", L"Assets/TheCA/TheCATexture.dds", 5.0f, -28.0f, 0.0f },
 		{ "Touma", "Assets/Touma/ToumaMesh.obj", L"Assets/Touma/ToumaTexture.dds", -5.0f, -28.0f, 0.0f }
 	};
 
