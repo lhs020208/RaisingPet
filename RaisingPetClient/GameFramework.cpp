@@ -501,6 +501,42 @@ void CGameFramework::MoveToNextFrame()
 	}
 }
 
+bool CGameFramework::IsPointOverPet(int xClient, int yClient)
+{
+	if (!m_hWnd || !m_pScene || !m_pCamera) return(false);
+
+	RECT clientRect;
+	::GetClientRect(m_hWnd, &clientRect);
+	POINT clientPoint = { xClient, yClient };
+	if (!::PtInRect(&clientRect, clientPoint)) return(false);
+
+	return(m_pScene->PickObjectPointedByCursor(xClient, yClient, m_pCamera) != NULL);
+}
+void CGameFramework::UpdateMouseTransparency()
+{
+	if (!m_hWnd || !m_pScene || !m_pCamera) return;
+
+	POINT cursorPosition;
+	::GetCursorPos(&cursorPosition);
+	::ScreenToClient(m_hWnd, &cursorPosition);
+
+	const bool bPointingAtPet = IsPointOverPet(cursorPosition.x, cursorPosition.y);
+
+	// Keep receiving the matching button-up event after a pet starts a mouse capture.
+	const bool bShouldBeTransparent = !bPointingAtPet && (::GetCapture() != m_hWnd);
+	if (bShouldBeTransparent == m_bMouseTransparent) return;
+
+	LONG_PTR nExStyle = ::GetWindowLongPtr(m_hWnd, GWL_EXSTYLE);
+	if (bShouldBeTransparent)
+		nExStyle |= WS_EX_TRANSPARENT;
+	else
+		nExStyle &= ~static_cast<LONG_PTR>(WS_EX_TRANSPARENT);
+
+	::SetWindowLongPtr(m_hWnd, GWL_EXSTYLE, nExStyle);
+	::SetWindowPos(m_hWnd, HWND_TOPMOST, 0, 0, 0, 0,
+		SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_NOOWNERZORDER | SWP_FRAMECHANGED);
+	m_bMouseTransparent = bShouldBeTransparent;
+}
 void CGameFramework::FrameAdvance()
 {    
 	m_GameTimer.Tick(0.0f);
@@ -508,6 +544,7 @@ void CGameFramework::FrameAdvance()
 	ProcessInput();
 
     AnimateObjects();
+	UpdateMouseTransparency();
 
 
 	HRESULT hResult = m_pd3dCommandAllocator->Reset();

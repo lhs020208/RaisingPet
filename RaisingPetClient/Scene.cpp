@@ -107,6 +107,10 @@ void CScene::OnProcessingMouseMessage(HWND hWnd, UINT nMessageID, WPARAM wParam,
 void CScene::OnProcessingKeyboardMessage(HWND hWnd, UINT nMessageID, WPARAM wParam, LPARAM lParam)
 {
 }
+CGameObject* CScene::PickObjectPointedByCursor(int xClient, int yClient, CCamera* pCamera)
+{
+	return(NULL);
+}
 
 bool CScene::ProcessInput()
 {
@@ -400,10 +404,12 @@ void CGameScene::OnProcessingKeyboardMessage(HWND hWnd, UINT nMessageID, WPARAM 
 }
 CGameObject* CGameScene::PickObjectPointedByCursor(int xClient, int yClient, CCamera* pCamera)
 {
+	if (!pCamera || pCamera->m_d3dViewport.Width <= 0.0f || pCamera->m_d3dViewport.Height <= 0.0f)
+		return(NULL);
 
 	XMFLOAT3 xmf3PickPosition;
-	xmf3PickPosition.x = (((2.0f * xClient) / (float)pCamera->m_d3dViewport.Width) - 1) / pCamera->m_xmf4x4Projection._11;
-	xmf3PickPosition.y = -(((2.0f * yClient) / (float)pCamera->m_d3dViewport.Height) - 1) / pCamera->m_xmf4x4Projection._22;
+	xmf3PickPosition.x = (((2.0f * xClient) / pCamera->m_d3dViewport.Width) - 1.0f) / pCamera->m_xmf4x4Projection._11;
+	xmf3PickPosition.y = -(((2.0f * yClient) / pCamera->m_d3dViewport.Height) - 1.0f) / pCamera->m_xmf4x4Projection._22;
 	xmf3PickPosition.z = 1.0f;
 
 	XMVECTOR xmvPickPosition = XMLoadFloat3(&xmf3PickPosition);
@@ -411,18 +417,20 @@ CGameObject* CGameScene::PickObjectPointedByCursor(int xClient, int yClient, CCa
 
 	float fNearestHitDistance = FLT_MAX;
 	CGameObject* pNearestObject = NULL;
-	/*for (int i = 0; i < m_nTanks; i++) {
-		if (m_pTank[i])
-		{
-			int hit = m_pTank[i]->PickObjectByRayIntersection(xmvPickPosition, xmmtxView, &fNearestHitDistance);
-			if (hit > 0)
-			{
-				pNearestObject = m_pTank[i];
-			}
-		}
-	}*/
-	return(pNearestObject);
+	for (PET_RENDER_RESOURCE& petResource : m_vPetResources)
+	{
+		if (!petResource.pPet) continue;
 
+		float fHitDistance = FLT_MAX;
+		if ((petResource.pPet->PickObjectByRayIntersection(xmvPickPosition, xmmtxView, &fHitDistance) > 0) &&
+			(fHitDistance < fNearestHitDistance))
+		{
+			fNearestHitDistance = fHitDistance;
+			pNearestObject = petResource.pPet;
+		}
+	}
+
+	return(pNearestObject);
 }
 void CGameScene::OnProcessingMouseMessage(HWND hWnd, UINT nMessageID, WPARAM wParam, LPARAM lParam)
 {

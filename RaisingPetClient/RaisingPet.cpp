@@ -88,7 +88,9 @@ BOOL InitInstance(HINSTANCE hInstance, int nCmdShow)
 	::GetMonitorInfo(hMonitor, &monitorInfo);
 
 	DWORD dwStyle = WS_POPUP;
-	DWORD dwExStyle = WS_EX_TOPMOST | WS_EX_NOREDIRECTIONBITMAP;
+	// A layered window is required for WS_EX_TRANSPARENT to pass mouse input
+	// through to windows owned by other processes.
+	DWORD dwExStyle = WS_EX_TOPMOST | WS_EX_LAYERED;
 	HWND hMainWnd = CreateWindowEx(dwExStyle, szWindowClass, szTitle, dwStyle,
 		monitorInfo.rcMonitor.left, monitorInfo.rcMonitor.top,
 		monitorInfo.rcMonitor.right - monitorInfo.rcMonitor.left,
@@ -96,6 +98,11 @@ BOOL InitInstance(HINSTANCE hInstance, int nCmdShow)
 		NULL, NULL, hInstance, NULL);
 
 	if (!hMainWnd) return(FALSE);
+	if (!::SetLayeredWindowAttributes(hMainWnd, 0, 255, LWA_ALPHA))
+	{
+		::DestroyWindow(hMainWnd);
+		return(FALSE);
+	}
 
 	if (!gGameFramework.OnCreate(hInstance, hMainWnd))
 	{
@@ -117,6 +124,17 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 
 	switch (message)
 	{
+	case WM_NCHITTEST:
+	{
+		if (::GetCapture() == hWnd) return(HTCLIENT);
+
+		POINT clientPoint = {
+			static_cast<short>(LOWORD(lParam)),
+			static_cast<short>(HIWORD(lParam))
+		};
+		::ScreenToClient(hWnd, &clientPoint);
+		return(gGameFramework.IsPointOverPet(clientPoint.x, clientPoint.y) ? HTCLIENT : HTTRANSPARENT);
+	}
 	case WM_SIZE:
 	case WM_LBUTTONDOWN:
 	case WM_LBUTTONUP:

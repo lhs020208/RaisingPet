@@ -33,6 +33,8 @@ public:
 
     void ProcessInput();
     void AnimateObjects();
+	bool IsPointOverPet(int xClient, int yClient);
+	void UpdateMouseTransparency();
     void FrameAdvance();
 
 	virtual void CreateShaderVariables();
@@ -92,6 +94,7 @@ private:
 	CCamera						*m_pCamera = NULL;
 
 	POINT						m_ptOldCursorPos;
+	bool						m_bMouseTransparent = false;
 
 	CGameTimer					m_GameTimer;
 	_TCHAR						m_pszFrameRate[50];

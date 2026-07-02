@@ -14,6 +14,7 @@ public:
 
 	virtual void OnProcessingMouseMessage(HWND hWnd, UINT nMessageID, WPARAM wParam, LPARAM lParam);
 	virtual void OnProcessingKeyboardMessage(HWND hWnd, UINT nMessageID, WPARAM wParam, LPARAM lParam);
+	virtual CGameObject* PickObjectPointedByCursor(int xClient, int yClient, CCamera* pCamera);
 
 	virtual void BuildObjects(ID3D12Device *pd3dDevice, ID3D12GraphicsCommandList *pd3dCommandList);
 	virtual void ReleaseObjects();
@@ -45,7 +46,7 @@ public:
 	virtual void Animate(float fElapsedTime) override;
 
 	virtual void OnProcessingKeyboardMessage(HWND hWnd, UINT nMessageID, WPARAM wParam, LPARAM lParam) override;
-	CGameObject* PickObjectPointedByCursor(int xClient, int yClient, CCamera* pCamera);
+	virtual CGameObject* PickObjectPointedByCursor(int xClient, int yClient, CCamera* pCamera) override;
 	virtual void OnProcessingMouseMessage(HWND hWnd, UINT nMessageID, WPARAM wParam, LPARAM lParam) override;
 
 private:

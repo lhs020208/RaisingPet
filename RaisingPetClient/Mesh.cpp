@@ -226,28 +226,31 @@ void CMesh::SetPolygon(int nIndex, CPolygon* pPolygon)
 
 int CMesh::CheckRayIntersection(XMVECTOR& xmvPickRayOrigin, XMVECTOR& xmvPickRayDirection, float* pfNearHitDistance)
 {
+	if (!m_pxmf3Positions || !m_pnIndices || m_nIndices < 3) return(0);
+
 	int nHits = 0;
 	float fNearestHit = FLT_MAX;
-
-	for (UINT i = 0; i < m_nIndices; i += 3)
+	for (UINT i = 0; i + 2 < m_nIndices; i += 3)
 	{
-		XMVECTOR v0 = XMLoadFloat3(&m_pxmf3Positions[m_pnIndices[i]]);
-		XMVECTOR v1 = XMLoadFloat3(&m_pxmf3Positions[m_pnIndices[i + 1]]);
-		XMVECTOR v2 = XMLoadFloat3(&m_pxmf3Positions[m_pnIndices[i + 2]]);
+		const UINT i0 = m_pnIndices[i];
+		const UINT i1 = m_pnIndices[i + 1];
+		const UINT i2 = m_pnIndices[i + 2];
+		if (i0 >= m_nVertices || i1 >= m_nVertices || i2 >= m_nVertices) continue;
 
-		float fDist = 0.0f;
-		if (TriangleTests::Intersects(xmvPickRayOrigin, xmvPickRayDirection, v0, v1, v2, fDist))
+		const XMVECTOR v0 = XMLoadFloat3(&m_pxmf3Positions[i0]);
+		const XMVECTOR v1 = XMLoadFloat3(&m_pxmf3Positions[i1]);
+		const XMVECTOR v2 = XMLoadFloat3(&m_pxmf3Positions[i2]);
+
+		float fHitDistance = 0.0f;
+		if (TriangleTests::Intersects(xmvPickRayOrigin, xmvPickRayDirection, v0, v1, v2, fHitDistance))
 		{
-			if (fDist < fNearestHit)
-			{
-				fNearestHit = fDist;
-				nHits++;
-				if (pfNearHitDistance) *pfNearHitDistance = fNearestHit;
-			}
+			++nHits;
+			if (fHitDistance < fNearestHit) fNearestHit = fHitDistance;
 		}
 	}
 
-	return nHits;
+	if (pfNearHitDistance && nHits > 0) *pfNearHitDistance = fNearestHit;
+	return(nHits);
 }
 BOOL CMesh::RayIntersectionByTriangle(XMVECTOR& xmRayOrigin, XMVECTOR& xmRayDirection, XMVECTOR v0, XMVECTOR v1, XMVECTOR v2, float* pfNearHitDistance)
 {
