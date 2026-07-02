@@ -131,6 +131,8 @@ void CTankScene::ReleaseUploadBuffers()
 }
 void CTankScene::Render(ID3D12GraphicsCommandList* pd3dCommandList, CCamera* pCamera)
 {
+	//if (!pCamera) return;
+
 	pCamera->SetViewportsAndScissorRects(pd3dCommandList);
 	pCamera->UpdateShaderVariables(pd3dCommandList);
 }

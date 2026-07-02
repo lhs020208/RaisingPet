@@ -4,7 +4,7 @@
 #pragma once
 
 #include "Timer.h"
-#include "Player.h"
+#include "Camera.h"
 #include "Scene.h"
 
 class CGameFramework
@@ -86,7 +86,6 @@ private:
 #endif
 
 	CScene						*m_pScene = NULL;
-	CPlayer						*m_pPlayer = NULL;
 	CCamera						*m_pCamera = NULL;
 
 	POINT						m_ptOldCursorPos;
