@@ -153,6 +153,7 @@ void CGameScene::BuildObjects(ID3D12Device* pd3dDevice, ID3D12GraphicsCommandLis
 	CMesh* pTheCAMesh = new CMesh(pd3dDevice, pd3dCommandList, pstrTheCAMeshFile);
 	petResource.pPet = new CPet();
 	petResource.pPet->SetMesh(pTheCAMesh);
+	petResource.pPet->SetName("TheCA");
 	petResource.pPet->SetShader(pObjectShader);
 	petResource.pPet->SetPosition(0.0f, -25.0f, 0.0f);
 	petResource.pPet->SetColor(XMFLOAT3(1.0f, 1.0f, 1.0f));

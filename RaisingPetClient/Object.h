@@ -105,4 +105,10 @@ private:
 	float m_fRotationElapsedTime = 0.0f;
 	float m_fRotationDuration = 0.35f;
 	bool m_bRotating = false;
+
+public:
+	string GetName() const { return name; }
+	void SetName(const string& newName) { name = newName;}
+private:
+	string name;
 };
