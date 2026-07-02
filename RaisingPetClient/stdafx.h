@@ -40,6 +40,7 @@ using namespace std;
 #include <DirectXCollision.h>
 
 #include <D3d12SDKLayers.h>
+#include <dcomp.h>
 
 
 using namespace DirectX;
@@ -66,6 +67,7 @@ using Microsoft::WRL::ComPtr;
 #pragma comment(lib, "d3dcompiler.lib")
 #pragma comment(lib, "d3d12.lib")
 #pragma comment(lib, "dxgi.lib")
+#pragma comment(lib, "dcomp.lib")
 
 // TODO: 프로그램에 필요한 추가 헤더는 여기에서 참조합니다.
 extern UINT	gnCbvSrvDescriptorIncrementSize;

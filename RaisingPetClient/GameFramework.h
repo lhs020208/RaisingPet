@@ -57,6 +57,9 @@ private:
         
 	IDXGIFactory4				*m_pdxgiFactory;
 	IDXGISwapChain3				*m_pdxgiSwapChain;
+	IDCompositionDevice			*m_pdcompDevice;
+	IDCompositionTarget			*m_pdcompTarget;
+	IDCompositionVisual			*m_pdcompVisual;
 	ID3D12Device				*m_pd3dDevice;
 
 	bool						m_bMsaa4xEnable = false;

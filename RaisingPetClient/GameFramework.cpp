@@ -9,6 +9,9 @@ CGameFramework::CGameFramework()
 {
 	m_pdxgiFactory = NULL;
 	m_pdxgiSwapChain = NULL;
+	m_pdcompDevice = NULL;
+	m_pdcompTarget = NULL;
+	m_pdcompVisual = NULL;
 	m_pd3dDevice = NULL;
 
 	for (int i = 0; i < m_nSwapChainBuffers; i++) m_ppd3dSwapChainBackBuffers[i] = NULL;
@@ -50,6 +53,7 @@ bool CGameFramework::OnCreate(HINSTANCE hInstance, HWND hMainWnd)
 	CreateCommandQueueAndList();
 	CreateRtvAndDsvDescriptorHeaps();
 	CreateSwapChain();
+	if (!m_pdxgiSwapChain || !m_pdcompDevice || !m_pdcompTarget || !m_pdcompVisual) return(false);
 	CreateDepthStencilView();
 
 	BuildObjects();
@@ -64,66 +68,51 @@ void CGameFramework::CreateSwapChain()
 	m_nWndClientWidth = rcClient.right - rcClient.left;
 	m_nWndClientHeight = rcClient.bottom - rcClient.top;
 
-#ifdef _WITH_CREATE_SWAPCHAIN_FOR_HWND
-	DXGI_SWAP_CHAIN_DESC1 dxgiSwapChainDesc;
-	::ZeroMemory(&dxgiSwapChainDesc, sizeof(DXGI_SWAP_CHAIN_DESC1));
+	// Composition swap chains are single-sampled. Render transparency through alpha instead of MSAA.
+	m_bMsaa4xEnable = false;
+
+	DXGI_SWAP_CHAIN_DESC1 dxgiSwapChainDesc = {};
 	dxgiSwapChainDesc.Width = m_nWndClientWidth;
 	dxgiSwapChainDesc.Height = m_nWndClientHeight;
 	dxgiSwapChainDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
-	dxgiSwapChainDesc.SampleDesc.Count = (m_bMsaa4xEnable) ? 4 : 1;
-	dxgiSwapChainDesc.SampleDesc.Quality = (m_bMsaa4xEnable) ? (m_nMsaa4xQualityLevels - 1) : 0;
+	dxgiSwapChainDesc.SampleDesc.Count = 1;
+	dxgiSwapChainDesc.SampleDesc.Quality = 0;
 	dxgiSwapChainDesc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
 	dxgiSwapChainDesc.BufferCount = m_nSwapChainBuffers;
-	dxgiSwapChainDesc.Scaling = DXGI_SCALING_NONE;
-	dxgiSwapChainDesc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
-	dxgiSwapChainDesc.AlphaMode = DXGI_ALPHA_MODE_UNSPECIFIED;
-#ifdef _WITH_ONLY_RESIZE_BACKBUFFERS
+	dxgiSwapChainDesc.Scaling = DXGI_SCALING_STRETCH;
+	dxgiSwapChainDesc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_SEQUENTIAL;
+	dxgiSwapChainDesc.AlphaMode = DXGI_ALPHA_MODE_PREMULTIPLIED;
 	dxgiSwapChainDesc.Flags = 0;
-#else
-	dxgiSwapChainDesc.Flags = DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH;
-#endif
 
-	DXGI_SWAP_CHAIN_FULLSCREEN_DESC dxgiSwapChainFullScreenDesc;
-	::ZeroMemory(&dxgiSwapChainFullScreenDesc, sizeof(DXGI_SWAP_CHAIN_FULLSCREEN_DESC));
-	dxgiSwapChainFullScreenDesc.RefreshRate.Numerator = 60;
-	dxgiSwapChainFullScreenDesc.RefreshRate.Denominator = 1;
-	dxgiSwapChainFullScreenDesc.ScanlineOrdering = DXGI_MODE_SCANLINE_ORDER_UNSPECIFIED;
-	dxgiSwapChainFullScreenDesc.Scaling = DXGI_MODE_SCALING_UNSPECIFIED;
-	dxgiSwapChainFullScreenDesc.Windowed = TRUE;
+	IDXGISwapChain1* pdxgiCompositionSwapChain = NULL;
+	HRESULT hResult = m_pdxgiFactory->CreateSwapChainForComposition(
+		m_pd3dCommandQueue, &dxgiSwapChainDesc, NULL, &pdxgiCompositionSwapChain);
+	if (FAILED(hResult)) return;
 
-	HRESULT hResult = m_pdxgiFactory->CreateSwapChainForHwnd(m_pd3dCommandQueue, m_hWnd, &dxgiSwapChainDesc, &dxgiSwapChainFullScreenDesc, NULL, (IDXGISwapChain1 **)&m_pdxgiSwapChain);
-#else
-	DXGI_SWAP_CHAIN_DESC dxgiSwapChainDesc;
-	::ZeroMemory(&dxgiSwapChainDesc, sizeof(dxgiSwapChainDesc));
-	dxgiSwapChainDesc.BufferCount = m_nSwapChainBuffers;
-	dxgiSwapChainDesc.BufferDesc.Width = m_nWndClientWidth;
-	dxgiSwapChainDesc.BufferDesc.Height = m_nWndClientHeight;
-	dxgiSwapChainDesc.BufferDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
-	dxgiSwapChainDesc.BufferDesc.RefreshRate.Numerator = 60;
-	dxgiSwapChainDesc.BufferDesc.RefreshRate.Denominator = 1;
-	dxgiSwapChainDesc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
-	dxgiSwapChainDesc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
-	dxgiSwapChainDesc.OutputWindow = m_hWnd;
-	dxgiSwapChainDesc.SampleDesc.Count = (m_bMsaa4xEnable) ? 4 : 1;
-	dxgiSwapChainDesc.SampleDesc.Quality = (m_bMsaa4xEnable) ? (m_nMsaa4xQualityLevels - 1) : 0;
-	dxgiSwapChainDesc.Windowed = TRUE;
-#ifdef _WITH_ONLY_RESIZE_BACKBUFFERS
-	dxgiSwapChainDesc.Flags = 0;
-#else
-	dxgiSwapChainDesc.Flags = DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH;
-#endif
+	hResult = pdxgiCompositionSwapChain->QueryInterface(
+		__uuidof(IDXGISwapChain3), reinterpret_cast<void**>(&m_pdxgiSwapChain));
+	pdxgiCompositionSwapChain->Release();
+	if (FAILED(hResult)) return;
 
-	HRESULT hResult = m_pdxgiFactory->CreateSwapChain(m_pd3dCommandQueue, &dxgiSwapChainDesc, (IDXGISwapChain **)&m_pdxgiSwapChain);
-#endif
+	hResult = ::DCompositionCreateDevice2(NULL, __uuidof(IDCompositionDevice),
+		reinterpret_cast<void**>(&m_pdcompDevice));
+	if (FAILED(hResult)) return;
 
-	hResult = m_pdxgiFactory->MakeWindowAssociation(m_hWnd, DXGI_MWA_NO_ALT_ENTER);
+	hResult = m_pdcompDevice->CreateTargetForHwnd(m_hWnd, TRUE, &m_pdcompTarget);
+	if (FAILED(hResult)) return;
+	hResult = m_pdcompDevice->CreateVisual(&m_pdcompVisual);
+	if (FAILED(hResult)) return;
+	hResult = m_pdcompVisual->SetContent(m_pdxgiSwapChain);
+	if (FAILED(hResult)) return;
+	hResult = m_pdcompTarget->SetRoot(m_pdcompVisual);
+	if (FAILED(hResult)) return;
+	hResult = m_pdcompDevice->Commit();
+	if (FAILED(hResult)) return;
+
+	m_pdxgiFactory->MakeWindowAssociation(m_hWnd, DXGI_MWA_NO_ALT_ENTER);
 	m_nSwapChainBufferIndex = m_pdxgiSwapChain->GetCurrentBackBufferIndex();
-
-#ifndef _WITH_SWAPCHAIN_FULLSCREEN_STATE
 	CreateRenderTargetViews();
-#endif
 }
-
 void CGameFramework::CreateDirect3DDevice()
 {
 	HRESULT hResult;
@@ -288,37 +277,8 @@ void CGameFramework::CreateRenderTargetViewsAndDepthStencilView()
 
 void CGameFramework::ChangeSwapChainState()
 {
-	WaitForGpuComplete();
-
-	BOOL bFullScreenState = FALSE;
-	m_pdxgiSwapChain->GetFullscreenState(&bFullScreenState, NULL);
-	m_pdxgiSwapChain->SetFullscreenState(!bFullScreenState, NULL);
-
-	DXGI_MODE_DESC dxgiTargetParameters;
-	dxgiTargetParameters.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
-	dxgiTargetParameters.Width = m_nWndClientWidth;
-	dxgiTargetParameters.Height = m_nWndClientHeight;
-	dxgiTargetParameters.RefreshRate.Numerator = 60;
-	dxgiTargetParameters.RefreshRate.Denominator = 1;
-	dxgiTargetParameters.Scaling = DXGI_MODE_SCALING_UNSPECIFIED;
-	dxgiTargetParameters.ScanlineOrdering = DXGI_MODE_SCANLINE_ORDER_UNSPECIFIED;
-	m_pdxgiSwapChain->ResizeTarget(&dxgiTargetParameters);
-
-	for (int i = 0; i < m_nSwapChainBuffers; i++) if (m_ppd3dSwapChainBackBuffers[i]) m_ppd3dSwapChainBackBuffers[i]->Release();
-#ifdef _WITH_ONLY_RESIZE_BACKBUFFERS
-	DXGI_SWAP_CHAIN_DESC dxgiSwapChainDesc;
-	m_pdxgiSwapChain->GetDesc(&dxgiSwapChainDesc);
-	m_pdxgiSwapChain->ResizeBuffers(0, 0, 0, DXGI_FORMAT_UNKNOWN, 0);
-#else
-	DXGI_SWAP_CHAIN_DESC dxgiSwapChainDesc;
-	m_pdxgiSwapChain->GetDesc(&dxgiSwapChainDesc);
-	m_pdxgiSwapChain->ResizeBuffers(m_nSwapChainBuffers, m_nWndClientWidth, m_nWndClientHeight, dxgiSwapChainDesc.BufferDesc.Format, dxgiSwapChainDesc.Flags);
-#endif
-	m_nSwapChainBufferIndex = m_pdxgiSwapChain->GetCurrentBackBufferIndex();
-
-	CreateRenderTargetViews();
+	// Composition swap chains are always windowed; exclusive fullscreen is not supported.
 }
-
 void CGameFramework::OnProcessingMouseMessage(HWND hWnd, UINT nMessageID, WPARAM wParam, LPARAM lParam)
 {
 	if (m_pScene) m_pScene->OnProcessingMouseMessage(hWnd, nMessageID, wParam, lParam);
@@ -414,7 +374,12 @@ void CGameFramework::OnDestroy()
 
 	if (m_pd3dFence) m_pd3dFence->Release();
 
-	m_pdxgiSwapChain->SetFullscreenState(FALSE, NULL);
+	if (m_pdcompVisual) m_pdcompVisual->SetContent(NULL);
+	if (m_pdcompTarget) m_pdcompTarget->SetRoot(NULL);
+	if (m_pdcompDevice) m_pdcompDevice->Commit();
+	if (m_pdcompVisual) m_pdcompVisual->Release();
+	if (m_pdcompTarget) m_pdcompTarget->Release();
+	if (m_pdcompDevice) m_pdcompDevice->Release();
 	if (m_pdxgiSwapChain) m_pdxgiSwapChain->Release();
     if (m_pd3dDevice) m_pd3dDevice->Release();
 	if (m_pdxgiFactory) m_pdxgiFactory->Release();
@@ -433,11 +398,13 @@ void CGameFramework::BuildObjects()
 	auto pRootSignature = m_pScene->GetGraphicsRootSignature();
 
 	m_pCamera = new CCamera();
+	m_pCamera->SetViewport(0, 0, m_nWndClientWidth, m_nWndClientHeight);
+	m_pCamera->SetScissorRect(0, 0, m_nWndClientWidth, m_nWndClientHeight);
 	m_pCamera->GenerateViewMatrix(
 		XMFLOAT3(0.0f, 5.0f, -10.0f),
 		XMFLOAT3(0.0f, 0.0f, 0.0f),
 		XMFLOAT3(0.0f, 1.0f, 0.0f));
-	m_pCamera->GenerateProjectionMatrix(0.1f, 1000.0f, ASPECT_RATIO, 60.0f);
+	m_pCamera->GenerateProjectionMatrix(0.1f, 1000.0f, float(m_nWndClientWidth) / float(m_nWndClientHeight), 60.0f);
 
 	if (m_pScene) m_pScene->BuildObjects(m_pd3dDevice, m_pd3dCommandList);
 
@@ -559,7 +526,7 @@ void CGameFramework::FrameAdvance()
 	D3D12_CPU_DESCRIPTOR_HANDLE d3dRtvCPUDescriptorHandle = m_pd3dRtvDescriptorHeap->GetCPUDescriptorHandleForHeapStart();
 	d3dRtvCPUDescriptorHandle.ptr += (m_nSwapChainBufferIndex * m_nRtvDescriptorIncrementSize);
 
-	float pfClearColor[4] = { 0.0f, 0.125f, 0.3f, 1.0f };
+	float pfClearColor[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
 	m_pd3dCommandList->ClearRenderTargetView(d3dRtvCPUDescriptorHandle, pfClearColor/*Colors::Azure*/, 0, NULL);
 
 	D3D12_CPU_DESCRIPTOR_HANDLE d3dDsvCPUDescriptorHandle = m_pd3dDsvDescriptorHeap->GetCPUDescriptorHandleForHeapStart();

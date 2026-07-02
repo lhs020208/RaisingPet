@@ -69,7 +69,7 @@ ATOM MyRegisterClass(HINSTANCE hInstance)
 	wcex.hInstance = hInstance;
 	wcex.hIcon = ::LoadIcon(hInstance, MAKEINTRESOURCE(IDI_RAISINGPET));
 	wcex.hCursor = ::LoadCursor(NULL, IDC_ARROW);
-	wcex.hbrBackground = (HBRUSH)(COLOR_WINDOW + 1);
+	wcex.hbrBackground = NULL;
 	wcex.lpszMenuName = NULL;//MAKEINTRESOURCE(IDC_RAISINGPET);
 	wcex.lpszClassName = szWindowClass;
 	wcex.hIconSm = ::LoadIcon(wcex.hInstance, MAKEINTRESOURCE(IDI_SMALL));
@@ -81,14 +81,27 @@ BOOL InitInstance(HINSTANCE hInstance, int nCmdShow)
 {
 	ghAppInstance = hInstance;
 
-	RECT rc = { 0, 0, FRAME_BUFFER_WIDTH, FRAME_BUFFER_HEIGHT };
-	DWORD dwStyle = WS_OVERLAPPED | WS_CAPTION | WS_MINIMIZEBOX | WS_SYSMENU | WS_BORDER;
-	AdjustWindowRect(&rc, dwStyle, FALSE);
-	HWND hMainWnd = CreateWindow(szWindowClass, szTitle, dwStyle, CW_USEDEFAULT, CW_USEDEFAULT, rc.right - rc.left, rc.bottom - rc.top, NULL, NULL, hInstance, NULL);
+	POINT ptPrimary = { 0, 0 };
+	HMONITOR hMonitor = ::MonitorFromPoint(ptPrimary, MONITOR_DEFAULTTOPRIMARY);
+	MONITORINFO monitorInfo = {};
+	monitorInfo.cbSize = sizeof(MONITORINFO);
+	::GetMonitorInfo(hMonitor, &monitorInfo);
+
+	DWORD dwStyle = WS_POPUP;
+	DWORD dwExStyle = WS_EX_TOPMOST | WS_EX_NOREDIRECTIONBITMAP;
+	HWND hMainWnd = CreateWindowEx(dwExStyle, szWindowClass, szTitle, dwStyle,
+		monitorInfo.rcMonitor.left, monitorInfo.rcMonitor.top,
+		monitorInfo.rcMonitor.right - monitorInfo.rcMonitor.left,
+		monitorInfo.rcMonitor.bottom - monitorInfo.rcMonitor.top,
+		NULL, NULL, hInstance, NULL);
 
 	if (!hMainWnd) return(FALSE);
 
-	gGameFramework.OnCreate(hInstance, hMainWnd);
+	if (!gGameFramework.OnCreate(hInstance, hMainWnd))
+	{
+		::DestroyWindow(hMainWnd);
+		return(FALSE);
+	}
 
 	::ShowWindow(hMainWnd, nCmdShow);
 	::UpdateWindow(hMainWnd);

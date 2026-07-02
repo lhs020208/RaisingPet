@@ -378,6 +378,9 @@ void CGameScene::OnProcessingKeyboardMessage(HWND hWnd, UINT nMessageID, WPARAM 
 		{
 		case VK_SPACE:
 			break;
+		case VK_ESCAPE:
+			::PostQuitMessage(0);
+			break;
 		default:
 			break;
 		}
