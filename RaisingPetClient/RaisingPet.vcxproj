@@ -135,9 +135,8 @@
       <OptimizeReferences>true</OptimizeReferences>
     </Link>
     <PostBuildEvent>
-      <Command>xcopy "$(TargetPath)" "$(ProjectDir)Executable\" /Y
-xcopy "$(ProjectDir)Shaders\*Shaders.hlsl" "$(ProjectDir)Executable\" /Y
-</Command>
+      <Command>if not exist "$(ProjectDir)Executable\Assets\Image\" mkdir "$(ProjectDir)Executable\Assets\Image\"
+xcopy "$(ProjectDir)Assets\Image\Test.dds" "$(ProjectDir)Executable\Assets\Image\" /Y</Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemGroup>

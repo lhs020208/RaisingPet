@@ -35,9 +35,9 @@ protected:
 };
 
 
-class CTankScene : public CScene {
+class CGameScene : public CScene {
 public:
-	CTankScene() {}
+	CGameScene() {}
 	virtual void BuildObjects(ID3D12Device* pd3dDevice, ID3D12GraphicsCommandList* pd3dCommandList) override;
 	virtual void ReleaseObjects() override;
 	virtual void ReleaseUploadBuffers();

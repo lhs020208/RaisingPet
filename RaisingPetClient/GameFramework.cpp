@@ -428,7 +428,7 @@ void CGameFramework::BuildObjects()
 {
 	m_pd3dCommandList->Reset(m_pd3dCommandAllocator, NULL);
 
-	m_pScene = new CTankScene();
+	m_pScene = new CGameScene();
 	m_pScene->BuildGraphicsRootSignature(m_pd3dDevice); // 따로 분리한 함수
 	auto pRootSignature = m_pScene->GetGraphicsRootSignature();
 

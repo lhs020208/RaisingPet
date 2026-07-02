@@ -131,7 +131,7 @@ void CScene::BuildGraphicsRootSignature(ID3D12Device* pd3dDevice)
 }
 
 //ÅÊÅ© Scene////////////////////////////////////////////////////////////////////////////////////////////////
-void CTankScene::BuildObjects(ID3D12Device* pd3dDevice, ID3D12GraphicsCommandList* pd3dCommandList)
+void CGameScene::BuildObjects(ID3D12Device* pd3dDevice, ID3D12GraphicsCommandList* pd3dCommandList)
 {
 	// Create the full-screen texture pipeline.
 	ID3DBlob* pd3dVertexShaderBlob = NULL;
@@ -233,7 +233,7 @@ void CTankScene::BuildObjects(ID3D12Device* pd3dDevice, ID3D12GraphicsCommandLis
 		m_pd3dFullscreenSrvDescriptorHeap->GetCPUDescriptorHandleForHeapStart());
 }
 
-void CTankScene::ReleaseObjects()
+void CGameScene::ReleaseObjects()
 {
 	if (m_pd3dFullscreenPipelineState) m_pd3dFullscreenPipelineState->Release();
 	if (m_pd3dFullscreenTexture) m_pd3dFullscreenTexture->Release();
@@ -242,7 +242,7 @@ void CTankScene::ReleaseObjects()
 	if (m_pd3dGraphicsRootSignature) m_pd3dGraphicsRootSignature->Release();
 }
 
-void CTankScene::ReleaseUploadBuffers()
+void CGameScene::ReleaseUploadBuffers()
 {
 	if (m_pd3dFullscreenTextureUploadBuffer)
 	{
@@ -250,7 +250,7 @@ void CTankScene::ReleaseUploadBuffers()
 		m_pd3dFullscreenTextureUploadBuffer = NULL;
 	}
 }
-void CTankScene::Render(ID3D12GraphicsCommandList* pd3dCommandList, CCamera* pCamera)
+void CGameScene::Render(ID3D12GraphicsCommandList* pd3dCommandList, CCamera* pCamera)
 {
 	if (!pCamera) return;
 
@@ -267,7 +267,7 @@ void CTankScene::Render(ID3D12GraphicsCommandList* pd3dCommandList, CCamera* pCa
 	pd3dCommandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 	pd3dCommandList->DrawInstanced(3, 1, 0, 0);
 }
-void CTankScene::OnProcessingKeyboardMessage(HWND hWnd, UINT nMessageID, WPARAM wParam, LPARAM lParam)
+void CGameScene::OnProcessingKeyboardMessage(HWND hWnd, UINT nMessageID, WPARAM wParam, LPARAM lParam)
 {
 	extern CGameFramework* g_pFramework;
 	switch (nMessageID)
@@ -294,7 +294,7 @@ void CTankScene::OnProcessingKeyboardMessage(HWND hWnd, UINT nMessageID, WPARAM 
 		break;
 	}
 }
-CGameObject* CTankScene::PickObjectPointedByCursor(int xClient, int yClient, CCamera* pCamera)
+CGameObject* CGameScene::PickObjectPointedByCursor(int xClient, int yClient, CCamera* pCamera)
 {
 
 	XMFLOAT3 xmf3PickPosition;
@@ -320,7 +320,7 @@ CGameObject* CTankScene::PickObjectPointedByCursor(int xClient, int yClient, CCa
 	return(pNearestObject);
 
 }
-void CTankScene::OnProcessingMouseMessage(HWND hWnd, UINT nMessageID, WPARAM wParam, LPARAM lParam)
+void CGameScene::OnProcessingMouseMessage(HWND hWnd, UINT nMessageID, WPARAM wParam, LPARAM lParam)
 {
 	switch (nMessageID)
 	{
@@ -331,7 +331,7 @@ void CTankScene::OnProcessingMouseMessage(HWND hWnd, UINT nMessageID, WPARAM wPa
 	}
 }
 
-void CTankScene::Animate(float fElapsedTime)
+void CGameScene::Animate(float fElapsedTime)
 {
 
 }
