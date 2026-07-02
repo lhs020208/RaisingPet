@@ -100,16 +100,25 @@ void CMesh::LoadMeshFromFile(ID3D12Device* device, ID3D12GraphicsCommandList* cm
 			vertices.emplace_back(x, y, z);
 		}
 		else if (prefix == "f") {
-			for (int i = 0; i < 3; ++i) {
-				std::string token;
-				iss >> token;
+			std::vector<UINT> faceIndices;
+			std::string token;
+			while (iss >> token) {
 				std::istringstream tokenStream(token);
 				std::string vIdx;
 				std::getline(tokenStream, vIdx, '/');
-				int idx = std::stoi(vIdx) - 1;
-				indices.push_back(static_cast<UINT>(idx));
+				int idx = std::stoi(vIdx);
+				if (idx < 0) idx = static_cast<int>(vertices.size()) + idx;
+				else idx -= 1;
+				faceIndices.push_back(static_cast<UINT>(idx));
+			}
+
+			for (size_t i = 1; i + 1 < faceIndices.size(); ++i) {
+				indices.push_back(faceIndices[0]);
+				indices.push_back(faceIndices[i]);
+				indices.push_back(faceIndices[i + 1]);
 			}
 		}
+
 	}
 	file.close();
 

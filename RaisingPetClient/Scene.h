@@ -49,6 +49,7 @@ public:
 	virtual void OnProcessingMouseMessage(HWND hWnd, UINT nMessageID, WPARAM wParam, LPARAM lParam) override;
 
 private:
+	CGameObject* m_pTheCAObject = NULL;
 	ID3D12PipelineState* m_pd3dFullscreenPipelineState = NULL;
 	ID3D12Resource* m_pd3dFullscreenTexture = NULL;
 	ID3D12Resource* m_pd3dFullscreenTextureUploadBuffer = NULL;

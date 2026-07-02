@@ -50,6 +50,13 @@ VS_OUTPUT VSPseudoLighting(VS_INPUT input)
 	return(output);
 }
 
+VS_OUTPUT VSPositionColor(float3 position : POSITION)
+{
+	VS_OUTPUT output = (VS_OUTPUT)0;
+	output.positionW = mul(float4(position, 1.0f), gmtxWorld).xyz;
+	output.positionH = mul(mul(float4(output.positionW, 1.0f), gmtxView), gmtxProjection);
+	return output;
+}
 static float3 gf3AmbientLightColor = float3(0.15f, 0.15f, 0.15f);
 static float3 gf3AmbientSpecularColor = float3(0.15f, 0.15f, 0.15f);
 
