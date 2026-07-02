@@ -150,7 +150,7 @@ void CGameScene::BuildObjects(ID3D12Device* pd3dDevice, ID3D12GraphicsCommandLis
 	petResource.pPet = new CPet();
 	petResource.pPet->SetMesh(pTheCAMesh);
 	petResource.pPet->SetShader(pObjectShader);
-	petResource.pPet->SetPosition(0.0f, 0.0f, 0.0f);
+	petResource.pPet->SetPosition(0.0f, -25.0f, 0.0f);
 	petResource.pPet->SetColor(XMFLOAT3(1.0f, 1.0f, 1.0f));
 
 		{
@@ -437,5 +437,8 @@ void CGameScene::OnProcessingMouseMessage(HWND hWnd, UINT nMessageID, WPARAM wPa
 
 void CGameScene::Animate(float fElapsedTime)
 {
-
+	for (PET_RENDER_RESOURCE& petResource : m_vPetResources)
+	{
+		if (petResource.pPet) petResource.pPet->Animate(fElapsedTime);
+	}
 }

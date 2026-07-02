@@ -234,3 +234,125 @@ void CGameObject::SetRotationTransform(XMFLOAT4X4* pmxf4x4Transform)
 	m_xmf4x4World._21 = pmxf4x4Transform->_21; m_xmf4x4World._22 = pmxf4x4Transform->_22; m_xmf4x4World._23 = pmxf4x4Transform->_23;
 	m_xmf4x4World._31 = pmxf4x4Transform->_31; m_xmf4x4World._32 = pmxf4x4Transform->_32; m_xmf4x4World._33 = pmxf4x4Transform->_33;
 }
+
+/////////////////////////////////////////////////////////////////////////////////////////////////////
+// CPet
+
+CPet::CPet() : m_RandomEngine(std::random_device{}())
+{
+}
+
+void CPet::Animate(float fTimeElapsed)
+{
+	if (fTimeElapsed <= 0.0f) return;
+
+	UpdateMoveSpeed(fTimeElapsed);
+
+	XMFLOAT3 position = GetPosition();
+	position.x += m_fMoveDirection * m_fCurrentMoveSpeed * fTimeElapsed;
+	SetPosition(position);
+
+	UpdateRotation(fTimeElapsed);
+	UpdateBoundingBox();
+
+	m_fStateElapsedTime += fTimeElapsed;
+	while (m_fStateElapsedTime >= 1.0f)
+	{
+		m_fStateElapsedTime -= 1.0f;
+		DecideNextState();
+	}
+}
+
+void CPet::DecideNextState()
+{
+	if (m_MoveState == MOVE_STATE::STOP)
+	{
+		std::uniform_int_distribution<int> nextStateDistribution(0, 2);
+		switch (nextStateDistribution(m_RandomEngine))
+		{
+		case 0:
+			ChangeMoveState(MOVE_STATE::LEFT);
+			break;
+		case 1:
+			ChangeMoveState(MOVE_STATE::RIGHT);
+			break;
+		default:
+			break;
+		}
+	}
+	else
+	{
+		std::uniform_int_distribution<int> continueDistribution(0, 1);
+		if (continueDistribution(m_RandomEngine) == 0)
+			ChangeMoveState(MOVE_STATE::STOP);
+	}
+}
+
+void CPet::ChangeMoveState(MOVE_STATE newState)
+{
+	if (newState == m_MoveState) return;
+
+	m_MoveState = newState;
+	m_fRotationStartYaw = m_fCurrentYaw;
+	m_fRotationTargetYaw = 0.0f;
+	if (m_MoveState == MOVE_STATE::LEFT)
+	{
+		m_fRotationTargetYaw = 45.0f;
+		m_fMoveDirection = -1.0f;
+	}
+	else if (m_MoveState == MOVE_STATE::RIGHT)
+	{
+		m_fRotationTargetYaw = -45.0f;
+		m_fMoveDirection = 1.0f;
+	}
+
+	m_fRotationElapsedTime = 0.0f;
+	m_bRotating = true;
+
+	m_fSpeedStart = m_fCurrentMoveSpeed;
+	m_fSpeedTarget = (m_MoveState == MOVE_STATE::STOP) ? 0.0f : m_fMoveSpeed;
+	m_fSpeedElapsedTime = 0.0f;
+	m_bSpeedTransitioning = true;
+}
+
+void CPet::UpdateRotation(float fTimeElapsed)
+{
+	if (!m_bRotating) return;
+
+	m_fRotationElapsedTime += fTimeElapsed;
+	float t = m_fRotationElapsedTime / m_fRotationDuration;
+	if (t >= 1.0f)
+	{
+		t = 1.0f;
+		m_bRotating = false;
+	}
+
+	const float easedT = 0.5f - (0.5f * cosf(XM_PI * t));
+	m_fCurrentYaw = m_fRotationStartYaw + ((m_fRotationTargetYaw - m_fRotationStartYaw) * easedT);
+
+	XMFLOAT4X4 rotationTransform;
+	XMStoreFloat4x4(&rotationTransform, XMMatrixRotationY(XMConvertToRadians(m_fCurrentYaw)));
+	SetRotationTransform(&rotationTransform);
+}
+
+void CPet::UpdateMoveSpeed(float fTimeElapsed)
+{
+	if (!m_bSpeedTransitioning) return;
+
+	m_fSpeedElapsedTime += fTimeElapsed;
+	float t = m_fSpeedElapsedTime / m_fSpeedTransitionDuration;
+	if (t >= 1.0f)
+	{
+		t = 1.0f;
+		m_bSpeedTransitioning = false;
+	}
+
+	const float easedT = 0.5f - (0.5f * cosf(XM_PI * t));
+	m_fCurrentMoveSpeed = m_fSpeedStart + ((m_fSpeedTarget - m_fSpeedStart) * easedT);
+
+	if (!m_bSpeedTransitioning && m_fCurrentMoveSpeed <= 0.0f)
+	{
+		m_fCurrentMoveSpeed = 0.0f;
+		m_fMoveDirection = 0.0f;
+	}
+}

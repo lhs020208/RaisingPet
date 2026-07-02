@@ -67,5 +67,42 @@ public:
 
 class CPet : public CGameObject
 {
+public:
+	CPet();
+	virtual ~CPet() {}
 
+	virtual void Animate(float fTimeElapsed) override;
+
+private:
+	enum class MOVE_STATE
+	{
+		STOP,
+		LEFT,
+		RIGHT
+	};
+
+	void DecideNextState();
+	void ChangeMoveState(MOVE_STATE newState);
+	void UpdateRotation(float fTimeElapsed);
+	void UpdateMoveSpeed(float fTimeElapsed);
+
+	MOVE_STATE m_MoveState = MOVE_STATE::STOP;
+	std::mt19937 m_RandomEngine;
+
+	float m_fStateElapsedTime = 0.0f;
+	float m_fMoveSpeed = 1.0f;
+	float m_fMoveDirection = 0.0f;
+	float m_fCurrentMoveSpeed = 0.0f;
+	float m_fSpeedStart = 0.0f;
+	float m_fSpeedTarget = 0.0f;
+	float m_fSpeedElapsedTime = 0.0f;
+	float m_fSpeedTransitionDuration = 0.35f;
+	bool m_bSpeedTransitioning = false;
+
+	float m_fCurrentYaw = 0.0f;
+	float m_fRotationStartYaw = 0.0f;
+	float m_fRotationTargetYaw = 0.0f;
+	float m_fRotationElapsedTime = 0.0f;
+	float m_fRotationDuration = 0.35f;
+	bool m_bRotating = false;
 };
