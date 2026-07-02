@@ -142,13 +142,12 @@ void CGameScene::BuildObjects(ID3D12Device* pd3dDevice, ID3D12GraphicsCommandLis
 		const char* pName;
 		const char* pMeshFile;
 		const wchar_t* pTextureFile;
-		const float vPosition[3] = { 0.0f, -25.0f, 0.0f };
 	};
 
 	const PET_ASSET_DESC petAssets[] =
 	{
-		{ "TheCA", "Assets/TheCA/TheCAMesh.obj", L"Assets/TheCA/TheCATexture.dds", 5.0f, -28.0f, 0.0f },
-		{ "Touma", "Assets/Touma/ToumaMesh.obj", L"Assets/Touma/ToumaTexture.dds", -5.0f, -28.0f, 0.0f }
+		{ "TheCA", "Assets/TheCA/TheCAMesh.obj", L"Assets/TheCA/TheCATexture.dds"},
+		{ "Touma", "Assets/Touma/ToumaMesh.obj", L"Assets/Touma/ToumaTexture.dds"}
 	};
 
 	CPseudoLightingShader* pObjectShader = new CPseudoLightingShader();
@@ -164,7 +163,7 @@ void CGameScene::BuildObjects(ID3D12Device* pd3dDevice, ID3D12GraphicsCommandLis
 		petResource.pPet->SetMesh(pPetMesh);
 		petResource.pPet->SetName(petAsset.pName);
 		petResource.pPet->SetShader(pObjectShader);
-		petResource.pPet->SetPosition(petAsset.vPosition[0], petAsset.vPosition[1], petAsset.vPosition[2]);
+		petResource.pPet->SetPosition(0.0f, -28.0f, 0.0f);
 		petResource.pPet->SetColor(XMFLOAT3(1.0f, 1.0f, 1.0f));
 
 		std::unique_ptr<uint8_t[]> textureData;
@@ -350,15 +349,17 @@ void CGameScene::Render(ID3D12GraphicsCommandList* pd3dCommandList, CCamera* pCa
 
 	pCamera->SetViewportsAndScissorRects(pd3dCommandList);
 	pCamera->UpdateShaderVariables(pd3dCommandList);
-	for (PET_RENDER_RESOURCE& petResource : m_vPetResources)
+	if (m_nActivePetIndex < m_vPetResources.size())
 	{
-		if (!petResource.pPet || !petResource.pd3dSrvDescriptorHeap) continue;
-
-		ID3D12DescriptorHeap* ppd3dPetDescriptorHeaps[] = { petResource.pd3dSrvDescriptorHeap };
-		pd3dCommandList->SetDescriptorHeaps(1, ppd3dPetDescriptorHeaps);
-		pd3dCommandList->SetGraphicsRootDescriptorTable(3,
-			petResource.pd3dSrvDescriptorHeap->GetGPUDescriptorHandleForHeapStart());
-		petResource.pPet->Render(pd3dCommandList, pCamera);
+		PET_RENDER_RESOURCE& petResource = m_vPetResources[m_nActivePetIndex];
+		if (petResource.pPet && petResource.pd3dSrvDescriptorHeap)
+		{
+			ID3D12DescriptorHeap* ppd3dPetDescriptorHeaps[] = { petResource.pd3dSrvDescriptorHeap };
+			pd3dCommandList->SetDescriptorHeaps(1, ppd3dPetDescriptorHeaps);
+			pd3dCommandList->SetGraphicsRootDescriptorTable(3,
+				petResource.pd3dSrvDescriptorHeap->GetGPUDescriptorHandleForHeapStart());
+			petResource.pPet->Render(pd3dCommandList, pCamera);
+		}
 	}
 
 	if (m_pd3dFullscreenPipelineState && m_pd3dFullscreenSrvDescriptorHeap)
@@ -415,22 +416,14 @@ CGameObject* CGameScene::PickObjectPointedByCursor(int xClient, int yClient, CCa
 	XMVECTOR xmvPickPosition = XMLoadFloat3(&xmf3PickPosition);
 	XMMATRIX xmmtxView = XMLoadFloat4x4(&pCamera->m_xmf4x4View);
 
-	float fNearestHitDistance = FLT_MAX;
-	CGameObject* pNearestObject = NULL;
-	for (PET_RENDER_RESOURCE& petResource : m_vPetResources)
-	{
-		if (!petResource.pPet) continue;
+	if (m_nActivePetIndex >= m_vPetResources.size()) return(NULL);
 
-		float fHitDistance = FLT_MAX;
-		if ((petResource.pPet->PickObjectByRayIntersection(xmvPickPosition, xmmtxView, &fHitDistance) > 0) &&
-			(fHitDistance < fNearestHitDistance))
-		{
-			fNearestHitDistance = fHitDistance;
-			pNearestObject = petResource.pPet;
-		}
-	}
+	CPet* pActivePet = m_vPetResources[m_nActivePetIndex].pPet;
+	if (!pActivePet) return(NULL);
 
-	return(pNearestObject);
+	float fHitDistance = FLT_MAX;
+	return((pActivePet->PickObjectByRayIntersection(xmvPickPosition, xmmtxView, &fHitDistance) > 0)
+		? pActivePet : NULL);
 }
 void CGameScene::OnProcessingMouseMessage(HWND hWnd, UINT nMessageID, WPARAM wParam, LPARAM lParam)
 {
@@ -445,8 +438,9 @@ void CGameScene::OnProcessingMouseMessage(HWND hWnd, UINT nMessageID, WPARAM wPa
 
 void CGameScene::Animate(float fElapsedTime)
 {
-	for (PET_RENDER_RESOURCE& petResource : m_vPetResources)
+	if (m_nActivePetIndex < m_vPetResources.size())
 	{
-		if (petResource.pPet) petResource.pPet->Animate(fElapsedTime);
+		CPet* pActivePet = m_vPetResources[m_nActivePetIndex].pPet;
+		if (pActivePet) pActivePet->Animate(fElapsedTime);
 	}
 }

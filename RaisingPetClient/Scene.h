@@ -59,6 +59,7 @@ private:
 	};
 
 	std::vector<PET_RENDER_RESOURCE> m_vPetResources;
+	UINT m_nActivePetIndex = 0;
 
 	ID3D12PipelineState* m_pd3dFullscreenPipelineState = NULL;
 	ID3D12Resource* m_pd3dFullscreenTexture = NULL;
