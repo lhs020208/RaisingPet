@@ -49,10 +49,16 @@ public:
 	virtual void OnProcessingMouseMessage(HWND hWnd, UINT nMessageID, WPARAM wParam, LPARAM lParam) override;
 
 private:
-	CGameObject* m_pTheCAObject = NULL;
-	ID3D12Resource* m_pd3dTheCATexture = NULL;
-	ID3D12Resource* m_pd3dTheCATextureUploadBuffer = NULL;
-	ID3D12DescriptorHeap* m_pd3dTheCASrvDescriptorHeap = NULL;
+	struct PET_RENDER_RESOURCE
+	{
+		CPet* pPet = NULL;
+		ID3D12Resource* pd3dTexture = NULL;
+		ID3D12Resource* pd3dTextureUploadBuffer = NULL;
+		ID3D12DescriptorHeap* pd3dSrvDescriptorHeap = NULL;
+	};
+
+	std::vector<PET_RENDER_RESOURCE> m_vPetResources;
+
 	ID3D12PipelineState* m_pd3dFullscreenPipelineState = NULL;
 	ID3D12Resource* m_pd3dFullscreenTexture = NULL;
 	ID3D12Resource* m_pd3dFullscreenTextureUploadBuffer = NULL;
