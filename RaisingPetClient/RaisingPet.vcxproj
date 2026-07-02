@@ -142,6 +142,8 @@ xcopy "$(ProjectDir)Shaders\*Shaders.hlsl" "$(ProjectDir)Executable\" /Y
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="Camera.h" />
+    <ClInclude Include="d3dx12.h" />
+    <ClInclude Include="DDSTextureLoader12.h" />
     <ClInclude Include="GameFramework.h" />
     <ClInclude Include="RaisingPet.h" />
     <ClInclude Include="Mesh.h" />
@@ -156,6 +158,7 @@ xcopy "$(ProjectDir)Shaders\*Shaders.hlsl" "$(ProjectDir)Executable\" /Y
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Camera.cpp" />
+    <ClCompile Include="DDSTextureLoader12.cpp" />
     <ClCompile Include="GameFramework.cpp" />
     <ClCompile Include="RaisingPet.cpp" />
     <ClCompile Include="Mesh.cpp" />

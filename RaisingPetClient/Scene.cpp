@@ -5,6 +5,8 @@
 #include "stdafx.h"
 #include "Scene.h"
 #include "GameFramework.h"
+#include "DDSTextureLoader12.h"
+#include "d3dx12.h"
 extern CGameFramework* g_pFramework;
 
 CScene::CScene()
@@ -24,7 +26,14 @@ ID3D12RootSignature *CScene::CreateGraphicsRootSignature(ID3D12Device *pd3dDevic
 {
 	ID3D12RootSignature *pd3dGraphicsRootSignature = NULL;
 
-	D3D12_ROOT_PARAMETER pd3dRootParameters[3];
+	D3D12_DESCRIPTOR_RANGE d3dSrvDescriptorRange = {};
+	d3dSrvDescriptorRange.RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
+	d3dSrvDescriptorRange.NumDescriptors = 1;
+	d3dSrvDescriptorRange.BaseShaderRegister = 0;
+	d3dSrvDescriptorRange.RegisterSpace = 0;
+	d3dSrvDescriptorRange.OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
+
+	D3D12_ROOT_PARAMETER pd3dRootParameters[4];
 	pd3dRootParameters[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_32BIT_CONSTANTS;
 	pd3dRootParameters[0].Constants.Num32BitValues = 4; //Time, ElapsedTime, xCursor, yCursor
 	pd3dRootParameters[0].Constants.ShaderRegister = 0; //Time
@@ -43,13 +52,33 @@ ID3D12RootSignature *CScene::CreateGraphicsRootSignature(ID3D12Device *pd3dDevic
 	pd3dRootParameters[2].Constants.RegisterSpace = 0;
 	pd3dRootParameters[2].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
 
+	pd3dRootParameters[3].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
+	pd3dRootParameters[3].DescriptorTable.NumDescriptorRanges = 1;
+	pd3dRootParameters[3].DescriptorTable.pDescriptorRanges = &d3dSrvDescriptorRange;
+	pd3dRootParameters[3].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+
 	D3D12_ROOT_SIGNATURE_FLAGS d3dRootSignatureFlags = D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT;
 	D3D12_ROOT_SIGNATURE_DESC d3dRootSignatureDesc;
 	::ZeroMemory(&d3dRootSignatureDesc, sizeof(D3D12_ROOT_SIGNATURE_DESC));
 	d3dRootSignatureDesc.NumParameters = _countof(pd3dRootParameters);
 	d3dRootSignatureDesc.pParameters = pd3dRootParameters;
-	d3dRootSignatureDesc.NumStaticSamplers = 0;
-	d3dRootSignatureDesc.pStaticSamplers = NULL;
+	D3D12_STATIC_SAMPLER_DESC d3dStaticSampler = {};
+	d3dStaticSampler.Filter = D3D12_FILTER_MIN_MAG_MIP_LINEAR;
+	d3dStaticSampler.AddressU = D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
+	d3dStaticSampler.AddressV = D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
+	d3dStaticSampler.AddressW = D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
+	d3dStaticSampler.MipLODBias = 0.0f;
+	d3dStaticSampler.MaxAnisotropy = 1;
+	d3dStaticSampler.ComparisonFunc = D3D12_COMPARISON_FUNC_ALWAYS;
+	d3dStaticSampler.BorderColor = D3D12_STATIC_BORDER_COLOR_OPAQUE_BLACK;
+	d3dStaticSampler.MinLOD = 0.0f;
+	d3dStaticSampler.MaxLOD = D3D12_FLOAT32_MAX;
+	d3dStaticSampler.ShaderRegister = 0;
+	d3dStaticSampler.RegisterSpace = 0;
+	d3dStaticSampler.ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+
+	d3dRootSignatureDesc.NumStaticSamplers = 1;
+	d3dRootSignatureDesc.pStaticSamplers = &d3dStaticSampler;
 	d3dRootSignatureDesc.Flags = d3dRootSignatureFlags;
 
 	ID3DBlob *pd3dSignatureBlob = NULL;
@@ -104,30 +133,122 @@ void CScene::BuildGraphicsRootSignature(ID3D12Device* pd3dDevice)
 //ÅÊÅ© Scene////////////////////////////////////////////////////////////////////////////////////////////////
 void CTankScene::BuildObjects(ID3D12Device* pd3dDevice, ID3D12GraphicsCommandList* pd3dCommandList)
 {
-	m_pd3dGraphicsRootSignature = CreateGraphicsRootSignature(pd3dDevice);
-	CPseudoLightingShader* pShader = new CPseudoLightingShader();
-	pShader->CreateShader(pd3dDevice, m_pd3dGraphicsRootSignature);
-	pShader->CreateShaderVariables(pd3dDevice, pd3dCommandList);
+	// Create the full-screen texture pipeline.
+	ID3DBlob* pd3dVertexShaderBlob = NULL;
+	ID3DBlob* pd3dPixelShaderBlob = NULL;
+	ID3DBlob* pd3dErrorBlob = NULL;
 
-	using namespace std;
-	default_random_engine dre{ random_device{}() };
-	uniform_real_distribution<float> uid{ 0.0f,1.0f };
+	HRESULT hResult = D3DCompileFromFile(L"Shaders.hlsl", NULL, NULL, "VSFullscreenTexture", "vs_5_1",
+		D3DCOMPILE_ENABLE_STRICTNESS, 0, &pd3dVertexShaderBlob, &pd3dErrorBlob);
+	if (FAILED(hResult))
+	{
+		if (pd3dErrorBlob) OutputDebugStringA(static_cast<const char*>(pd3dErrorBlob->GetBufferPointer()));
+		if (pd3dErrorBlob) pd3dErrorBlob->Release();
+		return;
+	}
+	if (pd3dErrorBlob) { pd3dErrorBlob->Release(); pd3dErrorBlob = NULL; }
 
-	uniform_real_distribution<float> uid_x{ 0,18.0f };
-	uniform_real_distribution<float> uid_z{ 0,18.0f };
-	uniform_int_distribution<int> uid_x_int(-9, 9);
-	uniform_int_distribution<int> uid_z_int(-9, 9);
-	uniform_real_distribution<float> uid_rot{ 0,360.0f };
+	hResult = D3DCompileFromFile(L"Shaders.hlsl", NULL, NULL, "PSFullscreenTexture", "ps_5_1",
+		D3DCOMPILE_ENABLE_STRICTNESS, 0, &pd3dPixelShaderBlob, &pd3dErrorBlob);
+	if (FAILED(hResult))
+	{
+		if (pd3dErrorBlob) OutputDebugStringA(static_cast<const char*>(pd3dErrorBlob->GetBufferPointer()));
+		if (pd3dErrorBlob) pd3dErrorBlob->Release();
+		pd3dVertexShaderBlob->Release();
+		return;
+	}
+	if (pd3dErrorBlob) pd3dErrorBlob->Release();
+
+	D3D12_GRAPHICS_PIPELINE_STATE_DESC d3dPipelineStateDesc = {};
+	d3dPipelineStateDesc.pRootSignature = m_pd3dGraphicsRootSignature;
+	d3dPipelineStateDesc.VS = { pd3dVertexShaderBlob->GetBufferPointer(), pd3dVertexShaderBlob->GetBufferSize() };
+	d3dPipelineStateDesc.PS = { pd3dPixelShaderBlob->GetBufferPointer(), pd3dPixelShaderBlob->GetBufferSize() };
+	CShader d3dStateFactory;
+	d3dPipelineStateDesc.RasterizerState = d3dStateFactory.CreateRasterizerState();
+	d3dPipelineStateDesc.RasterizerState.CullMode = D3D12_CULL_MODE_NONE;
+	d3dPipelineStateDesc.BlendState = d3dStateFactory.CreateBlendState();
+	d3dPipelineStateDesc.DepthStencilState = d3dStateFactory.CreateDepthStencilState();
+	d3dPipelineStateDesc.DepthStencilState.DepthEnable = FALSE;
+	d3dPipelineStateDesc.DepthStencilState.DepthWriteMask = D3D12_DEPTH_WRITE_MASK_ZERO;
+	d3dPipelineStateDesc.SampleMask = UINT_MAX;
+	d3dPipelineStateDesc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
+	d3dPipelineStateDesc.NumRenderTargets = 1;
+	d3dPipelineStateDesc.RTVFormats[0] = DXGI_FORMAT_R8G8B8A8_UNORM;
+	d3dPipelineStateDesc.DSVFormat = DXGI_FORMAT_D24_UNORM_S8_UINT;
+	d3dPipelineStateDesc.SampleDesc.Count = 1;
+
+	hResult = pd3dDevice->CreateGraphicsPipelineState(&d3dPipelineStateDesc,
+		__uuidof(ID3D12PipelineState), reinterpret_cast<void**>(&m_pd3dFullscreenPipelineState));
+	pd3dVertexShaderBlob->Release();
+	pd3dPixelShaderBlob->Release();
+	if (FAILED(hResult)) return;
+
+	// Load the DDS. The second path also works when the process starts at the repository root.
+	std::unique_ptr<uint8_t[]> ddsData;
+	std::vector<D3D12_SUBRESOURCE_DATA> subresources;
+	hResult = DirectX::LoadDDSTextureFromFile(pd3dDevice, L"Assets\\Image\\Test.dds",
+		&m_pd3dFullscreenTexture, ddsData, subresources);
+	if (FAILED(hResult))
+	{
+		hResult = DirectX::LoadDDSTextureFromFile(pd3dDevice, L"RaisingPetClient\\Assets\\Image\\Test.dds",
+			&m_pd3dFullscreenTexture, ddsData, subresources);
+	}
+	if (FAILED(hResult))
+	{
+		hResult = DirectX::LoadDDSTextureFromFile(pd3dDevice, L"..\\..\\Assets\\Image\\Test.dds",
+			&m_pd3dFullscreenTexture, ddsData, subresources);
+	}
+	if (FAILED(hResult) || subresources.empty()) return;
+
+
+	const UINT64 nUploadBufferSize = GetRequiredIntermediateSize(m_pd3dFullscreenTexture, 0,
+		static_cast<UINT>(subresources.size()));
+	CD3DX12_HEAP_PROPERTIES d3dUploadHeapProperties(D3D12_HEAP_TYPE_UPLOAD);
+	CD3DX12_RESOURCE_DESC d3dUploadBufferDesc = CD3DX12_RESOURCE_DESC::Buffer(nUploadBufferSize);
+	hResult = pd3dDevice->CreateCommittedResource(&d3dUploadHeapProperties, D3D12_HEAP_FLAG_NONE,
+		&d3dUploadBufferDesc, D3D12_RESOURCE_STATE_GENERIC_READ, NULL,
+		__uuidof(ID3D12Resource), reinterpret_cast<void**>(&m_pd3dFullscreenTextureUploadBuffer));
+	if (FAILED(hResult)) return;
+
+	UpdateSubresources(pd3dCommandList, m_pd3dFullscreenTexture, m_pd3dFullscreenTextureUploadBuffer,
+		0, 0, static_cast<UINT>(subresources.size()), subresources.data());
+	CD3DX12_RESOURCE_BARRIER d3dTextureBarrier = CD3DX12_RESOURCE_BARRIER::Transition(
+		m_pd3dFullscreenTexture, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+	pd3dCommandList->ResourceBarrier(1, &d3dTextureBarrier);
+
+	D3D12_DESCRIPTOR_HEAP_DESC d3dSrvHeapDesc = {};
+	d3dSrvHeapDesc.NumDescriptors = 1;
+	d3dSrvHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
+	d3dSrvHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
+	hResult = pd3dDevice->CreateDescriptorHeap(&d3dSrvHeapDesc, __uuidof(ID3D12DescriptorHeap),
+		reinterpret_cast<void**>(&m_pd3dFullscreenSrvDescriptorHeap));
+	if (FAILED(hResult)) return;
+
+	D3D12_SHADER_RESOURCE_VIEW_DESC d3dSrvDesc = {};
+	d3dSrvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+	d3dSrvDesc.Format = m_pd3dFullscreenTexture->GetDesc().Format;
+	d3dSrvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
+	d3dSrvDesc.Texture2D.MipLevels = m_pd3dFullscreenTexture->GetDesc().MipLevels;
+	pd3dDevice->CreateShaderResourceView(m_pd3dFullscreenTexture, &d3dSrvDesc,
+		m_pd3dFullscreenSrvDescriptorHeap->GetCPUDescriptorHandleForHeapStart());
 }
 
 void CTankScene::ReleaseObjects()
 {
+	if (m_pd3dFullscreenPipelineState) m_pd3dFullscreenPipelineState->Release();
+	if (m_pd3dFullscreenTexture) m_pd3dFullscreenTexture->Release();
+	if (m_pd3dFullscreenTextureUploadBuffer) m_pd3dFullscreenTextureUploadBuffer->Release();
+	if (m_pd3dFullscreenSrvDescriptorHeap) m_pd3dFullscreenSrvDescriptorHeap->Release();
 	if (m_pd3dGraphicsRootSignature) m_pd3dGraphicsRootSignature->Release();
 }
 
 void CTankScene::ReleaseUploadBuffers()
 {
-
+	if (m_pd3dFullscreenTextureUploadBuffer)
+	{
+		m_pd3dFullscreenTextureUploadBuffer->Release();
+		m_pd3dFullscreenTextureUploadBuffer = NULL;
+	}
 }
 void CTankScene::Render(ID3D12GraphicsCommandList* pd3dCommandList, CCamera* pCamera)
 {
@@ -135,6 +256,16 @@ void CTankScene::Render(ID3D12GraphicsCommandList* pd3dCommandList, CCamera* pCa
 
 	pCamera->SetViewportsAndScissorRects(pd3dCommandList);
 	pCamera->UpdateShaderVariables(pd3dCommandList);
+
+	if (!m_pd3dFullscreenPipelineState || !m_pd3dFullscreenSrvDescriptorHeap) return;
+
+	ID3D12DescriptorHeap* ppd3dDescriptorHeaps[] = { m_pd3dFullscreenSrvDescriptorHeap };
+	pd3dCommandList->SetDescriptorHeaps(1, ppd3dDescriptorHeaps);
+	pd3dCommandList->SetGraphicsRootDescriptorTable(3,
+		m_pd3dFullscreenSrvDescriptorHeap->GetGPUDescriptorHandleForHeapStart());
+	pd3dCommandList->SetPipelineState(m_pd3dFullscreenPipelineState);
+	pd3dCommandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+	pd3dCommandList->DrawInstanced(3, 1, 0, 0);
 }
 void CTankScene::OnProcessingKeyboardMessage(HWND hWnd, UINT nMessageID, WPARAM wParam, LPARAM lParam)
 {

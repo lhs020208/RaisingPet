@@ -150,3 +150,38 @@ float4 PSPseudoLighting(VS_OUTPUT input) : SV_TARGET
 	*/
     return float4(gf3ObjectColor, 1.0f);
 }
+
+Texture2D gFullscreenTexture : register(t0);
+SamplerState gFullscreenSampler : register(s0);
+
+struct VS_FULLSCREEN_OUTPUT
+{
+    float4 positionH : SV_POSITION;
+    float2 uv : TEXCOORD0;
+};
+
+VS_FULLSCREEN_OUTPUT VSFullscreenTexture(uint vertexId : SV_VertexID)
+{
+    static const float2 positions[3] =
+    {
+        float2(-1.0f,  1.0f),
+        float2( 3.0f,  1.0f),
+        float2(-1.0f, -3.0f)
+    };
+    static const float2 texCoords[3] =
+    {
+        float2(0.0f, 0.0f),
+        float2(2.0f, 0.0f),
+        float2(0.0f, 2.0f)
+    };
+
+    VS_FULLSCREEN_OUTPUT output;
+    output.positionH = float4(positions[vertexId], 0.0f, 1.0f);
+    output.uv = texCoords[vertexId];
+    return output;
+}
+
+float4 PSFullscreenTexture(VS_FULLSCREEN_OUTPUT input) : SV_TARGET
+{
+    return gFullscreenTexture.Sample(gFullscreenSampler, input.uv);
+}

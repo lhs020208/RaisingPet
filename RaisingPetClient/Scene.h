@@ -48,4 +48,10 @@ public:
 	virtual void OnProcessingKeyboardMessage(HWND hWnd, UINT nMessageID, WPARAM wParam, LPARAM lParam) override;
 	CGameObject* PickObjectPointedByCursor(int xClient, int yClient, CCamera* pCamera);
 	virtual void OnProcessingMouseMessage(HWND hWnd, UINT nMessageID, WPARAM wParam, LPARAM lParam) override;
+
+private:
+	ID3D12PipelineState* m_pd3dFullscreenPipelineState = NULL;
+	ID3D12Resource* m_pd3dFullscreenTexture = NULL;
+	ID3D12Resource* m_pd3dFullscreenTextureUploadBuffer = NULL;
+	ID3D12DescriptorHeap* m_pd3dFullscreenSrvDescriptorHeap = NULL;
 };
