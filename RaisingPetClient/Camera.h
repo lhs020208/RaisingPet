@@ -7,8 +7,6 @@
 
 #define THIRD_PERSON_CAMERA			0x03
 
-class CPlayer;
-
 class CCamera
 {
 public:
@@ -42,8 +40,6 @@ public:
 	D3D12_VIEWPORT					m_d3dViewport;
 	D3D12_RECT						m_d3dScissorRect;
 
-	CPlayer							*m_pPlayer = NULL;
-
 public:
 	CCamera();
 	CCamera(CCamera *pCamera);
@@ -64,9 +60,6 @@ public:
 	void SetScissorRect(LONG xLeft, LONG yTop, LONG xRight, LONG yBottom);
 
 	virtual void SetViewportsAndScissorRects(ID3D12GraphicsCommandList *pd3dCommandList);
-
-	void SetPlayer(CPlayer *pPlayer) { m_pPlayer = pPlayer; }
-	CPlayer *GetPlayer() { return(m_pPlayer); }
 
 	void SetMode(DWORD nMode) { m_nMode = nMode; }
 	DWORD GetMode() { return(m_nMode); }

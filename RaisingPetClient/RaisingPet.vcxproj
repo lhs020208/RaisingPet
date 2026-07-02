@@ -148,7 +148,6 @@ xcopy "$(ProjectDir)Shaders\*Shaders.hlsl" "$(ProjectDir)Executable\" /Y
     <ClInclude Include="RaisingPet.h" />
     <ClInclude Include="Mesh.h" />
     <ClInclude Include="Object.h" />
-    <ClInclude Include="Player.h" />
     <ClInclude Include="Resource.h" />
     <ClInclude Include="Scene.h" />
     <ClInclude Include="Shader.h" />
@@ -163,7 +162,6 @@ xcopy "$(ProjectDir)Shaders\*Shaders.hlsl" "$(ProjectDir)Executable\" /Y
     <ClCompile Include="RaisingPet.cpp" />
     <ClCompile Include="Mesh.cpp" />
     <ClCompile Include="Object.cpp" />
-    <ClCompile Include="Player.cpp" />
     <ClCompile Include="Scene.cpp" />
     <ClCompile Include="Shader.cpp" />
     <ClCompile Include="stdafx.cpp">

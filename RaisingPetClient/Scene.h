@@ -5,7 +5,6 @@
 #pragma once
 
 #include "Shader.h"
-#include "Player.h"
 
 class CScene
 {

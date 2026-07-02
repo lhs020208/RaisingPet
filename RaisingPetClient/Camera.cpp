@@ -2,7 +2,6 @@
 // File: Camera.cpp
 //-----------------------------------------------------------------------------
 #include "stdafx.h"
-#include "Player.h"
 #include "Camera.h"
 
 CCamera::CCamera()
@@ -22,7 +21,6 @@ CCamera::CCamera()
 	m_fTimeLag = 0.0f;
 	m_xmf3LookAtWorld = XMFLOAT3(0.0f, 0.0f, 0.0f);
 	m_nMode = 0x00;
-	m_pPlayer = NULL;
 }
 
 CCamera::CCamera(CCamera *pCamera)
@@ -48,7 +46,6 @@ CCamera::CCamera(CCamera *pCamera)
 		m_fTimeLag = 0.0f;
 		m_xmf3LookAtWorld = XMFLOAT3(0.0f, 0.0f, 0.0f);
 		m_nMode = 0x00;
-		m_pPlayer = NULL;
 	}
 }
 
@@ -293,50 +290,7 @@ CThirdPersonCamera::CThirdPersonCamera(CCamera *pCamera) : CCamera(pCamera)
 
 void CThirdPersonCamera::Update(XMFLOAT3& xmf3LookAt, float fTimeElapsed)
 {
-	if (m_pPlayer)
-	{
-		if (m_pPlayer->overview == false) {
-			XMVECTOR up = XMVector3Normalize(XMLoadFloat3(&m_pPlayer->m_xmf3Up));
-			XMVECTOR look = XMVector3Normalize(XMLoadFloat3(&m_pPlayer->m_xmf3Look));
-
-			// 2. Right = Up x Look
-			XMVECTOR right = XMVector3Normalize(XMVector3Cross(up, look));
-
-			// 3. Look 재정렬 = Right x Up
-			look = XMVector3Normalize(XMVector3Cross(right, up)); // 정직교 보정
-
-			// 4. 회전 행렬 구성
-			XMMATRIX mtxRotate;
-			mtxRotate.r[0] = right;
-			mtxRotate.r[1] = up;
-			mtxRotate.r[2] = look;
-			mtxRotate.r[3] = XMVectorSet(0, 0, 0, 1);
-
-			// 5. 카메라 위치 계산
-			XMFLOAT3 xmf3Offset = Vector3::TransformCoord(m_pPlayer->m_xmf3CameraOffset, mtxRotate);
-			XMFLOAT3 xmf3Position = Vector3::Add(m_pPlayer->m_xmf3Position, xmf3Offset);
-
-			// 6. 위치 적용
-			m_xmf3Position = xmf3Position;
-
-			// 7. LookAt 적용 (위치를 바라보게)
-			SetLookAt(m_pPlayer->m_xmf3Position, XMFLOAT3(0.0f, 1.0f, 0.0f));
-
-			// 8. 뷰 행렬 갱신
-			GenerateViewMatrix();
-		}
-		else
-		{
-			m_xmf3Position = XMFLOAT3(-30.0f, 10.0f, 30.0f);
-
-			XMFLOAT3 target = XMFLOAT3(0.0f, 0.0f, 0.0f);
-
-			if (Vector3::Equal(m_xmf3Position, target, 0.0001f)) target.z += 0.01f;
-			SetLookAt(target);
-
-			GenerateViewMatrix();
-		}
-	}
+	
 }
 
 void CThirdPersonCamera::SetLookAt(XMFLOAT3& xmf3LookAt)
@@ -351,7 +305,7 @@ void CThirdPersonCamera::SetLookAt(XMFLOAT3& xmf3LookAt)
 		xmf3LookAt.z += 0.01f;
 	}
 
-	XMFLOAT4X4 mtxLookAt = Matrix4x4::LookAtLH(m_xmf3Position, xmf3LookAt, m_pPlayer->GetUpVector());
+	XMFLOAT4X4 mtxLookAt = Matrix4x4::LookAtLH(m_xmf3Position, xmf3LookAt, m_xmf3Up);
 	m_xmf3Right = Vector3::Normalize(XMFLOAT3(mtxLookAt._11, mtxLookAt._21, mtxLookAt._31));
 	m_xmf3Up = Vector3::Normalize(XMFLOAT3(mtxLookAt._12, mtxLookAt._22, mtxLookAt._32));
 	m_xmf3Look = Vector3::Normalize(XMFLOAT3(mtxLookAt._13, mtxLookAt._23, mtxLookAt._33));
