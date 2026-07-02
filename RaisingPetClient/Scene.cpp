@@ -137,41 +137,40 @@ void CScene::BuildGraphicsRootSignature(ID3D12Device* pd3dDevice)
 //ÅÊÅ© Scene////////////////////////////////////////////////////////////////////////////////////////////////
 void CGameScene::BuildObjects(ID3D12Device* pd3dDevice, ID3D12GraphicsCommandList* pd3dCommandList)
 {
-	m_vPetResources.emplace_back();
-	PET_RENDER_RESOURCE& petResource = m_vPetResources.back();
+	struct PET_ASSET_DESC
+	{
+		const char* pName;
+		const char* pMeshFile;
+		const wchar_t* pTextureFile;
+		const float vPosition[3] = { 0.0f, -25.0f, 0.0f };
+	};
+
+	const PET_ASSET_DESC petAssets[] =
+	{
+		{ "TheCA", "Assets/TheCA/TheCAMesh.obj", L"Assets/TheCA/TheCATexture.dds", 5.0f, -25.0f, 0.0f },
+		{ "Touma", "Assets/Touma/ToumaMesh.obj", L"Assets/Touma/ToumaTexture.dds", -5.0f, -28.0f, 0.0f }
+	};
+
 	CPseudoLightingShader* pObjectShader = new CPseudoLightingShader();
 	pObjectShader->CreateShader(pd3dDevice, m_pd3dGraphicsRootSignature);
 
-	char pstrTheCAMeshFile0[] = "Assets/TheCA/TheCA.obj";
-	char pstrTheCAMeshFile1[] = "RaisingPetClient/Assets/TheCA/TheCA.obj";
-	char pstrTheCAMeshFile2[] = "../Assets/TheCA/TheCA.obj";
-	char pstrTheCAMeshFile3[] = "../../Assets/TheCA/TheCA.obj";
-	char* pstrTheCAMeshFile = pstrTheCAMeshFile0;
-	if (GetFileAttributesA(pstrTheCAMeshFile) == INVALID_FILE_ATTRIBUTES) pstrTheCAMeshFile = pstrTheCAMeshFile1;
-	if (GetFileAttributesA(pstrTheCAMeshFile) == INVALID_FILE_ATTRIBUTES) pstrTheCAMeshFile = pstrTheCAMeshFile2;
-	if (GetFileAttributesA(pstrTheCAMeshFile) == INVALID_FILE_ATTRIBUTES) pstrTheCAMeshFile = pstrTheCAMeshFile3;
-	CMesh* pTheCAMesh = new CMesh(pd3dDevice, pd3dCommandList, pstrTheCAMeshFile);
-	petResource.pPet = new CPet();
-	petResource.pPet->SetMesh(pTheCAMesh);
-	petResource.pPet->SetName("TheCA");
-	petResource.pPet->SetShader(pObjectShader);
-	petResource.pPet->SetPosition(0.0f, -25.0f, 0.0f);
-	petResource.pPet->SetColor(XMFLOAT3(1.0f, 1.0f, 1.0f));
+	for (const PET_ASSET_DESC& petAsset : petAssets)
+	{
+		m_vPetResources.emplace_back();
+		PET_RENDER_RESOURCE& petResource = m_vPetResources.back();
 
-		{
+		CMesh* pPetMesh = new CMesh(pd3dDevice, pd3dCommandList, const_cast<char*>(petAsset.pMeshFile));
+		petResource.pPet = new CPet();
+		petResource.pPet->SetMesh(pPetMesh);
+		petResource.pPet->SetName(petAsset.pName);
+		petResource.pPet->SetShader(pObjectShader);
+		petResource.pPet->SetPosition(petAsset.vPosition[0], petAsset.vPosition[1], petAsset.vPosition[2]);
+		petResource.pPet->SetColor(XMFLOAT3(1.0f, 1.0f, 1.0f));
+
 		std::unique_ptr<uint8_t[]> textureData;
 		std::vector<D3D12_SUBRESOURCE_DATA> textureSubresources;
-		HRESULT hTextureResult = DirectX::LoadDDSTextureFromFile(pd3dDevice,
-			L"Assets/TheCA/CubePaint.dds", &petResource.pd3dTexture, textureData, textureSubresources);
-		if (FAILED(hTextureResult))
-			hTextureResult = DirectX::LoadDDSTextureFromFile(pd3dDevice,
-				L"RaisingPetClient/Assets/TheCA/CubePaint.dds", &petResource.pd3dTexture, textureData, textureSubresources);
-		if (FAILED(hTextureResult))
-			hTextureResult = DirectX::LoadDDSTextureFromFile(pd3dDevice,
-				L"../Assets/TheCA/CubePaint.dds", &petResource.pd3dTexture, textureData, textureSubresources);
-		if (FAILED(hTextureResult))
-			hTextureResult = DirectX::LoadDDSTextureFromFile(pd3dDevice,
-				L"../../Assets/TheCA/CubePaint.dds", &petResource.pd3dTexture, textureData, textureSubresources);
+		HRESULT hTextureResult = DirectX::LoadDDSTextureFromFile(pd3dDevice, petAsset.pTextureFile,
+			&petResource.pd3dTexture, textureData, textureSubresources);
 
 		if (SUCCEEDED(hTextureResult) && !textureSubresources.empty())
 		{
@@ -211,7 +210,7 @@ void CGameScene::BuildObjects(ID3D12Device* pd3dDevice, ID3D12GraphicsCommandLis
 			}
 		}
 	}
-// Create the full-screen texture pipeline.
+
 	ID3DBlob* pd3dVertexShaderBlob = NULL;
 	ID3DBlob* pd3dPixelShaderBlob = NULL;
 	ID3DBlob* pd3dErrorBlob = NULL;
