@@ -440,7 +440,6 @@ void CGameFramework::BuildObjects()
 	m_pPlayer->SetCameraOffset(XMFLOAT3(0.0f, 0.5f, -3.0f));
 	m_pCamera = m_pPlayer->GetCamera();
 
-	m_pScene->SetPlayer(m_pPlayer);
 	if (m_pScene) m_pScene->BuildObjects(m_pd3dDevice, m_pd3dCommandList);
 
 	m_pd3dCommandList->Close();
