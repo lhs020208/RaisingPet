@@ -161,6 +161,20 @@ float4 PSPseudoLighting(VS_OUTPUT input) : SV_TARGET
 Texture2D gFullscreenTexture : register(t0);
 SamplerState gFullscreenSampler : register(s0);
 
+VS_OUTPUT VSPositionTexture(float3 position : POSITION, float2 uv : TEXTURECOORD)
+{
+	VS_OUTPUT output = (VS_OUTPUT)0;
+	output.positionW = mul(float4(position, 1.0f), gmtxWorld).xyz;
+	output.positionH = mul(mul(float4(output.positionW, 1.0f), gmtxView), gmtxProjection);
+	output.uv = uv;
+	return output;
+}
+
+float4 PSPositionTexture(VS_OUTPUT input) : SV_TARGET
+{
+	return gFullscreenTexture.Sample(gFullscreenSampler, input.uv);
+}
+
 struct VS_FULLSCREEN_OUTPUT
 {
     float4 positionH : SV_POSITION;

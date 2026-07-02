@@ -183,10 +183,11 @@ CPseudoLightingShader::~CPseudoLightingShader()
 
 D3D12_INPUT_LAYOUT_DESC CPseudoLightingShader::CreateInputLayout()
 {
-	UINT nInputElementDescs = 1;
+	UINT nInputElementDescs = 2;
 	D3D12_INPUT_ELEMENT_DESC *pd3dInputElementDescs = new D3D12_INPUT_ELEMENT_DESC[nInputElementDescs];
 
 	pd3dInputElementDescs[0] = { "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 };
+	pd3dInputElementDescs[1] = { "TEXTURECOORD", 0, DXGI_FORMAT_R32G32_FLOAT, 1, 0, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 };
 
 	D3D12_INPUT_LAYOUT_DESC d3dInputLayoutDesc;
 	d3dInputLayoutDesc.pInputElementDescs = pd3dInputElementDescs;
@@ -197,12 +198,12 @@ D3D12_INPUT_LAYOUT_DESC CPseudoLightingShader::CreateInputLayout()
 
 D3D12_SHADER_BYTECODE CPseudoLightingShader::CreateVertexShader(ID3DBlob **ppd3dShaderBlob)
 {
-	return(CShader::CompileShaderFromFile(L"Shaders.hlsl", "VSPositionColor", "vs_5_1", ppd3dShaderBlob));
+	return(CShader::CompileShaderFromFile(L"Shaders.hlsl", "VSPositionTexture", "vs_5_1", ppd3dShaderBlob));
 }
 
 D3D12_SHADER_BYTECODE CPseudoLightingShader::CreatePixelShader(ID3DBlob **ppd3dShaderBlob)
 {
-	return(CShader::CompileShaderFromFile(L"Shaders.hlsl", "PSPseudoLighting", "ps_5_1", ppd3dShaderBlob));
+	return(CShader::CompileShaderFromFile(L"Shaders.hlsl", "PSPositionTexture", "ps_5_1", ppd3dShaderBlob));
 }
 
 

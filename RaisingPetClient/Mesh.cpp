@@ -85,97 +85,137 @@ void CMesh::LoadMeshFromFile(ID3D12Device* device, ID3D12GraphicsCommandList* cm
 	std::ifstream file(filename);
 	if (!file.is_open()) return;
 
+	struct OBJ_VERTEX_INDEX
+	{
+		int position = -1;
+		int textureCoord = -1;
+	};
+
+	std::vector<XMFLOAT3> sourcePositions;
+	std::vector<XMFLOAT2> sourceTextureCoords;
 	std::vector<XMFLOAT3> vertices;
+	std::vector<XMFLOAT2> textureCoords;
 	std::vector<UINT> indices;
 
+	auto ResolveOBJIndex = [](int index, size_t count) -> int
+	{
+		return (index < 0) ? static_cast<int>(count) + index : index - 1;
+	};
+
 	std::string line;
-	while (std::getline(file, line)) {
+	while (std::getline(file, line))
+	{
 		std::istringstream iss(line);
 		std::string prefix;
 		iss >> prefix;
 
-		if (prefix == "v") {
+		if (prefix == "v")
+		{
 			float x, y, z;
 			iss >> x >> y >> z;
-			vertices.emplace_back(x, y, z);
+			sourcePositions.emplace_back(x, y, z);
 		}
-		else if (prefix == "f") {
-			std::vector<UINT> faceIndices;
+		else if (prefix == "vt")
+		{
+			float u, v;
+			iss >> u >> v;
+			sourceTextureCoords.emplace_back(u, 1.0f - v);
+		}
+		else if (prefix == "f")
+		{
+			std::vector<OBJ_VERTEX_INDEX> face;
 			std::string token;
-			while (iss >> token) {
+			while (iss >> token)
+			{
+				OBJ_VERTEX_INDEX vertexIndex;
 				std::istringstream tokenStream(token);
-				std::string vIdx;
-				std::getline(tokenStream, vIdx, '/');
-				int idx = std::stoi(vIdx);
-				if (idx < 0) idx = static_cast<int>(vertices.size()) + idx;
-				else idx -= 1;
-				faceIndices.push_back(static_cast<UINT>(idx));
+				std::string value;
+
+				if (std::getline(tokenStream, value, '/') && !value.empty())
+					vertexIndex.position = ResolveOBJIndex(std::stoi(value), sourcePositions.size());
+				if (std::getline(tokenStream, value, '/') && !value.empty())
+					vertexIndex.textureCoord = ResolveOBJIndex(std::stoi(value), sourceTextureCoords.size());
+
+				face.push_back(vertexIndex);
 			}
 
-			for (size_t i = 1; i + 1 < faceIndices.size(); ++i) {
-				indices.push_back(faceIndices[0]);
-				indices.push_back(faceIndices[i]);
-				indices.push_back(faceIndices[i + 1]);
+			for (size_t i = 1; i + 1 < face.size(); ++i)
+			{
+				const OBJ_VERTEX_INDEX triangle[3] = { face[0], face[i], face[i + 1] };
+				for (const OBJ_VERTEX_INDEX& vertexIndex : triangle)
+				{
+					if (vertexIndex.position < 0 || vertexIndex.position >= static_cast<int>(sourcePositions.size())) continue;
+					vertices.push_back(sourcePositions[vertexIndex.position]);
+
+					if (vertexIndex.textureCoord >= 0 && vertexIndex.textureCoord < static_cast<int>(sourceTextureCoords.size()))
+						textureCoords.push_back(sourceTextureCoords[vertexIndex.textureCoord]);
+					else
+						textureCoords.emplace_back(0.0f, 0.0f);
+
+					indices.push_back(static_cast<UINT>(indices.size()));
+				}
 			}
 		}
-
 	}
 	file.close();
+
+	if (vertices.empty()) return;
 
 	m_nVertices = static_cast<UINT>(vertices.size());
 	m_nIndices = static_cast<UINT>(indices.size());
 
 	m_pxmf3Positions = new XMFLOAT3[m_nVertices];
 	memcpy(m_pxmf3Positions, vertices.data(), sizeof(XMFLOAT3) * m_nVertices);
-
+	m_pxmf2TextureCoords = new XMFLOAT2[m_nVertices];
+	memcpy(m_pxmf2TextureCoords, textureCoords.data(), sizeof(XMFLOAT2) * m_nVertices);
 	m_pnIndices = new UINT[m_nIndices];
 	memcpy(m_pnIndices, indices.data(), sizeof(UINT) * m_nIndices);
 
-	// ===== GPU 리소스 생성 =====
-
-	// 1. 정점 버퍼
 	UINT vbSize = sizeof(XMFLOAT3) * m_nVertices;
 	m_pd3dPositionBuffer = CreateBufferResource(device, cmdList, m_pxmf3Positions, vbSize,
 		D3D12_HEAP_TYPE_DEFAULT, D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER, &m_pd3dPositionUploadBuffer);
 
-	m_nVertexBufferViews = 1;
-	m_pd3dVertexBufferViews = new D3D12_VERTEX_BUFFER_VIEW[1];
+	UINT uvbSize = sizeof(XMFLOAT2) * m_nVertices;
+	m_pd3dTextureCoordBuffer = CreateBufferResource(device, cmdList, m_pxmf2TextureCoords, uvbSize,
+		D3D12_HEAP_TYPE_DEFAULT, D3D12_RESOURCE_STATE_VERTEX_AND_CONSTANT_BUFFER, &m_pd3dTextureCoordUploadBuffer);
+
+	m_nVertexBufferViews = 2;
+	m_pd3dVertexBufferViews = new D3D12_VERTEX_BUFFER_VIEW[m_nVertexBufferViews];
 	m_pd3dVertexBufferViews[0].BufferLocation = m_pd3dPositionBuffer->GetGPUVirtualAddress();
 	m_pd3dVertexBufferViews[0].StrideInBytes = sizeof(XMFLOAT3);
 	m_pd3dVertexBufferViews[0].SizeInBytes = vbSize;
+	m_pd3dVertexBufferViews[1].BufferLocation = m_pd3dTextureCoordBuffer->GetGPUVirtualAddress();
+	m_pd3dVertexBufferViews[1].StrideInBytes = sizeof(XMFLOAT2);
+	m_pd3dVertexBufferViews[1].SizeInBytes = uvbSize;
 
-	// 2. 인덱스 버퍼
 	UINT ibSize = sizeof(UINT) * m_nIndices;
 	m_pd3dIndexBuffer = CreateBufferResource(device, cmdList, m_pnIndices, ibSize,
 		D3D12_HEAP_TYPE_DEFAULT, D3D12_RESOURCE_STATE_INDEX_BUFFER, &m_pd3dIndexUploadBuffer);
-
 	m_d3dIndexBufferView.BufferLocation = m_pd3dIndexBuffer->GetGPUVirtualAddress();
 	m_d3dIndexBufferView.Format = DXGI_FORMAT_R32_UINT;
 	m_d3dIndexBufferView.SizeInBytes = ibSize;
 
-	// OBB 계산
-	XMFLOAT3 min = vertices[0], max = vertices[0];
-	for (const auto& v : vertices) {
-		if (v.x < min.x) min.x = v.x;
-		if (v.y < min.y) min.y = v.y;
-		if (v.z < min.z) min.z = v.z;
-
-		if (v.x > max.x) max.x = v.x;
-		if (v.y > max.y) max.y = v.y;
-		if (v.z > max.z) max.z = v.z;
+	XMFLOAT3 minimum = vertices[0], maximum = vertices[0];
+	for (const XMFLOAT3& vertex : vertices)
+	{
+		minimum.x = min(minimum.x, vertex.x);
+		minimum.y = min(minimum.y, vertex.y);
+		minimum.z = min(minimum.z, vertex.z);
+		maximum.x = max(maximum.x, vertex.x);
+		maximum.y = max(maximum.y, vertex.y);
+		maximum.z = max(maximum.z, vertex.z);
 	}
 
 	XMFLOAT3 center = {
-		(min.x + max.x) * 0.5f,
-		(min.y + max.y) * 0.5f,
-		(min.z + max.z) * 0.5f
+		(minimum.x + maximum.x) * 0.5f,
+		(minimum.y + maximum.y) * 0.5f,
+		(minimum.z + maximum.z) * 0.5f
 	};
 	XMFLOAT3 extent = {
-		(max.x - min.x) * 0.5f,
-		(max.y - min.y) * 0.5f,
-		(max.z - min.z) * 0.5f
+		(maximum.x - minimum.x) * 0.5f,
+		(maximum.y - minimum.y) * 0.5f,
+		(maximum.z - minimum.z) * 0.5f
 	};
-
 	m_xmOOBB = BoundingOrientedBox(center, extent, XMFLOAT4(0, 0, 0, 1));
 }
 

@@ -50,6 +50,9 @@ public:
 
 private:
 	CGameObject* m_pTheCAObject = NULL;
+	ID3D12Resource* m_pd3dTheCATexture = NULL;
+	ID3D12Resource* m_pd3dTheCATextureUploadBuffer = NULL;
+	ID3D12DescriptorHeap* m_pd3dTheCASrvDescriptorHeap = NULL;
 	ID3D12PipelineState* m_pd3dFullscreenPipelineState = NULL;
 	ID3D12Resource* m_pd3dFullscreenTexture = NULL;
 	ID3D12Resource* m_pd3dFullscreenTextureUploadBuffer = NULL;

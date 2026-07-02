@@ -151,7 +151,60 @@ void CGameScene::BuildObjects(ID3D12Device* pd3dDevice, ID3D12GraphicsCommandLis
 	m_pTheCAObject->SetPosition(0.0f, 0.0f, 0.0f);
 	m_pTheCAObject->SetColor(XMFLOAT3(1.0f, 1.0f, 1.0f));
 
-	// Create the full-screen texture pipeline.
+		{
+		std::unique_ptr<uint8_t[]> textureData;
+		std::vector<D3D12_SUBRESOURCE_DATA> textureSubresources;
+		HRESULT hTextureResult = DirectX::LoadDDSTextureFromFile(pd3dDevice,
+			L"Assets/TheCA/CubePaint.dds", &m_pd3dTheCATexture, textureData, textureSubresources);
+		if (FAILED(hTextureResult))
+			hTextureResult = DirectX::LoadDDSTextureFromFile(pd3dDevice,
+				L"RaisingPetClient/Assets/TheCA/CubePaint.dds", &m_pd3dTheCATexture, textureData, textureSubresources);
+		if (FAILED(hTextureResult))
+			hTextureResult = DirectX::LoadDDSTextureFromFile(pd3dDevice,
+				L"../Assets/TheCA/CubePaint.dds", &m_pd3dTheCATexture, textureData, textureSubresources);
+		if (FAILED(hTextureResult))
+			hTextureResult = DirectX::LoadDDSTextureFromFile(pd3dDevice,
+				L"../../Assets/TheCA/CubePaint.dds", &m_pd3dTheCATexture, textureData, textureSubresources);
+
+		if (SUCCEEDED(hTextureResult) && !textureSubresources.empty())
+		{
+			const UINT64 uploadBufferSize = GetRequiredIntermediateSize(m_pd3dTheCATexture, 0,
+				static_cast<UINT>(textureSubresources.size()));
+			CD3DX12_HEAP_PROPERTIES uploadHeapProperties(D3D12_HEAP_TYPE_UPLOAD);
+			CD3DX12_RESOURCE_DESC uploadBufferDesc = CD3DX12_RESOURCE_DESC::Buffer(uploadBufferSize);
+			hTextureResult = pd3dDevice->CreateCommittedResource(&uploadHeapProperties, D3D12_HEAP_FLAG_NONE,
+				&uploadBufferDesc, D3D12_RESOURCE_STATE_GENERIC_READ, NULL, __uuidof(ID3D12Resource),
+				reinterpret_cast<void**>(&m_pd3dTheCATextureUploadBuffer));
+
+			if (SUCCEEDED(hTextureResult))
+			{
+				UpdateSubresources(pd3dCommandList, m_pd3dTheCATexture, m_pd3dTheCATextureUploadBuffer,
+					0, 0, static_cast<UINT>(textureSubresources.size()), textureSubresources.data());
+				CD3DX12_RESOURCE_BARRIER textureBarrier = CD3DX12_RESOURCE_BARRIER::Transition(
+					m_pd3dTheCATexture, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+				pd3dCommandList->ResourceBarrier(1, &textureBarrier);
+
+				D3D12_DESCRIPTOR_HEAP_DESC srvHeapDesc = {};
+				srvHeapDesc.NumDescriptors = 1;
+				srvHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
+				srvHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
+				hTextureResult = pd3dDevice->CreateDescriptorHeap(&srvHeapDesc, __uuidof(ID3D12DescriptorHeap),
+					reinterpret_cast<void**>(&m_pd3dTheCASrvDescriptorHeap));
+
+				if (SUCCEEDED(hTextureResult))
+				{
+					D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
+					srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+					srvDesc.Format = m_pd3dTheCATexture->GetDesc().Format;
+					srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
+					srvDesc.Texture2D.MipLevels = m_pd3dTheCATexture->GetDesc().MipLevels;
+					pd3dDevice->CreateShaderResourceView(m_pd3dTheCATexture, &srvDesc,
+						m_pd3dTheCASrvDescriptorHeap->GetCPUDescriptorHandleForHeapStart());
+				}
+			}
+		}
+	}
+// Create the full-screen texture pipeline.
 	ID3DBlob* pd3dVertexShaderBlob = NULL;
 	ID3DBlob* pd3dPixelShaderBlob = NULL;
 	ID3DBlob* pd3dErrorBlob = NULL;
@@ -255,6 +308,10 @@ void CGameScene::ReleaseObjects()
 	if (m_pTheCAObject) delete m_pTheCAObject;
 	m_pTheCAObject = NULL;
 
+	if (m_pd3dTheCATexture) m_pd3dTheCATexture->Release();
+	if (m_pd3dTheCATextureUploadBuffer) m_pd3dTheCATextureUploadBuffer->Release();
+	if (m_pd3dTheCASrvDescriptorHeap) m_pd3dTheCASrvDescriptorHeap->Release();
+
 	if (m_pd3dFullscreenPipelineState) m_pd3dFullscreenPipelineState->Release();
 	if (m_pd3dFullscreenTexture) m_pd3dFullscreenTexture->Release();
 	if (m_pd3dFullscreenTextureUploadBuffer) m_pd3dFullscreenTextureUploadBuffer->Release();
@@ -265,6 +322,11 @@ void CGameScene::ReleaseObjects()
 void CGameScene::ReleaseUploadBuffers()
 {
 	if (m_pTheCAObject) m_pTheCAObject->ReleaseUploadBuffers();
+	if (m_pd3dTheCATextureUploadBuffer)
+	{
+		m_pd3dTheCATextureUploadBuffer->Release();
+		m_pd3dTheCATextureUploadBuffer = NULL;
+	}
 
 	if (m_pd3dFullscreenTextureUploadBuffer)
 	{
@@ -278,19 +340,25 @@ void CGameScene::Render(ID3D12GraphicsCommandList* pd3dCommandList, CCamera* pCa
 
 	pCamera->SetViewportsAndScissorRects(pd3dCommandList);
 	pCamera->UpdateShaderVariables(pd3dCommandList);
+	if (m_pTheCAObject && m_pd3dTheCASrvDescriptorHeap)
+	{
+		ID3D12DescriptorHeap* ppd3dObjectDescriptorHeaps[] = { m_pd3dTheCASrvDescriptorHeap };
+		pd3dCommandList->SetDescriptorHeaps(1, ppd3dObjectDescriptorHeaps);
+		pd3dCommandList->SetGraphicsRootDescriptorTable(3,
+			m_pd3dTheCASrvDescriptorHeap->GetGPUDescriptorHandleForHeapStart());
+		m_pTheCAObject->Render(pd3dCommandList, pCamera);
+	}
 
 	if (m_pd3dFullscreenPipelineState && m_pd3dFullscreenSrvDescriptorHeap)
 	{
-		ID3D12DescriptorHeap* ppd3dDescriptorHeaps[] = { m_pd3dFullscreenSrvDescriptorHeap };
+		/*ID3D12DescriptorHeap* ppd3dDescriptorHeaps[] = { m_pd3dFullscreenSrvDescriptorHeap };
 		pd3dCommandList->SetDescriptorHeaps(1, ppd3dDescriptorHeaps);
 		pd3dCommandList->SetGraphicsRootDescriptorTable(3,
 			m_pd3dFullscreenSrvDescriptorHeap->GetGPUDescriptorHandleForHeapStart());
 		pd3dCommandList->SetPipelineState(m_pd3dFullscreenPipelineState);
 		pd3dCommandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-		pd3dCommandList->DrawInstanced(3, 1, 0, 0);
+		pd3dCommandList->DrawInstanced(3, 1, 0, 0);*/
 	}
-
-	if (m_pTheCAObject) m_pTheCAObject->Render(pd3dCommandList, pCamera);
 }
 void CGameScene::OnProcessingKeyboardMessage(HWND hWnd, UINT nMessageID, WPARAM wParam, LPARAM lParam)
 {
