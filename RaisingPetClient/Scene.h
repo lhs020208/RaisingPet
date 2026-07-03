@@ -80,6 +80,7 @@ private:
 	ID3D12PipelineState* m_pd3dTextPipelineState = NULL;
 	ID3D12PipelineState* m_pd3dSolidUiPipelineState = NULL;
 	ID3D12PipelineState* m_pd3dCoinPipelineState = NULL;
+	ID3D12PipelineState* m_pd3dUiImagePipelineState = NULL;
 	std::vector<TEXT_GLYPH_RESOURCE> m_vTextGlyphResources;
 
 	struct COIN_EFFECT
@@ -96,6 +97,19 @@ private:
 	std::vector<COIN_EFFECT> m_vCoinEffects;
 	std::mt19937 m_CoinRandomEngine{ std::random_device{}() };
 
+	struct UI_IMAGE_RESOURCE
+	{
+		ID3D12Resource* pd3dTexture = NULL;
+		ID3D12Resource* pd3dTextureUploadBuffer = NULL;
+		ID3D12DescriptorHeap* pd3dSrvDescriptorHeap = NULL;
+	};
+
+	UI_IMAGE_RESOURCE m_ShopIconResource;
+	UI_IMAGE_RESOURCE m_ShopBoardResource;
+	UI_IMAGE_RESOURCE m_ShopCloseIconResource;
+	CGameObject m_ShopUiHitObject;
+	bool m_bShopActive = false;
+
 	void RenderPetPossessionText(ID3D12GraphicsCommandList* pd3dCommandList, CCamera* pCamera, CPet* pPet);
 	void RenderMoneyUI(ID3D12GraphicsCommandList* pd3dCommandList, CCamera* pCamera);
 	void RenderSolidUiRectangle(ID3D12GraphicsCommandList* pd3dCommandList, CCamera* pCamera,
@@ -104,6 +118,11 @@ private:
 	void SpawnCoinEffects(CPet* pPet, UINT nPossessionBeforeCollection);
 	void AnimateCoinEffects(float fElapsedTime);
 	void RenderCoinEffects(ID3D12GraphicsCommandList* pd3dCommandList, CCamera* pCamera);
+	void RenderShopUI(ID3D12GraphicsCommandList* pd3dCommandList, CCamera* pCamera);
+	void RenderUiImage(ID3D12GraphicsCommandList* pd3dCommandList, CCamera* pCamera,
+		UI_IMAGE_RESOURCE& imageResource, const XMFLOAT4& xmf4Rectangle);
+	bool IsPointOverShopUI(float x, float y, float fViewportWidth, float fViewportHeight) const;
+	bool ProcessShopUIClick(float x, float y, float fViewportWidth, float fViewportHeight);
 
 public:
 	UINT GetMoney() { return m_nMoney; }

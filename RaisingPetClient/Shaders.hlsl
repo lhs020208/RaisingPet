@@ -280,3 +280,10 @@ float4 PSCoinSprite(VS_FULLSCREEN_OUTPUT input) : SV_TARGET
 	clip(color.a - 0.01f);
 	return color;
 }
+
+float4 PSUiImage(VS_FULLSCREEN_OUTPUT input) : SV_TARGET
+{
+	float4 color = gFullscreenTexture.Sample(gFullscreenSampler, input.uv);
+	clip(color.a - 0.01f);
+	return color;
+}

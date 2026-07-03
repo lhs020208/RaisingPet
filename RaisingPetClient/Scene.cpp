@@ -28,7 +28,7 @@ static std::string FormatPossession(UINT nValue)
 struct MONEY_UI_LAYOUT
 {
 	float fRightMargin = 30.0f;
-	float fBottomMargin = 230.0f;
+	float fBottomMargin = 50.0f;
 	float fHorizontalPadding = 14.0f;
 	float fVerticalPadding = 8.0f;
 	float fOutlineThickness = 2.0f;
@@ -39,7 +39,61 @@ struct MONEY_UI_LAYOUT
 };
 
 static const MONEY_UI_LAYOUT gMoneyUiLayout;
-CScene::CScene()
+
+struct SHOP_UI_LAYOUT
+{
+	float fIconSize = 64.0f;
+	float fIconRightMargin = 30.0f;
+	float fIconBottomMargin = 50.0f;
+	float fBoardWidthRatio = 0.68f;
+	float fBoardMaximumWidth = 720.0f;
+	float fBoardMaximumHeightRatio = 0.80f;
+	float fCloseWidth = 40.0f;
+	float fCloseHeight = 45.0f;
+	float fBoardTopPadding = 25.0f;
+	float fBoardRightPadding = 35.0f;
+	float fMoneyToCloseGap = 12.0f;
+};
+
+static const SHOP_UI_LAYOUT gShopUiLayout;
+
+static bool IsPointInRectangle(float x, float y, const XMFLOAT4& rectangle)
+{
+	return(x >= rectangle.x && x <= rectangle.z && y >= rectangle.y && y <= rectangle.w);
+}
+
+static XMFLOAT4 GetShopIconRectangle(float fViewportWidth, float fViewportHeight)
+{
+	const float fRight = fViewportWidth - gShopUiLayout.fIconRightMargin;
+	const float fBottom = fViewportHeight - gShopUiLayout.fIconBottomMargin;
+	return(XMFLOAT4(fRight - gShopUiLayout.fIconSize, fBottom - gShopUiLayout.fIconSize,
+		fRight, fBottom));
+}
+
+static XMFLOAT4 GetShopBoardRectangle(float fViewportWidth, float fViewportHeight)
+{
+	float fWidth = fViewportWidth * gShopUiLayout.fBoardWidthRatio;
+	if (fWidth > gShopUiLayout.fBoardMaximumWidth) fWidth = gShopUiLayout.fBoardMaximumWidth;
+	float fHeight = fWidth * (2017.0f / 2923.0f);
+	const float fMaximumHeight = fViewportHeight * gShopUiLayout.fBoardMaximumHeightRatio;
+	if (fHeight > fMaximumHeight)
+	{
+		fHeight = fMaximumHeight;
+		fWidth = fHeight * (2923.0f / 2017.0f);
+	}
+	const float fLeft = (fViewportWidth - fWidth) * 0.5f;
+	const float fTop = (fViewportHeight - fHeight) * 0.5f;
+	return(XMFLOAT4(fLeft, fTop, fLeft + fWidth, fTop + fHeight));
+}
+
+static XMFLOAT4 GetShopCloseRectangle(float fViewportWidth, float fViewportHeight)
+{
+	const XMFLOAT4 board = GetShopBoardRectangle(fViewportWidth, fViewportHeight);
+	const float fRight = board.z - gShopUiLayout.fBoardRightPadding;
+	const float fTop = board.y + gShopUiLayout.fBoardTopPadding;
+	return(XMFLOAT4(fRight - gShopUiLayout.fCloseWidth, fTop,
+		fRight, fTop + gShopUiLayout.fCloseHeight));
+}CScene::CScene()
 {
 }
 
@@ -479,6 +533,75 @@ void CGameScene::BuildObjects(ID3D12Device* pd3dDevice, ID3D12GraphicsCommandLis
 	coinSrvDesc.Texture2D.MipLevels = m_pd3dCoinTexture->GetDesc().MipLevels;
 	pd3dDevice->CreateShaderResourceView(m_pd3dCoinTexture, &coinSrvDesc,
 		m_pd3dCoinSrvDescriptorHeap->GetCPUDescriptorHandleForHeapStart());
+	pd3dVertexShaderBlob = NULL;
+	pd3dPixelShaderBlob = NULL;
+	pd3dErrorBlob = NULL;
+	hResult = D3DCompileFromFile(L"Shaders.hlsl", NULL, NULL, "VSTextGlyph", "vs_5_1",
+		D3DCOMPILE_ENABLE_STRICTNESS, 0, &pd3dVertexShaderBlob, &pd3dErrorBlob);
+	if (FAILED(hResult)) return;
+	if (pd3dErrorBlob) { pd3dErrorBlob->Release(); pd3dErrorBlob = NULL; }
+	hResult = D3DCompileFromFile(L"Shaders.hlsl", NULL, NULL, "PSUiImage", "ps_5_1",
+		D3DCOMPILE_ENABLE_STRICTNESS, 0, &pd3dPixelShaderBlob, &pd3dErrorBlob);
+	if (FAILED(hResult))
+	{
+		pd3dVertexShaderBlob->Release();
+		return;
+	}
+	if (pd3dErrorBlob) pd3dErrorBlob->Release();
+
+	d3dPipelineStateDesc.VS = { pd3dVertexShaderBlob->GetBufferPointer(), pd3dVertexShaderBlob->GetBufferSize() };
+	d3dPipelineStateDesc.PS = { pd3dPixelShaderBlob->GetBufferPointer(), pd3dPixelShaderBlob->GetBufferSize() };
+	hResult = pd3dDevice->CreateGraphicsPipelineState(&d3dPipelineStateDesc,
+		__uuidof(ID3D12PipelineState), reinterpret_cast<void**>(&m_pd3dUiImagePipelineState));
+	pd3dVertexShaderBlob->Release();
+	pd3dPixelShaderBlob->Release();
+	if (FAILED(hResult)) return;
+
+	auto LoadUiImage = [pd3dDevice, pd3dCommandList](const wchar_t* pFileName,
+		UI_IMAGE_RESOURCE& imageResource) -> bool
+	{
+		std::unique_ptr<uint8_t[]> ddsData;
+		std::vector<D3D12_SUBRESOURCE_DATA> subresources;
+		HRESULT result = DirectX::LoadDDSTextureFromFile(pd3dDevice, pFileName,
+			&imageResource.pd3dTexture, ddsData, subresources);
+		if (FAILED(result) || subresources.empty()) return(false);
+
+		const UINT64 nUploadBufferSize = GetRequiredIntermediateSize(imageResource.pd3dTexture, 0,
+			static_cast<UINT>(subresources.size()));
+		CD3DX12_HEAP_PROPERTIES uploadHeapProperties(D3D12_HEAP_TYPE_UPLOAD);
+		CD3DX12_RESOURCE_DESC uploadBufferDesc = CD3DX12_RESOURCE_DESC::Buffer(nUploadBufferSize);
+		result = pd3dDevice->CreateCommittedResource(&uploadHeapProperties, D3D12_HEAP_FLAG_NONE,
+			&uploadBufferDesc, D3D12_RESOURCE_STATE_GENERIC_READ, NULL,
+			__uuidof(ID3D12Resource), reinterpret_cast<void**>(&imageResource.pd3dTextureUploadBuffer));
+		if (FAILED(result)) return(false);
+
+		UpdateSubresources(pd3dCommandList, imageResource.pd3dTexture, imageResource.pd3dTextureUploadBuffer,
+			0, 0, static_cast<UINT>(subresources.size()), subresources.data());
+		CD3DX12_RESOURCE_BARRIER textureBarrier = CD3DX12_RESOURCE_BARRIER::Transition(
+			imageResource.pd3dTexture, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+		pd3dCommandList->ResourceBarrier(1, &textureBarrier);
+
+		D3D12_DESCRIPTOR_HEAP_DESC srvHeapDesc = {};
+		srvHeapDesc.NumDescriptors = 1;
+		srvHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
+		srvHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
+		result = pd3dDevice->CreateDescriptorHeap(&srvHeapDesc, __uuidof(ID3D12DescriptorHeap),
+			reinterpret_cast<void**>(&imageResource.pd3dSrvDescriptorHeap));
+		if (FAILED(result)) return(false);
+
+		D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
+		srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+		srvDesc.Format = imageResource.pd3dTexture->GetDesc().Format;
+		srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
+		srvDesc.Texture2D.MipLevels = imageResource.pd3dTexture->GetDesc().MipLevels;
+		pd3dDevice->CreateShaderResourceView(imageResource.pd3dTexture, &srvDesc,
+			imageResource.pd3dSrvDescriptorHeap->GetCPUDescriptorHandleForHeapStart());
+		return(true);
+	};
+
+	LoadUiImage(L"Assets/Image/ShopIcon.dds", m_ShopIconResource);
+	LoadUiImage(L"Assets/Image/ShopBoard.dds", m_ShopBoardResource);
+	LoadUiImage(L"Assets/Image/ShopCloseIcon.dds", m_ShopCloseIconResource);
 }
 
 void CGameScene::ReleaseObjects()
@@ -495,10 +618,18 @@ void CGameScene::ReleaseObjects()
 	if (m_pd3dTextPipelineState) m_pd3dTextPipelineState->Release();
 	if (m_pd3dSolidUiPipelineState) m_pd3dSolidUiPipelineState->Release();
 	if (m_pd3dCoinPipelineState) m_pd3dCoinPipelineState->Release();
+	if (m_pd3dUiImagePipelineState) m_pd3dUiImagePipelineState->Release();
 	if (m_pd3dCoinTexture) m_pd3dCoinTexture->Release();
 	if (m_pd3dCoinTextureUploadBuffer) m_pd3dCoinTextureUploadBuffer->Release();
 	if (m_pd3dCoinSrvDescriptorHeap) m_pd3dCoinSrvDescriptorHeap->Release();
 	m_vCoinEffects.clear();
+	UI_IMAGE_RESOURCE* pUiImages[] = { &m_ShopIconResource, &m_ShopBoardResource, &m_ShopCloseIconResource };
+	for (UI_IMAGE_RESOURCE* pImage : pUiImages)
+	{
+		if (pImage->pd3dTexture) pImage->pd3dTexture->Release();
+		if (pImage->pd3dTextureUploadBuffer) pImage->pd3dTextureUploadBuffer->Release();
+		if (pImage->pd3dSrvDescriptorHeap) pImage->pd3dSrvDescriptorHeap->Release();
+	}
 	for (TEXT_GLYPH_RESOURCE& glyph : m_vTextGlyphResources)
 	{
 		if (glyph.pd3dTexture) glyph.pd3dTexture->Release();
@@ -533,6 +664,15 @@ void CGameScene::ReleaseUploadBuffers()
 		m_pd3dCoinTextureUploadBuffer->Release();
 		m_pd3dCoinTextureUploadBuffer = NULL;
 	}
+	UI_IMAGE_RESOURCE* pUiImages[] = { &m_ShopIconResource, &m_ShopBoardResource, &m_ShopCloseIconResource };
+	for (UI_IMAGE_RESOURCE* pImage : pUiImages)
+	{
+		if (pImage->pd3dTextureUploadBuffer)
+		{
+			pImage->pd3dTextureUploadBuffer->Release();
+			pImage->pd3dTextureUploadBuffer = NULL;
+		}
+	}
 }
 void CGameScene::Render(ID3D12GraphicsCommandList* pd3dCommandList, CCamera* pCamera)
 {
@@ -557,7 +697,7 @@ void CGameScene::Render(ID3D12GraphicsCommandList* pd3dCommandList, CCamera* pCa
 		RenderPetPossessionText(pd3dCommandList, pCamera, m_vPetResources[m_nActivePetIndex].pPet);
 
 	RenderCoinEffects(pd3dCommandList, pCamera);
-	RenderMoneyUI(pd3dCommandList, pCamera);
+	RenderShopUI(pd3dCommandList, pCamera);
 }
 void CGameScene::RenderPetPossessionText(ID3D12GraphicsCommandList* pd3dCommandList, CCamera* pCamera, CPet* pPet)
 {
@@ -674,6 +814,71 @@ void CGameScene::RenderSolidUiRectangle(ID3D12GraphicsCommandList* pd3dCommandLi
 	pd3dCommandList->DrawInstanced(6, 1, 0, 0);
 }
 
+void CGameScene::RenderUiImage(ID3D12GraphicsCommandList* pd3dCommandList, CCamera* pCamera,
+	UI_IMAGE_RESOURCE& imageResource, const XMFLOAT4& xmf4Rectangle)
+{
+	if (!m_pd3dUiImagePipelineState || !pCamera || !imageResource.pd3dSrvDescriptorHeap) return;
+	const float fViewportWidth = pCamera->m_d3dViewport.Width;
+	const float fViewportHeight = pCamera->m_d3dViewport.Height;
+	if (fViewportWidth <= 0.0f || fViewportHeight <= 0.0f) return;
+
+	const float rectangleConstants[4] =
+	{
+		(xmf4Rectangle.x / fViewportWidth) * 2.0f - 1.0f,
+		1.0f - (xmf4Rectangle.y / fViewportHeight) * 2.0f,
+		(xmf4Rectangle.z / fViewportWidth) * 2.0f - 1.0f,
+		1.0f - (xmf4Rectangle.w / fViewportHeight) * 2.0f
+	};
+	ID3D12DescriptorHeap* ppd3dDescriptorHeaps[] = { imageResource.pd3dSrvDescriptorHeap };
+	pd3dCommandList->SetDescriptorHeaps(1, ppd3dDescriptorHeaps);
+	pd3dCommandList->SetGraphicsRootDescriptorTable(3,
+		imageResource.pd3dSrvDescriptorHeap->GetGPUDescriptorHandleForHeapStart());
+	pd3dCommandList->SetGraphicsRoot32BitConstants(4, 4, rectangleConstants, 0);
+	pd3dCommandList->SetPipelineState(m_pd3dUiImagePipelineState);
+	pd3dCommandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+	pd3dCommandList->DrawInstanced(6, 1, 0, 0);
+}
+
+void CGameScene::RenderShopUI(ID3D12GraphicsCommandList* pd3dCommandList, CCamera* pCamera)
+{
+	if (!pCamera) return;
+	const float fViewportWidth = pCamera->m_d3dViewport.Width;
+	const float fViewportHeight = pCamera->m_d3dViewport.Height;
+
+	if (m_bShopActive)
+	{
+		RenderUiImage(pd3dCommandList, pCamera, m_ShopBoardResource,
+			GetShopBoardRectangle(fViewportWidth, fViewportHeight));
+		RenderMoneyUI(pd3dCommandList, pCamera);
+		RenderUiImage(pd3dCommandList, pCamera, m_ShopCloseIconResource,
+			GetShopCloseRectangle(fViewportWidth, fViewportHeight));
+	}
+
+	RenderUiImage(pd3dCommandList, pCamera, m_ShopIconResource,
+		GetShopIconRectangle(fViewportWidth, fViewportHeight));
+}
+
+bool CGameScene::IsPointOverShopUI(float x, float y, float fViewportWidth, float fViewportHeight) const
+{
+	if (IsPointInRectangle(x, y, GetShopIconRectangle(fViewportWidth, fViewportHeight))) return(true);
+	if (!m_bShopActive) return(false);
+	return(IsPointInRectangle(x, y, GetShopBoardRectangle(fViewportWidth, fViewportHeight)));
+}
+
+bool CGameScene::ProcessShopUIClick(float x, float y, float fViewportWidth, float fViewportHeight)
+{
+	const bool bIconClicked = IsPointInRectangle(x, y,
+		GetShopIconRectangle(fViewportWidth, fViewportHeight));
+	const bool bCloseClicked = m_bShopActive && IsPointInRectangle(x, y,
+		GetShopCloseRectangle(fViewportWidth, fViewportHeight));
+	if (!bIconClicked && !bCloseClicked) return(false);
+
+	if (m_bShopActive)
+		m_bShopActive = false;
+	else if (bIconClicked)
+		m_bShopActive = true;
+	return(true);
+}
 void CGameScene::RenderMoneyUI(ID3D12GraphicsCommandList* pd3dCommandList, CCamera* pCamera)
 {
 	if (!m_pd3dTextPipelineState || !pCamera || m_vTextGlyphResources.empty()) return;
@@ -720,10 +925,11 @@ void CGameScene::RenderMoneyUI(ID3D12GraphicsCommandList* pd3dCommandList, CCame
 	const float fViewportHeight = pCamera->m_d3dViewport.Height;
 	const float fPanelWidth = fFixedTextWidth + (gMoneyUiLayout.fHorizontalPadding * 2.0f);
 	const float fPanelHeight = (fMaximumBottom - fMinimumTop) + (gMoneyUiLayout.fVerticalPadding * 2.0f);
-	const float fPanelRight = fViewportWidth - gMoneyUiLayout.fRightMargin;
-	const float fPanelBottom = fViewportHeight - gMoneyUiLayout.fBottomMargin;
+	const XMFLOAT4 closeRectangle = GetShopCloseRectangle(fViewportWidth, fViewportHeight);
+	const float fPanelRight = closeRectangle.x - gShopUiLayout.fMoneyToCloseGap;
+	const float fPanelTop = closeRectangle.y;
 	const float fPanelLeft = fPanelRight - fPanelWidth;
-	const float fPanelTop = fPanelBottom - fPanelHeight;
+	const float fPanelBottom = fPanelTop + fPanelHeight;
 	const float fOutline = gMoneyUiLayout.fOutlineThickness;
 
 	RenderSolidUiRectangle(pd3dCommandList, pCamera,
@@ -814,6 +1020,9 @@ CGameObject* CGameScene::PickObjectPointedByCursor(int xClient, int yClient, CCa
 	m_pPointedPet = NULL;
 	if (!pCamera || pCamera->m_d3dViewport.Width <= 0.0f || pCamera->m_d3dViewport.Height <= 0.0f)
 		return(NULL);
+	if (IsPointOverShopUI(static_cast<float>(xClient), static_cast<float>(yClient),
+		pCamera->m_d3dViewport.Width, pCamera->m_d3dViewport.Height))
+		return(&m_ShopUiHitObject);
 
 	XMFLOAT3 xmf3PickPosition;
 	xmf3PickPosition.x = (((2.0f * xClient) / pCamera->m_d3dViewport.Width) - 1.0f) / pCamera->m_xmf4x4Projection._11;
@@ -951,9 +1160,18 @@ void CGameScene::OnProcessingMouseMessage(HWND hWnd, UINT nMessageID, WPARAM wPa
 	switch (nMessageID)
 	{
 	case WM_LBUTTONDOWN:
+	{
+		RECT clientRectangle;
+		::GetClientRect(hWnd, &clientRectangle);
+		const float x = static_cast<float>(static_cast<short>(LOWORD(lParam)));
+		const float y = static_cast<float>(static_cast<short>(HIWORD(lParam)));
+		if (ProcessShopUIClick(x, y, static_cast<float>(clientRectangle.right),
+			static_cast<float>(clientRectangle.bottom)))
+			break;
 		if (m_pPointedPet)
 			CollectPetPossession(m_pPointedPet);
 		break;
+	}
 	case WM_RBUTTONDOWN:
 		break;
 	}
