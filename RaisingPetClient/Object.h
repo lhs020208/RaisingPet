@@ -112,17 +112,17 @@ public:
 	string GetName() const { return m_sName; }
 	void SetName(const string& newName) { m_sName = newName;}
 
-	int GetPay() { return m_iPay; }
-	int GetMaxPossession() { return m_iMaxPossession; }
-	int GetNowPossession() { return m_iNowPossession; }
+	UINT GetPay() { return m_nPay; }
+	UINT GetMaxPossession() { return m_nMaxPossession; }
+	UINT GetNowPossession() { return m_nNowPossession; }
 
-	void SetPay(int p) { m_iPay = p; }
-	void GetMaxPossession(int p) { m_iMaxPossession = p; }
-	void GetNowPossession(int p) { m_iNowPossession = p; }
+	void SetPay(UINT p) { m_nPay = p; }
+	void GetMaxPossession(UINT p) { m_nMaxPossession = p; }
+	void GetNowPossession(UINT p) { m_nNowPossession = p; }
 
 private:
 	string m_sName;
-	int m_iPay = 10;
-	int m_iMaxPossession = 100;
-	int m_iNowPossession = 0;
+	UINT m_nPay = 10;
+	UINT m_nMaxPossession = 100;
+	UINT m_nNowPossession = 0;
 };

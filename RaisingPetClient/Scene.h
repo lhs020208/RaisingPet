@@ -60,9 +60,19 @@ private:
 
 	std::vector<PET_RENDER_RESOURCE> m_vPetResources;
 	UINT m_nActivePetIndex = 0;
+	CPet* m_pPointedPet = NULL;
 
 	ID3D12PipelineState* m_pd3dFullscreenPipelineState = NULL;
 	ID3D12Resource* m_pd3dFullscreenTexture = NULL;
 	ID3D12Resource* m_pd3dFullscreenTextureUploadBuffer = NULL;
 	ID3D12DescriptorHeap* m_pd3dFullscreenSrvDescriptorHeap = NULL;
+
+public:
+	UINT GetMoney() { return m_nMoney; }
+	void SetMoney(UINT p) { m_nMoney = p; }
+	void AddMoney(UINT p) { m_nMoney += p; }
+	bool DiscountMoney(UINT p);
+
+private:
+	UINT m_nMoney = 0;
 };

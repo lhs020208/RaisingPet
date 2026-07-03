@@ -249,27 +249,25 @@ void CPet::Animate(float fTimeElapsed)
 		m_fStateElapsedTime -= 1.0f;
 		DecideNextState();
 	}
-
-	//OutputDebugStringA(("Pet: " + m_sName + ", Pay: " + std::to_string(m_iPay) + ", Possession: " + std::to_string(m_iNowPossession) + "/" + std::to_string(m_iMaxPossession) + "\n").c_str());
 }
 
 void CPet::UpdatePossession(float fTimeElapsed)
 {
-	if (m_iNowPossession >= m_iMaxPossession)
+	if (m_nNowPossession >= m_nMaxPossession)
 	{
-		m_iNowPossession = m_iMaxPossession;
+		m_nNowPossession = m_nMaxPossession;
 		m_fPossessionElapsedTime = 0.0f;
 		return;
 	}
 
-	if (m_iPay <= 0) return;
+	if (m_nPay <= 0) return;
 
 	m_fPossessionElapsedTime += fTimeElapsed;
-	while (m_fPossessionElapsedTime >= 1.0f && m_iNowPossession < m_iMaxPossession)
+	while (m_fPossessionElapsedTime >= 1.0f && m_nNowPossession < m_nMaxPossession)
 	{
 		m_fPossessionElapsedTime -= 1.0f;
-		const int iRemainingPossession = m_iMaxPossession - m_iNowPossession;
-		m_iNowPossession += (m_iPay < iRemainingPossession) ? m_iPay : iRemainingPossession;
+		const int iRemainingPossession = m_nMaxPossession - m_nNowPossession;
+		m_nNowPossession += (m_nPay < iRemainingPossession) ? m_nPay : iRemainingPossession;
 	}
 }
 void CPet::DecideNextState()

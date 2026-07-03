@@ -407,6 +407,7 @@ void CGameScene::OnProcessingKeyboardMessage(HWND hWnd, UINT nMessageID, WPARAM 
 }
 CGameObject* CGameScene::PickObjectPointedByCursor(int xClient, int yClient, CCamera* pCamera)
 {
+	m_pPointedPet = NULL;
 	if (!pCamera || pCamera->m_d3dViewport.Width <= 0.0f || pCamera->m_d3dViewport.Height <= 0.0f)
 		return(NULL);
 
@@ -424,17 +425,33 @@ CGameObject* CGameScene::PickObjectPointedByCursor(int xClient, int yClient, CCa
 	if (!pActivePet) return(NULL);
 
 	float fHitDistance = FLT_MAX;
-	return((pActivePet->PickObjectByRayIntersection(xmvPickPosition, xmmtxView, &fHitDistance) > 0)
-		? pActivePet : NULL);
+	if (pActivePet->PickObjectByRayIntersection(xmvPickPosition, xmmtxView, &fHitDistance) <= 0)
+		return(NULL);
+
+	m_pPointedPet = pActivePet;
+	return(m_pPointedPet);
 }
 void CGameScene::OnProcessingMouseMessage(HWND hWnd, UINT nMessageID, WPARAM wParam, LPARAM lParam)
 {
 	switch (nMessageID)
 	{
+	case WM_LBUTTONDOWN:
+		if (m_pPointedPet)
+		{
+			std::string strDebugMessage = "[Before Collection] Money: " + std::to_string(m_nMoney)
+				+ ", Pet Possession: " + std::to_string(m_pPointedPet->GetNowPossession()) + "\n";
+			OutputDebugStringA(strDebugMessage.c_str());
+
+			m_nMoney += m_pPointedPet->GetNowPossession();
+			m_pPointedPet->GetNowPossession(0);
+
+			strDebugMessage = "[After Collection] Money: " + std::to_string(m_nMoney)
+				+ ", Pet Possession: " + std::to_string(m_pPointedPet->GetNowPossession()) + "\n";
+			OutputDebugStringA(strDebugMessage.c_str());
+		}
+		break;
 	case WM_RBUTTONDOWN:
-	{
-		
-	}
+		break;
 	}
 }
 
@@ -445,4 +462,12 @@ void CGameScene::Animate(float fElapsedTime)
 		CPet* pActivePet = m_vPetResources[m_nActivePetIndex].pPet;
 		if (pActivePet) pActivePet->Animate(fElapsedTime);
 	}
+}
+
+bool CGameScene::DiscountMoney(UINT p)
+{
+	if (p > m_nMoney) return false;
+
+	m_nMoney -= p;
+	return true;
 }
