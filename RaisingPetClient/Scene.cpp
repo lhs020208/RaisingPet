@@ -97,7 +97,7 @@ ID3D12RootSignature *CScene::CreateGraphicsRootSignature(ID3D12Device *pd3dDevic
 	pd3dRootParameters[5].Constants.Num32BitValues = 1;
 	pd3dRootParameters[5].Constants.ShaderRegister = 4;
 	pd3dRootParameters[5].Constants.RegisterSpace = 0;
-	pd3dRootParameters[5].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+	pd3dRootParameters[5].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
 
 	D3D12_ROOT_SIGNATURE_FLAGS d3dRootSignatureFlags = D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT;
 	D3D12_ROOT_SIGNATURE_DESC d3dRootSignatureDesc;
@@ -411,6 +411,74 @@ void CGameScene::BuildObjects(ID3D12Device* pd3dDevice, ID3D12GraphicsCommandLis
 		pd3dDevice->CreateShaderResourceView(glyph.pd3dTexture, &d3dSrvDesc,
 			glyph.pd3dSrvDescriptorHeap->GetCPUDescriptorHandleForHeapStart());
 	}
+	pd3dVertexShaderBlob = NULL;
+	pd3dPixelShaderBlob = NULL;
+	pd3dErrorBlob = NULL;
+	hResult = D3DCompileFromFile(L"Shaders.hlsl", NULL, NULL, "VSCoinSprite", "vs_5_1",
+		D3DCOMPILE_ENABLE_STRICTNESS, 0, &pd3dVertexShaderBlob, &pd3dErrorBlob);
+	if (FAILED(hResult))
+	{
+		if (pd3dErrorBlob) OutputDebugStringA(static_cast<const char*>(pd3dErrorBlob->GetBufferPointer()));
+		if (pd3dErrorBlob) pd3dErrorBlob->Release();
+		return;
+	}
+	if (pd3dErrorBlob) { pd3dErrorBlob->Release(); pd3dErrorBlob = NULL; }
+
+	hResult = D3DCompileFromFile(L"Shaders.hlsl", NULL, NULL, "PSCoinSprite", "ps_5_1",
+		D3DCOMPILE_ENABLE_STRICTNESS, 0, &pd3dPixelShaderBlob, &pd3dErrorBlob);
+	if (FAILED(hResult))
+	{
+		if (pd3dErrorBlob) OutputDebugStringA(static_cast<const char*>(pd3dErrorBlob->GetBufferPointer()));
+		if (pd3dErrorBlob) pd3dErrorBlob->Release();
+		pd3dVertexShaderBlob->Release();
+		return;
+	}
+	if (pd3dErrorBlob) pd3dErrorBlob->Release();
+
+	d3dPipelineStateDesc.VS = { pd3dVertexShaderBlob->GetBufferPointer(), pd3dVertexShaderBlob->GetBufferSize() };
+	d3dPipelineStateDesc.PS = { pd3dPixelShaderBlob->GetBufferPointer(), pd3dPixelShaderBlob->GetBufferSize() };
+	hResult = pd3dDevice->CreateGraphicsPipelineState(&d3dPipelineStateDesc,
+		__uuidof(ID3D12PipelineState), reinterpret_cast<void**>(&m_pd3dCoinPipelineState));
+	pd3dVertexShaderBlob->Release();
+	pd3dPixelShaderBlob->Release();
+	if (FAILED(hResult)) return;
+
+	std::unique_ptr<uint8_t[]> coinDdsData;
+	std::vector<D3D12_SUBRESOURCE_DATA> coinSubresources;
+	hResult = DirectX::LoadDDSTextureFromFile(pd3dDevice, L"Assets/Image/Coin.dds",
+		&m_pd3dCoinTexture, coinDdsData, coinSubresources);
+	if (FAILED(hResult) || coinSubresources.empty()) return;
+
+	const UINT64 nCoinUploadBufferSize = GetRequiredIntermediateSize(m_pd3dCoinTexture, 0,
+		static_cast<UINT>(coinSubresources.size()));
+	CD3DX12_HEAP_PROPERTIES coinUploadHeapProperties(D3D12_HEAP_TYPE_UPLOAD);
+	CD3DX12_RESOURCE_DESC coinUploadBufferDesc = CD3DX12_RESOURCE_DESC::Buffer(nCoinUploadBufferSize);
+	hResult = pd3dDevice->CreateCommittedResource(&coinUploadHeapProperties, D3D12_HEAP_FLAG_NONE,
+		&coinUploadBufferDesc, D3D12_RESOURCE_STATE_GENERIC_READ, NULL,
+		__uuidof(ID3D12Resource), reinterpret_cast<void**>(&m_pd3dCoinTextureUploadBuffer));
+	if (FAILED(hResult)) return;
+
+	UpdateSubresources(pd3dCommandList, m_pd3dCoinTexture, m_pd3dCoinTextureUploadBuffer,
+		0, 0, static_cast<UINT>(coinSubresources.size()), coinSubresources.data());
+	CD3DX12_RESOURCE_BARRIER coinTextureBarrier = CD3DX12_RESOURCE_BARRIER::Transition(
+		m_pd3dCoinTexture, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+	pd3dCommandList->ResourceBarrier(1, &coinTextureBarrier);
+
+	D3D12_DESCRIPTOR_HEAP_DESC coinSrvHeapDesc = {};
+	coinSrvHeapDesc.NumDescriptors = 1;
+	coinSrvHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
+	coinSrvHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
+	hResult = pd3dDevice->CreateDescriptorHeap(&coinSrvHeapDesc, __uuidof(ID3D12DescriptorHeap),
+		reinterpret_cast<void**>(&m_pd3dCoinSrvDescriptorHeap));
+	if (FAILED(hResult)) return;
+
+	D3D12_SHADER_RESOURCE_VIEW_DESC coinSrvDesc = {};
+	coinSrvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+	coinSrvDesc.Format = m_pd3dCoinTexture->GetDesc().Format;
+	coinSrvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
+	coinSrvDesc.Texture2D.MipLevels = m_pd3dCoinTexture->GetDesc().MipLevels;
+	pd3dDevice->CreateShaderResourceView(m_pd3dCoinTexture, &coinSrvDesc,
+		m_pd3dCoinSrvDescriptorHeap->GetCPUDescriptorHandleForHeapStart());
 }
 
 void CGameScene::ReleaseObjects()
@@ -426,6 +494,11 @@ void CGameScene::ReleaseObjects()
 
 	if (m_pd3dTextPipelineState) m_pd3dTextPipelineState->Release();
 	if (m_pd3dSolidUiPipelineState) m_pd3dSolidUiPipelineState->Release();
+	if (m_pd3dCoinPipelineState) m_pd3dCoinPipelineState->Release();
+	if (m_pd3dCoinTexture) m_pd3dCoinTexture->Release();
+	if (m_pd3dCoinTextureUploadBuffer) m_pd3dCoinTextureUploadBuffer->Release();
+	if (m_pd3dCoinSrvDescriptorHeap) m_pd3dCoinSrvDescriptorHeap->Release();
+	m_vCoinEffects.clear();
 	for (TEXT_GLYPH_RESOURCE& glyph : m_vTextGlyphResources)
 	{
 		if (glyph.pd3dTexture) glyph.pd3dTexture->Release();
@@ -455,6 +528,11 @@ void CGameScene::ReleaseUploadBuffers()
 			glyph.pd3dTextureUploadBuffer = NULL;
 		}
 	}
+	if (m_pd3dCoinTextureUploadBuffer)
+	{
+		m_pd3dCoinTextureUploadBuffer->Release();
+		m_pd3dCoinTextureUploadBuffer = NULL;
+	}
 }
 void CGameScene::Render(ID3D12GraphicsCommandList* pd3dCommandList, CCamera* pCamera)
 {
@@ -478,6 +556,7 @@ void CGameScene::Render(ID3D12GraphicsCommandList* pd3dCommandList, CCamera* pCa
 	if (m_nActivePetIndex < m_vPetResources.size())
 		RenderPetPossessionText(pd3dCommandList, pCamera, m_vPetResources[m_nActivePetIndex].pPet);
 
+	RenderCoinEffects(pd3dCommandList, pCamera);
 	RenderMoneyUI(pd3dCommandList, pCamera);
 }
 void CGameScene::RenderPetPossessionText(ID3D12GraphicsCommandList* pd3dCommandList, CCamera* pCamera, CPet* pPet)
@@ -756,24 +835,124 @@ CGameObject* CGameScene::PickObjectPointedByCursor(int xClient, int yClient, CCa
 	m_pPointedPet = pActivePet;
 	return(m_pPointedPet);
 }
+void CGameScene::SpawnCoinEffects(CPet* pPet, UINT nPossessionBeforeCollection)
+{
+	if (!pPet || nPossessionBeforeCollection == 0) return;
+	const UINT nMaxPossession = pPet->GetMaxPossession();
+	if (nMaxPossession == 0) return;
+
+	UINT nCoinCount = static_cast<UINT>((static_cast<UINT64>(nPossessionBeforeCollection) * 10
+		+ nMaxPossession - 1) / nMaxPossession);
+	if (nCoinCount > 10) nCoinCount = 10;
+
+	std::uniform_real_distribution<float> angleDistribution(0.0f, XM_PI);
+	std::uniform_real_distribution<float> speedDistribution(9.0f, 11.0f);
+	std::uniform_real_distribution<float> lifetimeDistribution(1.0f, 3.0f);
+	const XMFLOAT3 xmf3Origin = pPet->m_xmOOBB.Center;
+
+	for (UINT i = 0; i < nCoinCount; ++i)
+	{
+		const float fAngle = angleDistribution(m_CoinRandomEngine);
+		const float fSpeed = speedDistribution(m_CoinRandomEngine);
+		COIN_EFFECT coinEffect;
+		coinEffect.xmf3Position = xmf3Origin;
+		coinEffect.xmf3Velocity = XMFLOAT3(cosf(fAngle) * fSpeed, sinf(fAngle) * fSpeed, 0.0f);
+		coinEffect.fLifetime = lifetimeDistribution(m_CoinRandomEngine);
+		m_vCoinEffects.push_back(coinEffect);
+	}
+}
+
+void CGameScene::CollectPetPossession(CPet* pPet)
+{
+	if (!pPet) return;
+	const UINT nPossessionBeforeCollection = pPet->GetNowPossession();
+	std::string strDebugMessage = "[Before Collection] Money: " + std::to_string(m_nMoney)
+		+ ", Pet Possession: " + std::to_string(nPossessionBeforeCollection) + "\n";
+	OutputDebugStringA(strDebugMessage.c_str());
+
+	SpawnCoinEffects(pPet, nPossessionBeforeCollection);
+	m_nMoney += nPossessionBeforeCollection;
+	pPet->GetNowPossession(0);
+
+	strDebugMessage = "[After Collection] Money: " + std::to_string(m_nMoney)
+		+ ", Pet Possession: " + std::to_string(pPet->GetNowPossession()) + "\n";
+	OutputDebugStringA(strDebugMessage.c_str());
+}
+
+void CGameScene::AnimateCoinEffects(float fElapsedTime)
+{
+	if (fElapsedTime <= 0.0f) return;
+	const float fGravity = -24.0f;
+
+	for (size_t i = 0; i < m_vCoinEffects.size();)
+	{
+		COIN_EFFECT& coinEffect = m_vCoinEffects[i];
+		coinEffect.fAge += fElapsedTime;
+		if (coinEffect.fAge >= coinEffect.fLifetime)
+		{
+			m_vCoinEffects.erase(m_vCoinEffects.begin() + i);
+			continue;
+		}
+
+		coinEffect.xmf3Velocity.y += fGravity * fElapsedTime;
+		coinEffect.xmf3Position.x += coinEffect.xmf3Velocity.x * fElapsedTime;
+		coinEffect.xmf3Position.y += coinEffect.xmf3Velocity.y * fElapsedTime;
+		coinEffect.xmf3Position.z += coinEffect.xmf3Velocity.z * fElapsedTime;
+		++i;
+	}
+}
+
+void CGameScene::RenderCoinEffects(ID3D12GraphicsCommandList* pd3dCommandList, CCamera* pCamera)
+{
+	if (!m_pd3dCoinPipelineState || !m_pd3dCoinSrvDescriptorHeap || !pCamera || m_vCoinEffects.empty()) return;
+	const float fViewportWidth = pCamera->m_d3dViewport.Width;
+	const float fViewportHeight = pCamera->m_d3dViewport.Height;
+	if (fViewportWidth <= 0.0f || fViewportHeight <= 0.0f) return;
+
+	XMMATRIX xmmtxViewProjection = XMLoadFloat4x4(&pCamera->m_xmf4x4View)
+		* XMLoadFloat4x4(&pCamera->m_xmf4x4Projection);
+	ID3D12DescriptorHeap* ppd3dDescriptorHeaps[] = { m_pd3dCoinSrvDescriptorHeap };
+	pd3dCommandList->SetDescriptorHeaps(1, ppd3dDescriptorHeaps);
+	pd3dCommandList->SetGraphicsRootDescriptorTable(3,
+		m_pd3dCoinSrvDescriptorHeap->GetGPUDescriptorHandleForHeapStart());
+	pd3dCommandList->SetPipelineState(m_pd3dCoinPipelineState);
+	pd3dCommandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+
+	const float fCoinWidth = 28.5f;
+	const float fCoinHeight = 33.0f;
+	for (const COIN_EFFECT& coinEffect : m_vCoinEffects)
+	{
+		XMVECTOR xmvPosition = XMVector3TransformCoord(XMLoadFloat3(&coinEffect.xmf3Position), xmmtxViewProjection);
+		XMFLOAT3 xmf3Ndc;
+		XMStoreFloat3(&xmf3Ndc, xmvPosition);
+		if (xmf3Ndc.z < 0.0f || xmf3Ndc.z > 1.0f) continue;
+
+		const float fCenterX = (xmf3Ndc.x * 0.5f + 0.5f) * fViewportWidth;
+		const float fCenterY = (0.5f - xmf3Ndc.y * 0.5f) * fViewportHeight;
+		const float fLeft = fCenterX - (fCoinWidth * 0.5f);
+		const float fTop = fCenterY - (fCoinHeight * 0.5f);
+		const float fRight = fLeft + fCoinWidth;
+		const float fBottom = fTop + fCoinHeight;
+		const float spriteConstants[4] =
+		{
+			(fLeft / fViewportWidth) * 2.0f - 1.0f,
+			1.0f - (fTop / fViewportHeight) * 2.0f,
+			(fRight / fViewportWidth) * 2.0f - 1.0f,
+			1.0f - (fBottom / fViewportHeight) * 2.0f
+		};
+		const UINT nFrame = static_cast<UINT>(coinEffect.fAge / 0.1f) % 4;
+		pd3dCommandList->SetGraphicsRoot32BitConstants(4, 4, spriteConstants, 0);
+		pd3dCommandList->SetGraphicsRoot32BitConstant(5, nFrame, 0);
+		pd3dCommandList->DrawInstanced(6, 1, 0, 0);
+	}
+}
 void CGameScene::OnProcessingMouseMessage(HWND hWnd, UINT nMessageID, WPARAM wParam, LPARAM lParam)
 {
 	switch (nMessageID)
 	{
 	case WM_LBUTTONDOWN:
 		if (m_pPointedPet)
-		{
-			std::string strDebugMessage = "[Before Collection] Money: " + std::to_string(m_nMoney)
-				+ ", Pet Possession: " + std::to_string(m_pPointedPet->GetNowPossession()) + "\n";
-			OutputDebugStringA(strDebugMessage.c_str());
-
-			m_nMoney += m_pPointedPet->GetNowPossession();
-			m_pPointedPet->GetNowPossession(0);
-
-			strDebugMessage = "[After Collection] Money: " + std::to_string(m_nMoney)
-				+ ", Pet Possession: " + std::to_string(m_pPointedPet->GetNowPossession()) + "\n";
-			OutputDebugStringA(strDebugMessage.c_str());
-		}
+			CollectPetPossession(m_pPointedPet);
 		break;
 	case WM_RBUTTONDOWN:
 		break;
@@ -787,6 +966,7 @@ void CGameScene::Animate(float fElapsedTime)
 		CPet* pActivePet = m_vPetResources[m_nActivePetIndex].pPet;
 		if (pActivePet) pActivePet->Animate(fElapsedTime);
 	}
+	AnimateCoinEffects(fElapsedTime);
 }
 
 bool CGameScene::DiscountMoney(UINT p)

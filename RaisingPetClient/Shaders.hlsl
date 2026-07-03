@@ -254,3 +254,29 @@ float4 PSSolidUI(VS_FULLSCREEN_OUTPUT input) : SV_TARGET
 		gnPackedUIColor & 255) / 255.0f;
 	return float4(uiColor, 1.0f);
 }
+
+VS_FULLSCREEN_OUTPUT VSCoinSprite(uint vertexId : SV_VertexID)
+{
+	static const uint2 corners[6] =
+	{
+		uint2(0, 0), uint2(1, 0), uint2(0, 1),
+		uint2(0, 1), uint2(1, 0), uint2(1, 1)
+	};
+
+	uint2 corner = corners[vertexId];
+	uint frame = gnPackedUIColor & 3;
+	VS_FULLSCREEN_OUTPUT output;
+	output.positionH = float4(
+		lerp(gf4TextRect.x, gf4TextRect.z, corner.x),
+		lerp(gf4TextRect.y, gf4TextRect.w, corner.y),
+		0.0f, 1.0f);
+	output.uv = float2((frame + corner.x) * 0.25f, corner.y);
+	return output;
+}
+
+float4 PSCoinSprite(VS_FULLSCREEN_OUTPUT input) : SV_TARGET
+{
+	float4 color = gFullscreenTexture.Sample(gFullscreenSampler, input.uv);
+	clip(color.a - 0.01f);
+	return color;
+}

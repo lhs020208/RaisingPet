@@ -79,12 +79,31 @@ private:
 
 	ID3D12PipelineState* m_pd3dTextPipelineState = NULL;
 	ID3D12PipelineState* m_pd3dSolidUiPipelineState = NULL;
+	ID3D12PipelineState* m_pd3dCoinPipelineState = NULL;
 	std::vector<TEXT_GLYPH_RESOURCE> m_vTextGlyphResources;
+
+	struct COIN_EFFECT
+	{
+		XMFLOAT3 xmf3Position = XMFLOAT3(0.0f, 0.0f, 0.0f);
+		XMFLOAT3 xmf3Velocity = XMFLOAT3(0.0f, 0.0f, 0.0f);
+		float fAge = 0.0f;
+		float fLifetime = 1.0f;
+	};
+
+	ID3D12Resource* m_pd3dCoinTexture = NULL;
+	ID3D12Resource* m_pd3dCoinTextureUploadBuffer = NULL;
+	ID3D12DescriptorHeap* m_pd3dCoinSrvDescriptorHeap = NULL;
+	std::vector<COIN_EFFECT> m_vCoinEffects;
+	std::mt19937 m_CoinRandomEngine{ std::random_device{}() };
 
 	void RenderPetPossessionText(ID3D12GraphicsCommandList* pd3dCommandList, CCamera* pCamera, CPet* pPet);
 	void RenderMoneyUI(ID3D12GraphicsCommandList* pd3dCommandList, CCamera* pCamera);
 	void RenderSolidUiRectangle(ID3D12GraphicsCommandList* pd3dCommandList, CCamera* pCamera,
 		float fLeft, float fTop, float fRight, float fBottom, UINT nColor);
+	void CollectPetPossession(CPet* pPet);
+	void SpawnCoinEffects(CPet* pPet, UINT nPossessionBeforeCollection);
+	void AnimateCoinEffects(float fElapsedTime);
+	void RenderCoinEffects(ID3D12GraphicsCommandList* pd3dCommandList, CCamera* pCamera);
 
 public:
 	UINT GetMoney() { return m_nMoney; }
