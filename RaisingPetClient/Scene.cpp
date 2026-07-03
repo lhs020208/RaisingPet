@@ -52,7 +52,15 @@ struct SHOP_UI_LAYOUT
 	float fCloseHeight = 45.0f;
 	float fBoardTopPadding = 25.0f;
 	float fBoardRightPadding = 20.0f;
-	float fMoneyToCloseGap = 12.0f;
+	float fBackWidth = 40.0f;
+	float fBackHeight = 40.0f;
+	float fBackToCloseGap = 8.0f;
+	float fSlotLeftRatio = 0.055f;
+	float fSlotTopRatio = 0.21f;
+	float fSlotWidthRatio = 0.41f;
+	float fSlotVerticalGap = 14.0f;
+	float fMoneyRightPadding = 24.0f;
+	float fMoneyBottomPadding = 18.0f;
 };
 
 static const SHOP_UI_LAYOUT gShopUiLayout;
@@ -95,6 +103,28 @@ static XMFLOAT4 GetShopCloseRectangle(float fViewportWidth, float fViewportHeigh
 	const float fTop = board.y + gShopUiLayout.fBoardTopPadding;
 	return(XMFLOAT4(fRight - gShopUiLayout.fCloseWidth, fTop,
 		fRight, fTop + gShopUiLayout.fCloseHeight));
+}
+static XMFLOAT4 GetShopBackRectangle(float fViewportWidth, float fViewportHeight,
+	float fOffsetX = 0.0f, float fOffsetY = 0.0f)
+{
+	const XMFLOAT4 closeRectangle = GetShopCloseRectangle(fViewportWidth, fViewportHeight, fOffsetX, fOffsetY);
+	const float fRight = closeRectangle.x - gShopUiLayout.fBackToCloseGap;
+	return(XMFLOAT4(fRight - gShopUiLayout.fBackWidth, closeRectangle.y,
+		fRight, closeRectangle.y + gShopUiLayout.fBackHeight));
+}
+
+static XMFLOAT4 GetShopSlotRectangle(int nSlotIndex, float fViewportWidth, float fViewportHeight,
+	float fOffsetX = 0.0f, float fOffsetY = 0.0f)
+{
+	const XMFLOAT4 board = GetShopBoardRectangle(fViewportWidth, fViewportHeight, fOffsetX, fOffsetY);
+	const float fBoardWidth = board.z - board.x;
+	const float fBoardHeight = board.w - board.y;
+	const float fWidth = fBoardWidth * gShopUiLayout.fSlotWidthRatio;
+	const float fHeight = fWidth * (259.0f / 1190.0f);
+	const float fLeft = board.x + (fBoardWidth * gShopUiLayout.fSlotLeftRatio);
+	const float fTop = board.y + (fBoardHeight * gShopUiLayout.fSlotTopRatio)
+		+ nSlotIndex * (fHeight + gShopUiLayout.fSlotVerticalGap);
+	return(XMFLOAT4(fLeft, fTop, fLeft + fWidth, fTop + fHeight));
 }
 CScene::CScene()
 {
@@ -605,6 +635,11 @@ void CGameScene::BuildObjects(ID3D12Device* pd3dDevice, ID3D12GraphicsCommandLis
 	LoadUiImage(L"Assets/Image/ShopIcon.dds", m_ShopIconResource);
 	LoadUiImage(L"Assets/Image/ShopBoard.dds", m_ShopBoardResource);
 	LoadUiImage(L"Assets/Image/ShopCloseIcon.dds", m_ShopCloseIconResource);
+	LoadUiImage(L"Assets/Image/ShopBackSpaceIcon.dds", m_ShopBackSpaceIconResource);
+	LoadUiImage(L"Assets/Image/ShopSlot1.dds", m_ShopSlotResources[0]);
+	LoadUiImage(L"Assets/Image/ShopSlot2.dds", m_ShopSlotResources[1]);
+	LoadUiImage(L"Assets/Image/ShopSlot3.dds", m_ShopSlotResources[2]);
+	LoadUiImage(L"Assets/Image/ShopSlot4.dds", m_ShopSlotResources[3]);
 }
 
 void CGameScene::ReleaseObjects()
@@ -626,7 +661,9 @@ void CGameScene::ReleaseObjects()
 	if (m_pd3dCoinTextureUploadBuffer) m_pd3dCoinTextureUploadBuffer->Release();
 	if (m_pd3dCoinSrvDescriptorHeap) m_pd3dCoinSrvDescriptorHeap->Release();
 	m_vCoinEffects.clear();
-	UI_IMAGE_RESOURCE* pUiImages[] = { &m_ShopIconResource, &m_ShopBoardResource, &m_ShopCloseIconResource };
+	UI_IMAGE_RESOURCE* pUiImages[] = { &m_ShopIconResource, &m_ShopBoardResource, &m_ShopCloseIconResource,
+		&m_ShopBackSpaceIconResource, &m_ShopSlotResources[0], &m_ShopSlotResources[1],
+		&m_ShopSlotResources[2], &m_ShopSlotResources[3] };
 	for (UI_IMAGE_RESOURCE* pImage : pUiImages)
 	{
 		if (pImage->pd3dTexture) pImage->pd3dTexture->Release();
@@ -667,7 +704,9 @@ void CGameScene::ReleaseUploadBuffers()
 		m_pd3dCoinTextureUploadBuffer->Release();
 		m_pd3dCoinTextureUploadBuffer = NULL;
 	}
-	UI_IMAGE_RESOURCE* pUiImages[] = { &m_ShopIconResource, &m_ShopBoardResource, &m_ShopCloseIconResource };
+	UI_IMAGE_RESOURCE* pUiImages[] = { &m_ShopIconResource, &m_ShopBoardResource, &m_ShopCloseIconResource,
+		&m_ShopBackSpaceIconResource, &m_ShopSlotResources[0], &m_ShopSlotResources[1],
+		&m_ShopSlotResources[2], &m_ShopSlotResources[3] };
 	for (UI_IMAGE_RESOURCE* pImage : pUiImages)
 	{
 		if (pImage->pd3dTextureUploadBuffer)
@@ -852,11 +891,25 @@ void CGameScene::RenderShopUI(ID3D12GraphicsCommandList* pd3dCommandList, CCamer
 	{
 		RenderUiImage(pd3dCommandList, pCamera, m_ShopBoardResource,
 			GetShopBoardRectangle(fViewportWidth, fViewportHeight,
-			m_xmf2ShopBoardOffset.x, m_xmf2ShopBoardOffset.y));
+				m_xmf2ShopBoardOffset.x, m_xmf2ShopBoardOffset.y));
+
+		if (m_eShopPage == SHOP_PAGE::SLOT_MENU)
+		{
+			for (int i = 0; i < 4; ++i)
+			{
+				RenderUiImage(pd3dCommandList, pCamera, m_ShopSlotResources[i],
+					GetShopSlotRectangle(i, fViewportWidth, fViewportHeight,
+						m_xmf2ShopBoardOffset.x, m_xmf2ShopBoardOffset.y));
+			}
+		}
+
 		RenderMoneyUI(pd3dCommandList, pCamera);
+		RenderUiImage(pd3dCommandList, pCamera, m_ShopBackSpaceIconResource,
+			GetShopBackRectangle(fViewportWidth, fViewportHeight,
+				m_xmf2ShopBoardOffset.x, m_xmf2ShopBoardOffset.y));
 		RenderUiImage(pd3dCommandList, pCamera, m_ShopCloseIconResource,
 			GetShopCloseRectangle(fViewportWidth, fViewportHeight,
-			m_xmf2ShopBoardOffset.x, m_xmf2ShopBoardOffset.y));
+				m_xmf2ShopBoardOffset.x, m_xmf2ShopBoardOffset.y));
 	}
 
 	RenderUiImage(pd3dCommandList, pCamera, m_ShopIconResource,
@@ -878,16 +931,45 @@ bool CGameScene::ProcessShopUIClick(float x, float y, float fViewportWidth, floa
 	const bool bCloseClicked = m_bShopActive && IsPointInRectangle(x, y,
 		GetShopCloseRectangle(fViewportWidth, fViewportHeight,
 			m_xmf2ShopBoardOffset.x, m_xmf2ShopBoardOffset.y));
-	if (!bIconClicked && !bCloseClicked) return(false);
-
-	if (m_bShopActive)
+	if (bIconClicked || bCloseClicked)
 	{
-		m_bShopActive = false;
-		m_bShopBoardDragging = false;
+		if (m_bShopActive)
+		{
+			m_bShopActive = false;
+			m_bShopBoardDragging = false;
+		}
+		else
+		{
+			m_bShopActive = true;
+			m_eShopPage = SHOP_PAGE::SLOT_MENU;
+			m_nSelectedShopSlot = -1;
+		}
+		return(true);
 	}
-	else if (bIconClicked)
-		m_bShopActive = true;
-	return(true);
+
+	if (!m_bShopActive) return(false);
+	if (IsPointInRectangle(x, y, GetShopBackRectangle(fViewportWidth, fViewportHeight,
+		m_xmf2ShopBoardOffset.x, m_xmf2ShopBoardOffset.y)))
+	{
+		m_eShopPage = SHOP_PAGE::SLOT_MENU;
+		m_nSelectedShopSlot = -1;
+		return(true);
+	}
+
+	if (m_eShopPage == SHOP_PAGE::SLOT_MENU)
+	{
+		for (int i = 0; i < 4; ++i)
+		{
+			if (IsPointInRectangle(x, y, GetShopSlotRectangle(i, fViewportWidth, fViewportHeight,
+				m_xmf2ShopBoardOffset.x, m_xmf2ShopBoardOffset.y)))
+			{
+				m_eShopPage = SHOP_PAGE::SLOT_CONTENT;
+				m_nSelectedShopSlot = i;
+				return(true);
+			}
+		}
+	}
+	return(false);
 }
 XMFLOAT4 CGameScene::GetMoneyUiRectangle(float fViewportWidth, float fViewportHeight) const
 {
@@ -921,11 +1003,11 @@ XMFLOAT4 CGameScene::GetMoneyUiRectangle(float fViewportWidth, float fViewportHe
 
 	const float fPanelWidth = fFixedTextWidth + (gMoneyUiLayout.fHorizontalPadding * 2.0f);
 	const float fPanelHeight = (fMaximumBottom - fMinimumTop) + (gMoneyUiLayout.fVerticalPadding * 2.0f);
-	const XMFLOAT4 closeRectangle = GetShopCloseRectangle(fViewportWidth, fViewportHeight,
+	const XMFLOAT4 boardRectangle = GetShopBoardRectangle(fViewportWidth, fViewportHeight,
 		m_xmf2ShopBoardOffset.x, m_xmf2ShopBoardOffset.y);
-	const float fRight = closeRectangle.x - gShopUiLayout.fMoneyToCloseGap;
-	const float fTop = closeRectangle.y;
-	return(XMFLOAT4(fRight - fPanelWidth, fTop, fRight, fTop + fPanelHeight));
+	const float fRight = boardRectangle.z - gShopUiLayout.fMoneyRightPadding;
+	const float fBottom = boardRectangle.w - gShopUiLayout.fMoneyBottomPadding;
+	return(XMFLOAT4(fRight - fPanelWidth, fBottom - fPanelHeight, fRight, fBottom));
 }
 void CGameScene::RenderMoneyUI(ID3D12GraphicsCommandList* pd3dCommandList, CCamera* pCamera)
 {

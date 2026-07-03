@@ -107,8 +107,18 @@ private:
 	UI_IMAGE_RESOURCE m_ShopIconResource;
 	UI_IMAGE_RESOURCE m_ShopBoardResource;
 	UI_IMAGE_RESOURCE m_ShopCloseIconResource;
+	UI_IMAGE_RESOURCE m_ShopBackSpaceIconResource;
+	UI_IMAGE_RESOURCE m_ShopSlotResources[4];
 	CGameObject m_ShopUiHitObject;
+	enum class SHOP_PAGE
+	{
+		SLOT_MENU,
+		SLOT_CONTENT
+	};
+
 	bool m_bShopActive = false;
+	SHOP_PAGE m_eShopPage = SHOP_PAGE::SLOT_MENU;
+	int m_nSelectedShopSlot = -1;
 	bool m_bShopBoardDragging = false;
 	XMFLOAT2 m_xmf2ShopBoardOffset = XMFLOAT2(0.0f, 0.0f);
 	XMFLOAT2 m_xmf2ShopDragLastCursor = XMFLOAT2(0.0f, 0.0f);
