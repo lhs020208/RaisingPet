@@ -85,11 +85,13 @@ private:
 	void ChangeMoveState(MOVE_STATE newState);
 	void UpdateRotation(float fTimeElapsed);
 	void UpdateMoveSpeed(float fTimeElapsed);
+	void UpdatePossession(float fTimeElapsed);
 
 	MOVE_STATE m_MoveState = MOVE_STATE::STOP;
 	std::mt19937 m_RandomEngine;
 
 	float m_fStateElapsedTime = 0.0f;
+	float m_fPossessionElapsedTime = 0.0f;
 	float m_fMoveSpeed = 1.0f;
 	float m_fMoveDirection = 0.0f;
 	float m_fCurrentMoveSpeed = 0.0f;
@@ -107,8 +109,20 @@ private:
 	bool m_bRotating = false;
 
 public:
-	string GetName() const { return name; }
-	void SetName(const string& newName) { name = newName;}
+	string GetName() const { return m_sName; }
+	void SetName(const string& newName) { m_sName = newName;}
+
+	int GetPay() { return m_iPay; }
+	int GetMaxPossession() { return m_iMaxPossession; }
+	int GetNowPossession() { return m_iNowPossession; }
+
+	void SetPay(int p) { m_iPay = p; }
+	void GetMaxPossession(int p) { m_iMaxPossession = p; }
+	void GetNowPossession(int p) { m_iNowPossession = p; }
+
 private:
-	string name;
+	string m_sName;
+	int m_iPay = 10;
+	int m_iMaxPossession = 100;
+	int m_iNowPossession = 0;
 };

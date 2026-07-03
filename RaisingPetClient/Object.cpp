@@ -233,6 +233,7 @@ void CPet::Animate(float fTimeElapsed)
 {
 	if (fTimeElapsed <= 0.0f) return;
 
+	UpdatePossession(fTimeElapsed);
 	UpdateMoveSpeed(fTimeElapsed);
 
 	XMFLOAT3 position = GetPosition();
@@ -248,8 +249,29 @@ void CPet::Animate(float fTimeElapsed)
 		m_fStateElapsedTime -= 1.0f;
 		DecideNextState();
 	}
+
+	//OutputDebugStringA(("Pet: " + m_sName + ", Pay: " + std::to_string(m_iPay) + ", Possession: " + std::to_string(m_iNowPossession) + "/" + std::to_string(m_iMaxPossession) + "\n").c_str());
 }
 
+void CPet::UpdatePossession(float fTimeElapsed)
+{
+	if (m_iNowPossession >= m_iMaxPossession)
+	{
+		m_iNowPossession = m_iMaxPossession;
+		m_fPossessionElapsedTime = 0.0f;
+		return;
+	}
+
+	if (m_iPay <= 0) return;
+
+	m_fPossessionElapsedTime += fTimeElapsed;
+	while (m_fPossessionElapsedTime >= 1.0f && m_iNowPossession < m_iMaxPossession)
+	{
+		m_fPossessionElapsedTime -= 1.0f;
+		const int iRemainingPossession = m_iMaxPossession - m_iNowPossession;
+		m_iNowPossession += (m_iPay < iRemainingPossession) ? m_iPay : iRemainingPossession;
+	}
+}
 void CPet::DecideNextState()
 {
 	if (m_MoveState == MOVE_STATE::STOP)

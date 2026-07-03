@@ -164,7 +164,9 @@ void CGameScene::BuildObjects(ID3D12Device* pd3dDevice, ID3D12GraphicsCommandLis
 		petResource.pPet->SetName(petAsset.pName);
 		petResource.pPet->SetShader(pObjectShader);
 		petResource.pPet->SetPosition(0.0f, -28.0f, 0.0f);
-		petResource.pPet->SetColor(XMFLOAT3(1.0f, 1.0f, 1.0f));
+		petResource.pPet->SetPay(10);
+		petResource.pPet->GetNowPossession(0);
+		petResource.pPet->GetMaxPossession(100);
 
 		std::unique_ptr<uint8_t[]> textureData;
 		std::vector<D3D12_SUBRESOURCE_DATA> textureSubresources;
