@@ -430,19 +430,7 @@ void CGameFramework::ReleaseObjects()
 
 void CGameFramework::ProcessInput()
 {
-	static UCHAR pKeysBuffer[256];
-	DWORD dwDirection = 0;
-
-	float cxDelta = 0.0f, cyDelta = 0.0f;
-	if (GetCapture() == m_hWnd)
-	{
-		::SetCursor(NULL);
-		POINT ptCursorPos;
-		::GetCursorPos(&ptCursorPos);
-		cxDelta = (float)(ptCursorPos.x - m_ptOldCursorPos.x) / 3.0f;
-		cyDelta = (float)(ptCursorPos.y - m_ptOldCursorPos.y) / 3.0f;
-		::SetCursorPos(m_ptOldCursorPos.x, m_ptOldCursorPos.y);
-	}
+	// Keep the native cursor visible and allow it to move while interacting with pets and UI.
 }
 
 void CGameFramework::AnimateObjects()

@@ -51,7 +51,7 @@ struct SHOP_UI_LAYOUT
 	float fCloseWidth = 40.0f;
 	float fCloseHeight = 45.0f;
 	float fBoardTopPadding = 25.0f;
-	float fBoardRightPadding = 35.0f;
+	float fBoardRightPadding = 20.0f;
 	float fMoneyToCloseGap = 12.0f;
 };
 
@@ -70,7 +70,8 @@ static XMFLOAT4 GetShopIconRectangle(float fViewportWidth, float fViewportHeight
 		fRight, fBottom));
 }
 
-static XMFLOAT4 GetShopBoardRectangle(float fViewportWidth, float fViewportHeight)
+static XMFLOAT4 GetShopBoardRectangle(float fViewportWidth, float fViewportHeight,
+	float fOffsetX = 0.0f, float fOffsetY = 0.0f)
 {
 	float fWidth = fViewportWidth * gShopUiLayout.fBoardWidthRatio;
 	if (fWidth > gShopUiLayout.fBoardMaximumWidth) fWidth = gShopUiLayout.fBoardMaximumWidth;
@@ -81,19 +82,21 @@ static XMFLOAT4 GetShopBoardRectangle(float fViewportWidth, float fViewportHeigh
 		fHeight = fMaximumHeight;
 		fWidth = fHeight * (2923.0f / 2017.0f);
 	}
-	const float fLeft = (fViewportWidth - fWidth) * 0.5f;
-	const float fTop = (fViewportHeight - fHeight) * 0.5f;
+	const float fLeft = ((fViewportWidth - fWidth) * 0.5f) + fOffsetX;
+	const float fTop = ((fViewportHeight - fHeight) * 0.5f) + fOffsetY;
 	return(XMFLOAT4(fLeft, fTop, fLeft + fWidth, fTop + fHeight));
 }
 
-static XMFLOAT4 GetShopCloseRectangle(float fViewportWidth, float fViewportHeight)
+static XMFLOAT4 GetShopCloseRectangle(float fViewportWidth, float fViewportHeight,
+	float fOffsetX = 0.0f, float fOffsetY = 0.0f)
 {
-	const XMFLOAT4 board = GetShopBoardRectangle(fViewportWidth, fViewportHeight);
+	const XMFLOAT4 board = GetShopBoardRectangle(fViewportWidth, fViewportHeight, fOffsetX, fOffsetY);
 	const float fRight = board.z - gShopUiLayout.fBoardRightPadding;
 	const float fTop = board.y + gShopUiLayout.fBoardTopPadding;
 	return(XMFLOAT4(fRight - gShopUiLayout.fCloseWidth, fTop,
 		fRight, fTop + gShopUiLayout.fCloseHeight));
-}CScene::CScene()
+}
+CScene::CScene()
 {
 }
 
@@ -848,10 +851,12 @@ void CGameScene::RenderShopUI(ID3D12GraphicsCommandList* pd3dCommandList, CCamer
 	if (m_bShopActive)
 	{
 		RenderUiImage(pd3dCommandList, pCamera, m_ShopBoardResource,
-			GetShopBoardRectangle(fViewportWidth, fViewportHeight));
+			GetShopBoardRectangle(fViewportWidth, fViewportHeight,
+			m_xmf2ShopBoardOffset.x, m_xmf2ShopBoardOffset.y));
 		RenderMoneyUI(pd3dCommandList, pCamera);
 		RenderUiImage(pd3dCommandList, pCamera, m_ShopCloseIconResource,
-			GetShopCloseRectangle(fViewportWidth, fViewportHeight));
+			GetShopCloseRectangle(fViewportWidth, fViewportHeight,
+			m_xmf2ShopBoardOffset.x, m_xmf2ShopBoardOffset.y));
 	}
 
 	RenderUiImage(pd3dCommandList, pCamera, m_ShopIconResource,
@@ -862,7 +867,8 @@ bool CGameScene::IsPointOverShopUI(float x, float y, float fViewportWidth, float
 {
 	if (IsPointInRectangle(x, y, GetShopIconRectangle(fViewportWidth, fViewportHeight))) return(true);
 	if (!m_bShopActive) return(false);
-	return(IsPointInRectangle(x, y, GetShopBoardRectangle(fViewportWidth, fViewportHeight)));
+	return(IsPointInRectangle(x, y, GetShopBoardRectangle(fViewportWidth, fViewportHeight,
+			m_xmf2ShopBoardOffset.x, m_xmf2ShopBoardOffset.y)));
 }
 
 bool CGameScene::ProcessShopUIClick(float x, float y, float fViewportWidth, float fViewportHeight)
@@ -870,14 +876,56 @@ bool CGameScene::ProcessShopUIClick(float x, float y, float fViewportWidth, floa
 	const bool bIconClicked = IsPointInRectangle(x, y,
 		GetShopIconRectangle(fViewportWidth, fViewportHeight));
 	const bool bCloseClicked = m_bShopActive && IsPointInRectangle(x, y,
-		GetShopCloseRectangle(fViewportWidth, fViewportHeight));
+		GetShopCloseRectangle(fViewportWidth, fViewportHeight,
+			m_xmf2ShopBoardOffset.x, m_xmf2ShopBoardOffset.y));
 	if (!bIconClicked && !bCloseClicked) return(false);
 
 	if (m_bShopActive)
+	{
 		m_bShopActive = false;
+		m_bShopBoardDragging = false;
+	}
 	else if (bIconClicked)
 		m_bShopActive = true;
 	return(true);
+}
+XMFLOAT4 CGameScene::GetMoneyUiRectangle(float fViewportWidth, float fViewportHeight) const
+{
+	auto FindGlyph = [this](char ch) -> const TEXT_GLYPH_RESOURCE*
+	{
+		for (const TEXT_GLYPH_RESOURCE& glyph : m_vTextGlyphResources)
+			if (glyph.ch == ch) return(&glyph);
+		return(NULL);
+	};
+
+	float fFixedTextWidth = 0.0f;
+	for (const char* pCharacter = gMoneyUiLayout.pWidthReferenceText; *pCharacter; ++pCharacter)
+	{
+		const TEXT_GLYPH_RESOURCE* pGlyph = FindGlyph(*pCharacter);
+		if (pGlyph) fFixedTextWidth += (pGlyph->fPixelWidth * gMoneyUiLayout.fGlyphScale)
+			+ gMoneyUiLayout.fGlyphGap;
+	}
+	if (fFixedTextWidth > 0.0f) fFixedTextWidth -= gMoneyUiLayout.fGlyphGap;
+
+	float fMinimumTop = FLT_MAX;
+	float fMaximumBottom = -FLT_MAX;
+	for (char ch : FormatPossession(m_nMoney))
+	{
+		const TEXT_GLYPH_RESOURCE* pGlyph = FindGlyph(ch);
+		if (!pGlyph) continue;
+		fMinimumTop = min(fMinimumTop, pGlyph->fTopOffset * gMoneyUiLayout.fGlyphScale);
+		fMaximumBottom = max(fMaximumBottom,
+			(pGlyph->fTopOffset + pGlyph->fPixelHeight) * gMoneyUiLayout.fGlyphScale);
+	}
+	if (fMinimumTop == FLT_MAX) return(XMFLOAT4(0.0f, 0.0f, 0.0f, 0.0f));
+
+	const float fPanelWidth = fFixedTextWidth + (gMoneyUiLayout.fHorizontalPadding * 2.0f);
+	const float fPanelHeight = (fMaximumBottom - fMinimumTop) + (gMoneyUiLayout.fVerticalPadding * 2.0f);
+	const XMFLOAT4 closeRectangle = GetShopCloseRectangle(fViewportWidth, fViewportHeight,
+		m_xmf2ShopBoardOffset.x, m_xmf2ShopBoardOffset.y);
+	const float fRight = closeRectangle.x - gShopUiLayout.fMoneyToCloseGap;
+	const float fTop = closeRectangle.y;
+	return(XMFLOAT4(fRight - fPanelWidth, fTop, fRight, fTop + fPanelHeight));
 }
 void CGameScene::RenderMoneyUI(ID3D12GraphicsCommandList* pd3dCommandList, CCamera* pCamera)
 {
@@ -912,24 +960,13 @@ void CGameScene::RenderMoneyUI(ID3D12GraphicsCommandList* pd3dCommandList, CCame
 	if (fTextWidth > 0.0f) fTextWidth -= gMoneyUiLayout.fGlyphGap;
 	if (fMinimumTop == FLT_MAX) return;
 
-	float fFixedTextWidth = 0.0f;
-	for (const char* pCharacter = gMoneyUiLayout.pWidthReferenceText; *pCharacter; ++pCharacter)
-	{
-		TEXT_GLYPH_RESOURCE* pGlyph = FindGlyph(*pCharacter);
-		if (pGlyph) fFixedTextWidth += (pGlyph->fPixelWidth * gMoneyUiLayout.fGlyphScale)
-			+ gMoneyUiLayout.fGlyphGap;
-	}
-	if (fFixedTextWidth > 0.0f) fFixedTextWidth -= gMoneyUiLayout.fGlyphGap;
-
 	const float fViewportWidth = pCamera->m_d3dViewport.Width;
 	const float fViewportHeight = pCamera->m_d3dViewport.Height;
-	const float fPanelWidth = fFixedTextWidth + (gMoneyUiLayout.fHorizontalPadding * 2.0f);
-	const float fPanelHeight = (fMaximumBottom - fMinimumTop) + (gMoneyUiLayout.fVerticalPadding * 2.0f);
-	const XMFLOAT4 closeRectangle = GetShopCloseRectangle(fViewportWidth, fViewportHeight);
-	const float fPanelRight = closeRectangle.x - gShopUiLayout.fMoneyToCloseGap;
-	const float fPanelTop = closeRectangle.y;
-	const float fPanelLeft = fPanelRight - fPanelWidth;
-	const float fPanelBottom = fPanelTop + fPanelHeight;
+	const XMFLOAT4 panelRectangle = GetMoneyUiRectangle(fViewportWidth, fViewportHeight);
+	const float fPanelLeft = panelRectangle.x;
+	const float fPanelTop = panelRectangle.y;
+	const float fPanelRight = panelRectangle.z;
+	const float fPanelBottom = panelRectangle.w;
 	const float fOutline = gMoneyUiLayout.fOutlineThickness;
 
 	RenderSolidUiRectangle(pd3dCommandList, pCamera,
@@ -1163,15 +1200,45 @@ void CGameScene::OnProcessingMouseMessage(HWND hWnd, UINT nMessageID, WPARAM wPa
 	{
 		RECT clientRectangle;
 		::GetClientRect(hWnd, &clientRectangle);
+		const float fViewportWidth = static_cast<float>(clientRectangle.right);
+		const float fViewportHeight = static_cast<float>(clientRectangle.bottom);
 		const float x = static_cast<float>(static_cast<short>(LOWORD(lParam)));
 		const float y = static_cast<float>(static_cast<short>(HIWORD(lParam)));
-		if (ProcessShopUIClick(x, y, static_cast<float>(clientRectangle.right),
-			static_cast<float>(clientRectangle.bottom)))
-			break;
-		if (m_pPointedPet)
-			CollectPetPossession(m_pPointedPet);
+		if (ProcessShopUIClick(x, y, fViewportWidth, fViewportHeight)) break;
+
+		if (m_bShopActive)
+		{
+			const XMFLOAT4 boardRectangle = GetShopBoardRectangle(fViewportWidth, fViewportHeight,
+				m_xmf2ShopBoardOffset.x, m_xmf2ShopBoardOffset.y);
+			const XMFLOAT4 closeRectangle = GetShopCloseRectangle(fViewportWidth, fViewportHeight,
+				m_xmf2ShopBoardOffset.x, m_xmf2ShopBoardOffset.y);
+			const XMFLOAT4 moneyRectangle = GetMoneyUiRectangle(fViewportWidth, fViewportHeight);
+			if (IsPointInRectangle(x, y, boardRectangle)
+				&& !IsPointInRectangle(x, y, closeRectangle)
+				&& !IsPointInRectangle(x, y, moneyRectangle))
+			{
+				m_bShopBoardDragging = true;
+				m_xmf2ShopDragLastCursor = XMFLOAT2(x, y);
+				break;
+			}
+		}
+
+		if (m_pPointedPet) CollectPetPossession(m_pPointedPet);
 		break;
 	}
+	case WM_MOUSEMOVE:
+		if (m_bShopBoardDragging && (wParam & MK_LBUTTON))
+		{
+			const float x = static_cast<float>(static_cast<short>(LOWORD(lParam)));
+			const float y = static_cast<float>(static_cast<short>(HIWORD(lParam)));
+			m_xmf2ShopBoardOffset.x += x - m_xmf2ShopDragLastCursor.x;
+			m_xmf2ShopBoardOffset.y += y - m_xmf2ShopDragLastCursor.y;
+			m_xmf2ShopDragLastCursor = XMFLOAT2(x, y);
+		}
+		break;
+	case WM_LBUTTONUP:
+		m_bShopBoardDragging = false;
+		break;
 	case WM_RBUTTONDOWN:
 		break;
 	}

@@ -109,6 +109,9 @@ private:
 	UI_IMAGE_RESOURCE m_ShopCloseIconResource;
 	CGameObject m_ShopUiHitObject;
 	bool m_bShopActive = false;
+	bool m_bShopBoardDragging = false;
+	XMFLOAT2 m_xmf2ShopBoardOffset = XMFLOAT2(0.0f, 0.0f);
+	XMFLOAT2 m_xmf2ShopDragLastCursor = XMFLOAT2(0.0f, 0.0f);
 
 	void RenderPetPossessionText(ID3D12GraphicsCommandList* pd3dCommandList, CCamera* pCamera, CPet* pPet);
 	void RenderMoneyUI(ID3D12GraphicsCommandList* pd3dCommandList, CCamera* pCamera);
@@ -123,6 +126,7 @@ private:
 		UI_IMAGE_RESOURCE& imageResource, const XMFLOAT4& xmf4Rectangle);
 	bool IsPointOverShopUI(float x, float y, float fViewportWidth, float fViewportHeight) const;
 	bool ProcessShopUIClick(float x, float y, float fViewportWidth, float fViewportHeight);
+	XMFLOAT4 GetMoneyUiRectangle(float fViewportWidth, float fViewportHeight) const;
 
 public:
 	UINT GetMoney() { return m_nMoney; }
