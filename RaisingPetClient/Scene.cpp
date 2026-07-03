@@ -964,7 +964,12 @@ void CGameScene::Animate(float fElapsedTime)
 	if (m_nActivePetIndex < m_vPetResources.size())
 	{
 		CPet* pActivePet = m_vPetResources[m_nActivePetIndex].pPet;
-		if (pActivePet) pActivePet->Animate(fElapsedTime);
+		if (pActivePet)
+		{
+			pActivePet->Animate(fElapsedTime);
+			if (pActivePet->ConsumeAutoCollectRequest())
+				CollectPetPossession(pActivePet);
+		}
 	}
 	AnimateCoinEffects(fElapsedTime);
 }

@@ -92,6 +92,9 @@ private:
 
 	float m_fStateElapsedTime = 0.0f;
 	float m_fPossessionElapsedTime = 0.0f;
+	float m_fMaxChargeTime = 0.0f;
+	float m_fFullPossessionElapsedTime = 0.0f;
+	bool m_bAutoCollectRequested = false;
 	float m_fMoveSpeed = 1.0f;
 	float m_fMoveDirection = 0.0f;
 	float m_fCurrentMoveSpeed = 0.0f;
@@ -115,6 +118,8 @@ public:
 	UINT GetPay() { return m_nPay; }
 	UINT GetMaxPossession() { return m_nMaxPossession; }
 	UINT GetNowPossession() { return m_nNowPossession; }
+	float GetMaxChargeTime() const { return m_fMaxChargeTime; }
+	bool ConsumeAutoCollectRequest();
 
 	void SetPay(UINT p) { m_nPay = p; }
 	void GetMaxPossession(UINT p) { m_nMaxPossession = p; }

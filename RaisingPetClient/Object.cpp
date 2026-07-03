@@ -253,22 +253,52 @@ void CPet::Animate(float fTimeElapsed)
 
 void CPet::UpdatePossession(float fTimeElapsed)
 {
+	if (m_nNowPossession == 0)
+	{
+		m_fFullPossessionElapsedTime = 0.0f;
+		m_bAutoCollectRequested = false;
+		if (m_nPay > 0 && m_nMaxPossession > 0)
+		{
+			m_fMaxChargeTime = static_cast<float>((static_cast<UINT64>(m_nMaxPossession)
+				+ m_nPay - 1) / m_nPay);
+		}
+		else
+		{
+			m_fMaxChargeTime = 0.0f;
+		}
+	}
+
 	if (m_nNowPossession >= m_nMaxPossession)
 	{
 		m_nNowPossession = m_nMaxPossession;
 		m_fPossessionElapsedTime = 0.0f;
+		if (m_fMaxChargeTime > 0.0f && !m_bAutoCollectRequested)
+		{
+			m_fFullPossessionElapsedTime += fTimeElapsed;
+			if (m_fFullPossessionElapsedTime >= m_fMaxChargeTime)
+				m_bAutoCollectRequested = true;
+		}
 		return;
 	}
 
-	if (m_nPay <= 0) return;
+	m_fFullPossessionElapsedTime = 0.0f;
+	if (m_nPay == 0) return;
 
 	m_fPossessionElapsedTime += fTimeElapsed;
 	while (m_fPossessionElapsedTime >= 1.0f && m_nNowPossession < m_nMaxPossession)
 	{
 		m_fPossessionElapsedTime -= 1.0f;
-		const int iRemainingPossession = m_nMaxPossession - m_nNowPossession;
-		m_nNowPossession += (m_nPay < iRemainingPossession) ? m_nPay : iRemainingPossession;
+		const UINT nRemainingPossession = m_nMaxPossession - m_nNowPossession;
+		m_nNowPossession += (m_nPay < nRemainingPossession) ? m_nPay : nRemainingPossession;
 	}
+}
+
+bool CPet::ConsumeAutoCollectRequest()
+{
+	if (!m_bAutoCollectRequested) return(false);
+	m_bAutoCollectRequested = false;
+	m_fFullPossessionElapsedTime = 0.0f;
+	return(true);
 }
 void CPet::DecideNextState()
 {
