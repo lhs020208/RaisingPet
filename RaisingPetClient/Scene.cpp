@@ -9,6 +9,22 @@
 #include "d3dx12.h"
 extern CGameFramework* g_pFramework;
 
+static std::string FormatPossession(UINT nValue)
+{
+	if (nValue < 1000) return(std::to_string(nValue));
+
+	static const char suffixes[] = { 'k', 'm', 'b' };
+	UINT64 nDivisor = 1000;
+	int nSuffixIndex = 0;
+	while ((nValue / nDivisor) >= 1000 && nSuffixIndex < 2)
+	{
+		nDivisor *= 1000;
+		++nSuffixIndex;
+	}
+
+	const UINT64 nTenths = (static_cast<UINT64>(nValue) * 10) / nDivisor;
+	return(std::to_string(nTenths / 10) + "." + std::to_string(nTenths % 10) + suffixes[nSuffixIndex]);
+}
 CScene::CScene()
 {
 }
@@ -33,7 +49,7 @@ ID3D12RootSignature *CScene::CreateGraphicsRootSignature(ID3D12Device *pd3dDevic
 	d3dSrvDescriptorRange.RegisterSpace = 0;
 	d3dSrvDescriptorRange.OffsetInDescriptorsFromTableStart = D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND;
 
-	D3D12_ROOT_PARAMETER pd3dRootParameters[4];
+	D3D12_ROOT_PARAMETER pd3dRootParameters[5];
 	pd3dRootParameters[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_32BIT_CONSTANTS;
 	pd3dRootParameters[0].Constants.Num32BitValues = 4; //Time, ElapsedTime, xCursor, yCursor
 	pd3dRootParameters[0].Constants.ShaderRegister = 0; //Time
@@ -56,6 +72,12 @@ ID3D12RootSignature *CScene::CreateGraphicsRootSignature(ID3D12Device *pd3dDevic
 	pd3dRootParameters[3].DescriptorTable.NumDescriptorRanges = 1;
 	pd3dRootParameters[3].DescriptorTable.pDescriptorRanges = &d3dSrvDescriptorRange;
 	pd3dRootParameters[3].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+
+	pd3dRootParameters[4].ParameterType = D3D12_ROOT_PARAMETER_TYPE_32BIT_CONSTANTS;
+	pd3dRootParameters[4].Constants.Num32BitValues = 4;
+	pd3dRootParameters[4].Constants.ShaderRegister = 3;
+	pd3dRootParameters[4].Constants.RegisterSpace = 0;
+	pd3dRootParameters[4].ShaderVisibility = D3D12_SHADER_VISIBILITY_VERTEX;
 
 	D3D12_ROOT_SIGNATURE_FLAGS d3dRootSignatureFlags = D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT;
 	D3D12_ROOT_SIGNATURE_DESC d3dRootSignatureDesc;
@@ -216,7 +238,7 @@ void CGameScene::BuildObjects(ID3D12Device* pd3dDevice, ID3D12GraphicsCommandLis
 	ID3DBlob* pd3dPixelShaderBlob = NULL;
 	ID3DBlob* pd3dErrorBlob = NULL;
 
-	HRESULT hResult = D3DCompileFromFile(L"Shaders.hlsl", NULL, NULL, "VSFullscreenTexture", "vs_5_1",
+	HRESULT hResult = D3DCompileFromFile(L"Shaders.hlsl", NULL, NULL, "VSTextGlyph", "vs_5_1",
 		D3DCOMPILE_ENABLE_STRICTNESS, 0, &pd3dVertexShaderBlob, &pd3dErrorBlob);
 	if (FAILED(hResult))
 	{
@@ -226,7 +248,7 @@ void CGameScene::BuildObjects(ID3D12Device* pd3dDevice, ID3D12GraphicsCommandLis
 	}
 	if (pd3dErrorBlob) { pd3dErrorBlob->Release(); pd3dErrorBlob = NULL; }
 
-	hResult = D3DCompileFromFile(L"Shaders.hlsl", NULL, NULL, "PSFullscreenTexture", "ps_5_1",
+	hResult = D3DCompileFromFile(L"Shaders.hlsl", NULL, NULL, "PSTextGlyph", "ps_5_1",
 		D3DCOMPILE_ENABLE_STRICTNESS, 0, &pd3dPixelShaderBlob, &pd3dErrorBlob);
 	if (FAILED(hResult))
 	{
@@ -245,6 +267,11 @@ void CGameScene::BuildObjects(ID3D12Device* pd3dDevice, ID3D12GraphicsCommandLis
 	d3dPipelineStateDesc.RasterizerState = d3dStateFactory.CreateRasterizerState();
 	d3dPipelineStateDesc.RasterizerState.CullMode = D3D12_CULL_MODE_NONE;
 	d3dPipelineStateDesc.BlendState = d3dStateFactory.CreateBlendState();
+	d3dPipelineStateDesc.BlendState.RenderTarget[0].BlendEnable = TRUE;
+	d3dPipelineStateDesc.BlendState.RenderTarget[0].SrcBlend = D3D12_BLEND_SRC_ALPHA;
+	d3dPipelineStateDesc.BlendState.RenderTarget[0].DestBlend = D3D12_BLEND_INV_SRC_ALPHA;
+	d3dPipelineStateDesc.BlendState.RenderTarget[0].SrcBlendAlpha = D3D12_BLEND_ONE;
+	d3dPipelineStateDesc.BlendState.RenderTarget[0].DestBlendAlpha = D3D12_BLEND_INV_SRC_ALPHA;
 	d3dPipelineStateDesc.DepthStencilState = d3dStateFactory.CreateDepthStencilState();
 	d3dPipelineStateDesc.DepthStencilState.DepthEnable = FALSE;
 	d3dPipelineStateDesc.DepthStencilState.DepthWriteMask = D3D12_DEPTH_WRITE_MASK_ZERO;
@@ -256,58 +283,92 @@ void CGameScene::BuildObjects(ID3D12Device* pd3dDevice, ID3D12GraphicsCommandLis
 	d3dPipelineStateDesc.SampleDesc.Count = 1;
 
 	hResult = pd3dDevice->CreateGraphicsPipelineState(&d3dPipelineStateDesc,
-		__uuidof(ID3D12PipelineState), reinterpret_cast<void**>(&m_pd3dFullscreenPipelineState));
+		__uuidof(ID3D12PipelineState), reinterpret_cast<void**>(&m_pd3dTextPipelineState));
 	pd3dVertexShaderBlob->Release();
 	pd3dPixelShaderBlob->Release();
 	if (FAILED(hResult)) return;
 
-	std::unique_ptr<uint8_t[]> ddsData;
-	std::vector<D3D12_SUBRESOURCE_DATA> subresources;
-	hResult = DirectX::LoadDDSTextureFromFile(pd3dDevice, L"Assets/Image/Test.dds",
-		&m_pd3dFullscreenTexture, ddsData, subresources);
-	if (FAILED(hResult))
+	struct GLYPH_ASSET_DESC
 	{
-		hResult = DirectX::LoadDDSTextureFromFile(pd3dDevice, L"RaisingPetClient/Assets/Image/Test.dds",
-			&m_pd3dFullscreenTexture, ddsData, subresources);
-	}
-	if (FAILED(hResult))
+		char ch;
+		const wchar_t* pFileName;
+		float fImageWidth;
+		float fImageHeight;
+		float fLeft;
+		float fTop;
+		float fRight;
+		float fBottom;
+	};
+
+	const GLYPH_ASSET_DESC glyphAssets[] =
 	{
-		hResult = DirectX::LoadDDSTextureFromFile(pd3dDevice, L"../../Assets/Image/Test.dds",
-			&m_pd3dFullscreenTexture, ddsData, subresources);
+		{ '0', L"Assets/Image/Numbers/0.dds", 441, 521, 158, 136, 284, 322 },
+		{ '1', L"Assets/Image/Numbers/1.dds", 441, 521, 175, 136, 248, 318 },
+		{ '2', L"Assets/Image/Numbers/2.dds", 441, 521, 164, 136, 278, 318 },
+		{ '3', L"Assets/Image/Numbers/3.dds", 441, 521, 166, 136, 278, 322 },
+		{ '4', L"Assets/Image/Numbers/4.dds", 441, 521, 155, 139, 286, 318 },
+		{ '5', L"Assets/Image/Numbers/5.dds", 441, 521, 167, 139, 278, 322 },
+		{ '6', L"Assets/Image/Numbers/6.dds", 441, 521, 161, 136, 284, 322 },
+		{ '7', L"Assets/Image/Numbers/7.dds", 441, 521, 160, 139, 282, 318 },
+		{ '8', L"Assets/Image/Numbers/8.dds", 441, 521, 161, 136, 283, 322 },
+		{ '9', L"Assets/Image/Numbers/9.dds", 441, 521, 159, 136, 282, 322 },
+		{ '.', L"Assets/Image/Numbers/Point.dds", 363, 521, 161, 283, 203, 322 },
+		{ '/', L"Assets/Image/Numbers/Slash.dds", 407, 521, 144, 139, 261, 348 },
+		{ 'k', L"Assets/Image/Spellings/k.dds", 435, 521, 166, 129, 288, 318 },
+		{ 'm', L"Assets/Image/Spellings/m.dds", 527, 521, 167, 187, 363, 319 },
+		{ 'b', L"Assets/Image/Spellings/b.dds", 453, 521, 166, 129, 295, 322 }
+	};
+
+	for (const GLYPH_ASSET_DESC& glyphAsset : glyphAssets)
+	{
+		m_vTextGlyphResources.emplace_back();
+		TEXT_GLYPH_RESOURCE& glyph = m_vTextGlyphResources.back();
+		glyph.ch = glyphAsset.ch;
+		glyph.fU0 = glyphAsset.fLeft / glyphAsset.fImageWidth;
+		glyph.fV0 = glyphAsset.fTop / glyphAsset.fImageHeight;
+		glyph.fU1 = glyphAsset.fRight / glyphAsset.fImageWidth;
+		glyph.fV1 = glyphAsset.fBottom / glyphAsset.fImageHeight;
+		glyph.fPixelWidth = glyphAsset.fRight - glyphAsset.fLeft;
+		glyph.fPixelHeight = glyphAsset.fBottom - glyphAsset.fTop;
+		glyph.fTopOffset = glyphAsset.fTop - 129.0f;
+
+		std::unique_ptr<uint8_t[]> ddsData;
+		std::vector<D3D12_SUBRESOURCE_DATA> subresources;
+		hResult = DirectX::LoadDDSTextureFromFile(pd3dDevice, glyphAsset.pFileName,
+			&glyph.pd3dTexture, ddsData, subresources);
+		if (FAILED(hResult) || subresources.empty()) continue;
+
+		const UINT64 nUploadBufferSize = GetRequiredIntermediateSize(glyph.pd3dTexture, 0,
+			static_cast<UINT>(subresources.size()));
+		CD3DX12_HEAP_PROPERTIES d3dUploadHeapProperties(D3D12_HEAP_TYPE_UPLOAD);
+		CD3DX12_RESOURCE_DESC d3dUploadBufferDesc = CD3DX12_RESOURCE_DESC::Buffer(nUploadBufferSize);
+		hResult = pd3dDevice->CreateCommittedResource(&d3dUploadHeapProperties, D3D12_HEAP_FLAG_NONE,
+			&d3dUploadBufferDesc, D3D12_RESOURCE_STATE_GENERIC_READ, NULL,
+			__uuidof(ID3D12Resource), reinterpret_cast<void**>(&glyph.pd3dTextureUploadBuffer));
+		if (FAILED(hResult)) continue;
+
+		UpdateSubresources(pd3dCommandList, glyph.pd3dTexture, glyph.pd3dTextureUploadBuffer,
+			0, 0, static_cast<UINT>(subresources.size()), subresources.data());
+		CD3DX12_RESOURCE_BARRIER d3dTextureBarrier = CD3DX12_RESOURCE_BARRIER::Transition(
+			glyph.pd3dTexture, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+		pd3dCommandList->ResourceBarrier(1, &d3dTextureBarrier);
+
+		D3D12_DESCRIPTOR_HEAP_DESC d3dSrvHeapDesc = {};
+		d3dSrvHeapDesc.NumDescriptors = 1;
+		d3dSrvHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
+		d3dSrvHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
+		hResult = pd3dDevice->CreateDescriptorHeap(&d3dSrvHeapDesc, __uuidof(ID3D12DescriptorHeap),
+			reinterpret_cast<void**>(&glyph.pd3dSrvDescriptorHeap));
+		if (FAILED(hResult)) continue;
+
+		D3D12_SHADER_RESOURCE_VIEW_DESC d3dSrvDesc = {};
+		d3dSrvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+		d3dSrvDesc.Format = glyph.pd3dTexture->GetDesc().Format;
+		d3dSrvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
+		d3dSrvDesc.Texture2D.MipLevels = glyph.pd3dTexture->GetDesc().MipLevels;
+		pd3dDevice->CreateShaderResourceView(glyph.pd3dTexture, &d3dSrvDesc,
+			glyph.pd3dSrvDescriptorHeap->GetCPUDescriptorHandleForHeapStart());
 	}
-	if (FAILED(hResult) || subresources.empty()) return;
-
-
-	const UINT64 nUploadBufferSize = GetRequiredIntermediateSize(m_pd3dFullscreenTexture, 0,
-		static_cast<UINT>(subresources.size()));
-	CD3DX12_HEAP_PROPERTIES d3dUploadHeapProperties(D3D12_HEAP_TYPE_UPLOAD);
-	CD3DX12_RESOURCE_DESC d3dUploadBufferDesc = CD3DX12_RESOURCE_DESC::Buffer(nUploadBufferSize);
-	hResult = pd3dDevice->CreateCommittedResource(&d3dUploadHeapProperties, D3D12_HEAP_FLAG_NONE,
-		&d3dUploadBufferDesc, D3D12_RESOURCE_STATE_GENERIC_READ, NULL,
-		__uuidof(ID3D12Resource), reinterpret_cast<void**>(&m_pd3dFullscreenTextureUploadBuffer));
-	if (FAILED(hResult)) return;
-
-	UpdateSubresources(pd3dCommandList, m_pd3dFullscreenTexture, m_pd3dFullscreenTextureUploadBuffer,
-		0, 0, static_cast<UINT>(subresources.size()), subresources.data());
-	CD3DX12_RESOURCE_BARRIER d3dTextureBarrier = CD3DX12_RESOURCE_BARRIER::Transition(
-		m_pd3dFullscreenTexture, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
-	pd3dCommandList->ResourceBarrier(1, &d3dTextureBarrier);
-
-	D3D12_DESCRIPTOR_HEAP_DESC d3dSrvHeapDesc = {};
-	d3dSrvHeapDesc.NumDescriptors = 1;
-	d3dSrvHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
-	d3dSrvHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
-	hResult = pd3dDevice->CreateDescriptorHeap(&d3dSrvHeapDesc, __uuidof(ID3D12DescriptorHeap),
-		reinterpret_cast<void**>(&m_pd3dFullscreenSrvDescriptorHeap));
-	if (FAILED(hResult)) return;
-
-	D3D12_SHADER_RESOURCE_VIEW_DESC d3dSrvDesc = {};
-	d3dSrvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
-	d3dSrvDesc.Format = m_pd3dFullscreenTexture->GetDesc().Format;
-	d3dSrvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
-	d3dSrvDesc.Texture2D.MipLevels = m_pd3dFullscreenTexture->GetDesc().MipLevels;
-	pd3dDevice->CreateShaderResourceView(m_pd3dFullscreenTexture, &d3dSrvDesc,
-		m_pd3dFullscreenSrvDescriptorHeap->GetCPUDescriptorHandleForHeapStart());
 }
 
 void CGameScene::ReleaseObjects()
@@ -321,10 +382,14 @@ void CGameScene::ReleaseObjects()
 	}
 	m_vPetResources.clear();
 
-	if (m_pd3dFullscreenPipelineState) m_pd3dFullscreenPipelineState->Release();
-	if (m_pd3dFullscreenTexture) m_pd3dFullscreenTexture->Release();
-	if (m_pd3dFullscreenTextureUploadBuffer) m_pd3dFullscreenTextureUploadBuffer->Release();
-	if (m_pd3dFullscreenSrvDescriptorHeap) m_pd3dFullscreenSrvDescriptorHeap->Release();
+	if (m_pd3dTextPipelineState) m_pd3dTextPipelineState->Release();
+	for (TEXT_GLYPH_RESOURCE& glyph : m_vTextGlyphResources)
+	{
+		if (glyph.pd3dTexture) glyph.pd3dTexture->Release();
+		if (glyph.pd3dTextureUploadBuffer) glyph.pd3dTextureUploadBuffer->Release();
+		if (glyph.pd3dSrvDescriptorHeap) glyph.pd3dSrvDescriptorHeap->Release();
+	}
+	m_vTextGlyphResources.clear();
 	if (m_pd3dGraphicsRootSignature) m_pd3dGraphicsRootSignature->Release();
 }
 void CGameScene::ReleaseUploadBuffers()
@@ -339,10 +404,13 @@ void CGameScene::ReleaseUploadBuffers()
 		}
 	}
 
-	if (m_pd3dFullscreenTextureUploadBuffer)
+	for (TEXT_GLYPH_RESOURCE& glyph : m_vTextGlyphResources)
 	{
-		m_pd3dFullscreenTextureUploadBuffer->Release();
-		m_pd3dFullscreenTextureUploadBuffer = NULL;
+		if (glyph.pd3dTextureUploadBuffer)
+		{
+			glyph.pd3dTextureUploadBuffer->Release();
+			glyph.pd3dTextureUploadBuffer = NULL;
+		}
 	}
 }
 void CGameScene::Render(ID3D12GraphicsCommandList* pd3dCommandList, CCamera* pCamera)
@@ -364,20 +432,104 @@ void CGameScene::Render(ID3D12GraphicsCommandList* pd3dCommandList, CCamera* pCa
 		}
 	}
 
-	if (m_pd3dFullscreenPipelineState && m_pd3dFullscreenSrvDescriptorHeap)
+	if (m_nActivePetIndex < m_vPetResources.size())
+		RenderPetPossessionText(pd3dCommandList, pCamera, m_vPetResources[m_nActivePetIndex].pPet);
+}
+void CGameScene::RenderPetPossessionText(ID3D12GraphicsCommandList* pd3dCommandList, CCamera* pCamera, CPet* pPet)
+{
+	if (!m_pd3dTextPipelineState || !pCamera || !pPet || m_vTextGlyphResources.empty()) return;
+
+	const std::string strText = FormatPossession(pPet->GetNowPossession()) + " / "
+		+ FormatPossession(pPet->GetMaxPossession());
+	const float fGlyphScale = 0.16f;
+	const float fGlyphGap = 1.0f;
+	const float fSpaceWidth = 8.0f;
+
+	auto FindGlyph = [this](char ch) -> TEXT_GLYPH_RESOURCE*
 	{
-		/*ID3D12DescriptorHeap* ppd3dDescriptorHeaps[] = { m_pd3dFullscreenSrvDescriptorHeap };
+		for (TEXT_GLYPH_RESOURCE& glyph : m_vTextGlyphResources)
+			if (glyph.ch == ch) return(&glyph);
+		return(NULL);
+	};
+
+	float fTextWidth = 0.0f;
+	for (char ch : strText)
+	{
+		if (ch == ' ')
+			fTextWidth += fSpaceWidth;
+		else
+		{
+			TEXT_GLYPH_RESOURCE* pGlyph = FindGlyph(ch);
+			if (pGlyph) fTextWidth += (pGlyph->fPixelWidth * fGlyphScale) + fGlyphGap;
+		}
+	}
+	if (fTextWidth > 0.0f) fTextWidth -= fGlyphGap;
+
+	const BoundingOrientedBox& boundingBox = pPet->m_xmOOBB;
+	XMFLOAT3 xmf3Anchor(boundingBox.Center.x,
+		boundingBox.Center.y + boundingBox.Extents.y + 1.0f,
+		boundingBox.Center.z);
+	XMMATRIX xmmtxViewProjection = XMLoadFloat4x4(&pCamera->m_xmf4x4View)
+		* XMLoadFloat4x4(&pCamera->m_xmf4x4Projection);
+	XMVECTOR xmvAnchor = XMVector3TransformCoord(XMLoadFloat3(&xmf3Anchor), xmmtxViewProjection);
+	XMFLOAT3 xmf3Ndc;
+	XMStoreFloat3(&xmf3Ndc, xmvAnchor);
+	if (xmf3Ndc.z < 0.0f || xmf3Ndc.z > 1.0f) return;
+
+	const float fViewportWidth = pCamera->m_d3dViewport.Width;
+	const float fViewportHeight = pCamera->m_d3dViewport.Height;
+	if (fViewportWidth <= 0.0f || fViewportHeight <= 0.0f) return;
+
+	const float fAnchorX = (xmf3Ndc.x * 0.5f + 0.5f) * fViewportWidth;
+	const float fAnchorY = (0.5f - xmf3Ndc.y * 0.5f) * fViewportHeight;
+	float fCursorX = fAnchorX - (fTextWidth * 0.5f);
+	const float fTextTop = fAnchorY - 36.0f;
+
+	pd3dCommandList->SetPipelineState(m_pd3dTextPipelineState);
+	pd3dCommandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+
+	for (char ch : strText)
+	{
+		if (ch == ' ')
+		{
+			fCursorX += fSpaceWidth;
+			continue;
+		}
+
+		TEXT_GLYPH_RESOURCE* pGlyph = FindGlyph(ch);
+		if (!pGlyph || !pGlyph->pd3dSrvDescriptorHeap) continue;
+
+		const float fImageWidth = pGlyph->fPixelWidth / (pGlyph->fU1 - pGlyph->fU0);
+		const float fImageHeight = pGlyph->fPixelHeight / (pGlyph->fV1 - pGlyph->fV0);
+		const float fCropLeft = pGlyph->fU0 * fImageWidth;
+		const float fCropTop = pGlyph->fV0 * fImageHeight;
+		const float fGlyphLeft = fCursorX;
+		const float fLeft = fGlyphLeft - (fCropLeft * fGlyphScale);
+		const float fTop = fTextTop + (pGlyph->fTopOffset * fGlyphScale) - (fCropTop * fGlyphScale);
+		const float fRight = fLeft + (fImageWidth * fGlyphScale);
+		const float fBottom = fTop + (fImageHeight * fGlyphScale);
+		const float textConstants[4] =
+		{
+			(fLeft / fViewportWidth) * 2.0f - 1.0f,
+			1.0f - (fTop / fViewportHeight) * 2.0f,
+			(fRight / fViewportWidth) * 2.0f - 1.0f,
+			1.0f - (fBottom / fViewportHeight) * 2.0f
+		};
+
+		ID3D12DescriptorHeap* ppd3dDescriptorHeaps[] = { pGlyph->pd3dSrvDescriptorHeap };
 		pd3dCommandList->SetDescriptorHeaps(1, ppd3dDescriptorHeaps);
 		pd3dCommandList->SetGraphicsRootDescriptorTable(3,
-			m_pd3dFullscreenSrvDescriptorHeap->GetGPUDescriptorHandleForHeapStart());
-		pd3dCommandList->SetPipelineState(m_pd3dFullscreenPipelineState);
-		pd3dCommandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-		pd3dCommandList->DrawInstanced(3, 1, 0, 0);*/
+			pGlyph->pd3dSrvDescriptorHeap->GetGPUDescriptorHandleForHeapStart());
+		pd3dCommandList->SetGraphicsRoot32BitConstants(4, 4, textConstants, 0);
+		pd3dCommandList->DrawInstanced(6, 1, 0, 0);
+
+		fCursorX = fGlyphLeft + (pGlyph->fPixelWidth * fGlyphScale) + fGlyphGap;
 	}
 }
 void CGameScene::OnProcessingKeyboardMessage(HWND hWnd, UINT nMessageID, WPARAM wParam, LPARAM lParam)
 {
 	extern CGameFramework* g_pFramework;
+
 	switch (nMessageID)
 	{
 	case WM_KEYDOWN:

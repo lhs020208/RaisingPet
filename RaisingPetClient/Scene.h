@@ -62,10 +62,25 @@ private:
 	UINT m_nActivePetIndex = 0;
 	CPet* m_pPointedPet = NULL;
 
-	ID3D12PipelineState* m_pd3dFullscreenPipelineState = NULL;
-	ID3D12Resource* m_pd3dFullscreenTexture = NULL;
-	ID3D12Resource* m_pd3dFullscreenTextureUploadBuffer = NULL;
-	ID3D12DescriptorHeap* m_pd3dFullscreenSrvDescriptorHeap = NULL;
+	struct TEXT_GLYPH_RESOURCE
+	{
+		char ch = 0;
+		ID3D12Resource* pd3dTexture = NULL;
+		ID3D12Resource* pd3dTextureUploadBuffer = NULL;
+		ID3D12DescriptorHeap* pd3dSrvDescriptorHeap = NULL;
+		float fU0 = 0.0f;
+		float fV0 = 0.0f;
+		float fU1 = 1.0f;
+		float fV1 = 1.0f;
+		float fPixelWidth = 0.0f;
+		float fPixelHeight = 0.0f;
+		float fTopOffset = 0.0f;
+	};
+
+	ID3D12PipelineState* m_pd3dTextPipelineState = NULL;
+	std::vector<TEXT_GLYPH_RESOURCE> m_vTextGlyphResources;
+
+	void RenderPetPossessionText(ID3D12GraphicsCommandList* pd3dCommandList, CCamera* pCamera, CPet* pPet);
 
 public:
 	UINT GetMoney() { return m_nMoney; }
