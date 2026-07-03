@@ -78,9 +78,13 @@ private:
 	};
 
 	ID3D12PipelineState* m_pd3dTextPipelineState = NULL;
+	ID3D12PipelineState* m_pd3dSolidUiPipelineState = NULL;
 	std::vector<TEXT_GLYPH_RESOURCE> m_vTextGlyphResources;
 
 	void RenderPetPossessionText(ID3D12GraphicsCommandList* pd3dCommandList, CCamera* pCamera, CPet* pPet);
+	void RenderMoneyUI(ID3D12GraphicsCommandList* pd3dCommandList, CCamera* pCamera);
+	void RenderSolidUiRectangle(ID3D12GraphicsCommandList* pd3dCommandList, CCamera* pCamera,
+		float fLeft, float fTop, float fRight, float fBottom, UINT nColor);
 
 public:
 	UINT GetMoney() { return m_nMoney; }
