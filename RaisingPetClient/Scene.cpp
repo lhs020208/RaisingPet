@@ -924,6 +924,21 @@ bool CGameScene::IsPointOverShopUI(float x, float y, float fViewportWidth, float
 			m_xmf2ShopBoardOffset.x, m_xmf2ShopBoardOffset.y)));
 }
 
+void CGameScene::DeactivateShop(float fViewportWidth, float fViewportHeight)
+{
+	const XMFLOAT4 boardRectangle = GetShopBoardRectangle(fViewportWidth, fViewportHeight,
+		m_xmf2ShopBoardOffset.x, m_xmf2ShopBoardOffset.y);
+	const float fHalfWidth = (boardRectangle.z - boardRectangle.x) * 0.5f;
+	const float fHalfHeight = (boardRectangle.w - boardRectangle.y) * 0.5f;
+	m_bResetShopPositionOnNextOpen =
+		(boardRectangle.x < -fHalfWidth) ||
+		(boardRectangle.z > fViewportWidth + fHalfWidth) ||
+		(boardRectangle.y < -fHalfHeight) ||
+		(boardRectangle.w > fViewportHeight + fHalfHeight);
+	m_bShopActive = false;
+	m_bShopBoardDragging = false;
+}
+
 bool CGameScene::ProcessShopUIClick(float x, float y, float fViewportWidth, float fViewportHeight)
 {
 	const bool bIconClicked = IsPointInRectangle(x, y,
@@ -935,11 +950,15 @@ bool CGameScene::ProcessShopUIClick(float x, float y, float fViewportWidth, floa
 	{
 		if (m_bShopActive)
 		{
-			m_bShopActive = false;
-			m_bShopBoardDragging = false;
+			DeactivateShop(fViewportWidth, fViewportHeight);
 		}
 		else
 		{
+			if (m_bResetShopPositionOnNextOpen)
+			{
+				m_xmf2ShopBoardOffset = XMFLOAT2(0.0f, 0.0f);
+				m_bResetShopPositionOnNextOpen = false;
+			}
 			m_bShopActive = true;
 			m_eShopPage = SHOP_PAGE::SLOT_MENU;
 			m_nSelectedShopSlot = -1;
@@ -951,8 +970,13 @@ bool CGameScene::ProcessShopUIClick(float x, float y, float fViewportWidth, floa
 	if (IsPointInRectangle(x, y, GetShopBackRectangle(fViewportWidth, fViewportHeight,
 		m_xmf2ShopBoardOffset.x, m_xmf2ShopBoardOffset.y)))
 	{
-		m_eShopPage = SHOP_PAGE::SLOT_MENU;
-		m_nSelectedShopSlot = -1;
+		if (m_eShopPage == SHOP_PAGE::SLOT_MENU)
+			DeactivateShop(fViewportWidth, fViewportHeight);
+		else
+		{
+			m_eShopPage = SHOP_PAGE::SLOT_MENU;
+			m_nSelectedShopSlot = -1;
+		}
 		return(true);
 	}
 
@@ -963,7 +987,7 @@ bool CGameScene::ProcessShopUIClick(float x, float y, float fViewportWidth, floa
 			if (IsPointInRectangle(x, y, GetShopSlotRectangle(i, fViewportWidth, fViewportHeight,
 				m_xmf2ShopBoardOffset.x, m_xmf2ShopBoardOffset.y)))
 			{
-				m_eShopPage = SHOP_PAGE::SLOT_CONTENT;
+				m_eShopPage = static_cast<SHOP_PAGE>(static_cast<int>(SHOP_PAGE::SLOT_CONTENT_1) + i);
 				m_nSelectedShopSlot = i;
 				return(true);
 			}
@@ -1309,10 +1333,22 @@ void CGameScene::OnProcessingMouseMessage(HWND hWnd, UINT nMessageID, WPARAM wPa
 		break;
 	}
 	case WM_MOUSEMOVE:
-		if (m_bShopBoardDragging && (wParam & MK_LBUTTON))
+		if (m_bShopBoardDragging)
 		{
+			RECT clientRectangle;
+			::GetClientRect(hWnd, &clientRectangle);
 			const float x = static_cast<float>(static_cast<short>(LOWORD(lParam)));
 			const float y = static_cast<float>(static_cast<short>(HIWORD(lParam)));
+			const bool bCursorOutside = (x < 0.0f) || (y < 0.0f)
+				|| (x >= static_cast<float>(clientRectangle.right))
+				|| (y >= static_cast<float>(clientRectangle.bottom));
+			if (!(wParam & MK_LBUTTON) || bCursorOutside)
+			{
+				m_bShopBoardDragging = false;
+				if (::GetCapture() == hWnd) ::ReleaseCapture();
+				break;
+			}
+
 			m_xmf2ShopBoardOffset.x += x - m_xmf2ShopDragLastCursor.x;
 			m_xmf2ShopBoardOffset.y += y - m_xmf2ShopDragLastCursor.y;
 			m_xmf2ShopDragLastCursor = XMFLOAT2(x, y);

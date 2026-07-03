@@ -113,13 +113,17 @@ private:
 	enum class SHOP_PAGE
 	{
 		SLOT_MENU,
-		SLOT_CONTENT
+		SLOT_CONTENT_1,
+		SLOT_CONTENT_2,
+		SLOT_CONTENT_3,
+		SLOT_CONTENT_4
 	};
 
 	bool m_bShopActive = false;
 	SHOP_PAGE m_eShopPage = SHOP_PAGE::SLOT_MENU;
 	int m_nSelectedShopSlot = -1;
 	bool m_bShopBoardDragging = false;
+	bool m_bResetShopPositionOnNextOpen = false;
 	XMFLOAT2 m_xmf2ShopBoardOffset = XMFLOAT2(0.0f, 0.0f);
 	XMFLOAT2 m_xmf2ShopDragLastCursor = XMFLOAT2(0.0f, 0.0f);
 
@@ -137,6 +141,7 @@ private:
 	bool IsPointOverShopUI(float x, float y, float fViewportWidth, float fViewportHeight) const;
 	bool ProcessShopUIClick(float x, float y, float fViewportWidth, float fViewportHeight);
 	XMFLOAT4 GetMoneyUiRectangle(float fViewportWidth, float fViewportHeight) const;
+	void DeactivateShop(float fViewportWidth, float fViewportHeight);
 
 public:
 	UINT GetMoney() { return m_nMoney; }
