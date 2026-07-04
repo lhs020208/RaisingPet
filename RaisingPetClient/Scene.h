@@ -59,7 +59,7 @@ private:
 	};
 
 	std::vector<PET_RENDER_RESOURCE> m_vPetResources;
-	UINT m_nActivePetIndex = 2;
+	UINT m_nActivePetIndex = 0;
 	CPet* m_pPointedPet = NULL;
 
 	struct TEXT_GLYPH_RESOURCE
@@ -109,6 +109,8 @@ private:
 	UI_IMAGE_RESOURCE m_ShopCloseIconResource;
 	UI_IMAGE_RESOURCE m_ShopBackSpaceIconResource;
 	UI_IMAGE_RESOURCE m_ShopSlotResources[4];
+	UI_IMAGE_RESOURCE m_EmptySquareResources[2];
+	UI_IMAGE_RESOURCE m_PetConfirmationButtonResource;
 	CGameObject m_ShopUiHitObject;
 	enum class SHOP_PAGE
 	{
@@ -142,6 +144,8 @@ private:
 	bool ProcessShopUIClick(float x, float y, float fViewportWidth, float fViewportHeight);
 	XMFLOAT4 GetMoneyUiRectangle(float fViewportWidth, float fViewportHeight) const;
 	void DeactivateShop(float fViewportWidth, float fViewportHeight);
+	void RenderTextLine(ID3D12GraphicsCommandList* pd3dCommandList, CCamera* pCamera,
+		const std::string& strText, float fLeft, float fTop, float fGlyphScale, UINT nColor);
 
 public:
 	UINT GetMoney() { return m_nMoney; }
