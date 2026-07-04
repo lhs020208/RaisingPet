@@ -1,0 +1,90 @@
+#pragma once
+
+#include "Shader.h"
+
+struct TEXT_GLYPH_RESOURCE
+{
+	char ch = 0;
+	ID3D12Resource* pd3dTexture = NULL;
+	ID3D12Resource* pd3dTextureUploadBuffer = NULL;
+	ID3D12DescriptorHeap* pd3dSrvDescriptorHeap = NULL;
+	float fU0 = 0.0f;
+	float fV0 = 0.0f;
+	float fU1 = 1.0f;
+	float fV1 = 1.0f;
+	float fPixelWidth = 0.0f;
+	float fPixelHeight = 0.0f;
+	float fTopOffset = 0.0f;
+};
+
+struct SHOP_TEXT_RENDER_CONTEXT
+{
+	ID3D12PipelineState* pTextPipelineState = NULL;
+	ID3D12PipelineState* pSolidUiPipelineState = NULL;
+	std::vector<TEXT_GLYPH_RESOURCE>* pGlyphResources = NULL;
+};
+
+class CShopUI
+{
+public:
+	void BuildObjects(ID3D12Device* pd3dDevice, ID3D12GraphicsCommandList* pd3dCommandList,
+		ID3D12RootSignature* pd3dRootSignature);
+	void ReleaseObjects();
+	void ReleaseUploadBuffers();
+
+	void Render(ID3D12GraphicsCommandList* pd3dCommandList, CCamera* pCamera, UINT nMoney,
+		const std::vector<CPet*>& pets, const SHOP_TEXT_RENDER_CONTEXT& textContext);
+	bool IsPointOver(float x, float y, float fViewportWidth, float fViewportHeight) const;
+	bool OnProcessingMouseMessage(HWND hWnd, UINT nMessageID, WPARAM wParam, LPARAM lParam,
+		UINT nMoney, const SHOP_TEXT_RENDER_CONTEXT& textContext);
+
+private:
+	struct UI_IMAGE_RESOURCE
+	{
+		ID3D12Resource* pd3dTexture = NULL;
+		ID3D12Resource* pd3dTextureUploadBuffer = NULL;
+		ID3D12DescriptorHeap* pd3dSrvDescriptorHeap = NULL;
+	};
+
+	enum class SHOP_PAGE
+	{
+		SLOT_MENU,
+		SLOT_CONTENT_1,
+		SLOT_CONTENT_2,
+		SLOT_CONTENT_3,
+		SLOT_CONTENT_4
+	};
+
+	ID3D12PipelineState* m_pd3dUiImagePipelineState = NULL;
+	UI_IMAGE_RESOURCE m_ShopIconResource;
+	UI_IMAGE_RESOURCE m_ShopBoardResource;
+	UI_IMAGE_RESOURCE m_ShopCloseIconResource;
+	UI_IMAGE_RESOURCE m_ShopBackSpaceIconResource;
+	UI_IMAGE_RESOURCE m_ShopSlotResources[4];
+	UI_IMAGE_RESOURCE m_EmptySquareResources[2];
+	UI_IMAGE_RESOURCE m_PetConfirmationButtonResource;
+
+	bool m_bShopActive = false;
+	SHOP_PAGE m_eShopPage = SHOP_PAGE::SLOT_MENU;
+	int m_nSelectedShopSlot = -1;
+	bool m_bShopBoardDragging = false;
+	bool m_bResetShopPositionOnNextOpen = false;
+	XMFLOAT2 m_xmf2ShopBoardOffset = XMFLOAT2(0.0f, 0.0f);
+	XMFLOAT2 m_xmf2ShopDragLastCursor = XMFLOAT2(0.0f, 0.0f);
+
+	void RenderUiImage(ID3D12GraphicsCommandList* pd3dCommandList, CCamera* pCamera,
+		UI_IMAGE_RESOURCE& imageResource, const XMFLOAT4& rectangle);
+	void RenderMoneyUI(ID3D12GraphicsCommandList* pd3dCommandList, CCamera* pCamera, UINT nMoney,
+		const SHOP_TEXT_RENDER_CONTEXT& textContext);
+	void RenderSolidUiRectangle(ID3D12GraphicsCommandList* pd3dCommandList, CCamera* pCamera,
+		float fLeft, float fTop, float fRight, float fBottom, UINT nColor,
+		const SHOP_TEXT_RENDER_CONTEXT& textContext);
+	void RenderTextLine(ID3D12GraphicsCommandList* pd3dCommandList, CCamera* pCamera,
+		const std::string& text, float fLeft, float fTop, float fGlyphScale, UINT nColor,
+		const SHOP_TEXT_RENDER_CONTEXT& textContext);
+	XMFLOAT4 GetMoneyUiRectangle(float fViewportWidth, float fViewportHeight, UINT nMoney,
+		const SHOP_TEXT_RENDER_CONTEXT& textContext) const;
+	bool ProcessShopUIClick(float x, float y, float fViewportWidth, float fViewportHeight,
+		UINT nMoney, const SHOP_TEXT_RENDER_CONTEXT& textContext);
+	void DeactivateShop(float fViewportWidth, float fViewportHeight);
+};

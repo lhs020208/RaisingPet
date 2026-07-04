@@ -5,6 +5,7 @@
 #pragma once
 
 #include "Scene.h"
+#include "ShopUI.h"
 
 class CGameScene : public CScene {
 public:
@@ -32,25 +33,9 @@ private:
 	UINT m_nActivePetIndex = 0;
 	CPet* m_pPointedPet = NULL;
 
-	struct TEXT_GLYPH_RESOURCE
-	{
-		char ch = 0;
-		ID3D12Resource* pd3dTexture = NULL;
-		ID3D12Resource* pd3dTextureUploadBuffer = NULL;
-		ID3D12DescriptorHeap* pd3dSrvDescriptorHeap = NULL;
-		float fU0 = 0.0f;
-		float fV0 = 0.0f;
-		float fU1 = 1.0f;
-		float fV1 = 1.0f;
-		float fPixelWidth = 0.0f;
-		float fPixelHeight = 0.0f;
-		float fTopOffset = 0.0f;
-	};
-
 	ID3D12PipelineState* m_pd3dTextPipelineState = NULL;
 	ID3D12PipelineState* m_pd3dSolidUiPipelineState = NULL;
 	ID3D12PipelineState* m_pd3dCoinPipelineState = NULL;
-	ID3D12PipelineState* m_pd3dUiImagePipelineState = NULL;
 	std::vector<TEXT_GLYPH_RESOURCE> m_vTextGlyphResources;
 
 	struct COIN_EFFECT
@@ -67,55 +52,15 @@ private:
 	std::vector<COIN_EFFECT> m_vCoinEffects;
 	std::mt19937 m_CoinRandomEngine{ std::random_device{}() };
 
-	struct UI_IMAGE_RESOURCE
-	{
-		ID3D12Resource* pd3dTexture = NULL;
-		ID3D12Resource* pd3dTextureUploadBuffer = NULL;
-		ID3D12DescriptorHeap* pd3dSrvDescriptorHeap = NULL;
-	};
-
-	UI_IMAGE_RESOURCE m_ShopIconResource;
-	UI_IMAGE_RESOURCE m_ShopBoardResource;
-	UI_IMAGE_RESOURCE m_ShopCloseIconResource;
-	UI_IMAGE_RESOURCE m_ShopBackSpaceIconResource;
-	UI_IMAGE_RESOURCE m_ShopSlotResources[4];
-	UI_IMAGE_RESOURCE m_EmptySquareResources[2];
-	UI_IMAGE_RESOURCE m_PetConfirmationButtonResource;
+	CShopUI m_ShopUI;
 	CGameObject m_ShopUiHitObject;
-	enum class SHOP_PAGE
-	{
-		SLOT_MENU,
-		SLOT_CONTENT_1,
-		SLOT_CONTENT_2,
-		SLOT_CONTENT_3,
-		SLOT_CONTENT_4
-	};
-
-	bool m_bShopActive = false;
-	SHOP_PAGE m_eShopPage = SHOP_PAGE::SLOT_MENU;
-	int m_nSelectedShopSlot = -1;
-	bool m_bShopBoardDragging = false;
-	bool m_bResetShopPositionOnNextOpen = false;
-	XMFLOAT2 m_xmf2ShopBoardOffset = XMFLOAT2(0.0f, 0.0f);
-	XMFLOAT2 m_xmf2ShopDragLastCursor = XMFLOAT2(0.0f, 0.0f);
 
 	void RenderPetPossessionText(ID3D12GraphicsCommandList* pd3dCommandList, CCamera* pCamera, CPet* pPet);
-	void RenderMoneyUI(ID3D12GraphicsCommandList* pd3dCommandList, CCamera* pCamera);
-	void RenderSolidUiRectangle(ID3D12GraphicsCommandList* pd3dCommandList, CCamera* pCamera,
-		float fLeft, float fTop, float fRight, float fBottom, UINT nColor);
 	void CollectPetPossession(CPet* pPet);
 	void SpawnCoinEffects(CPet* pPet, UINT nPossessionBeforeCollection);
 	void AnimateCoinEffects(float fElapsedTime);
 	void RenderCoinEffects(ID3D12GraphicsCommandList* pd3dCommandList, CCamera* pCamera);
-	void RenderShopUI(ID3D12GraphicsCommandList* pd3dCommandList, CCamera* pCamera);
-	void RenderUiImage(ID3D12GraphicsCommandList* pd3dCommandList, CCamera* pCamera,
-		UI_IMAGE_RESOURCE& imageResource, const XMFLOAT4& xmf4Rectangle);
-	bool IsPointOverShopUI(float x, float y, float fViewportWidth, float fViewportHeight) const;
-	bool ProcessShopUIClick(float x, float y, float fViewportWidth, float fViewportHeight);
-	XMFLOAT4 GetMoneyUiRectangle(float fViewportWidth, float fViewportHeight) const;
-	void DeactivateShop(float fViewportWidth, float fViewportHeight);
-	void RenderTextLine(ID3D12GraphicsCommandList* pd3dCommandList, CCamera* pCamera,
-		const std::string& strText, float fLeft, float fTop, float fGlyphScale, UINT nColor);
+	SHOP_TEXT_RENDER_CONTEXT GetShopTextRenderContext();
 
 public:
 	UINT GetMoney() { return m_nMoney; }
@@ -125,5 +70,4 @@ public:
 
 private:
 	UINT m_nMoney = 0;
-	int MaxNameWord = 10;
 };

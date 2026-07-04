@@ -150,6 +150,7 @@ xcopy "$(ProjectDir)Assets\Image\Test.dds" "$(ProjectDir)Executable\Assets\Image
     <ClInclude Include="Object.h" />
     <ClInclude Include="Resource.h" />
     <ClInclude Include="Scene.h" />
+    <ClInclude Include="ShopUI.h" />
     <ClInclude Include="Shader.h" />
     <ClInclude Include="stdafx.h" />
     <ClInclude Include="targetver.h" />
@@ -164,6 +165,7 @@ xcopy "$(ProjectDir)Assets\Image\Test.dds" "$(ProjectDir)Executable\Assets\Image
     <ClCompile Include="Mesh.cpp" />
     <ClCompile Include="Object.cpp" />
     <ClCompile Include="Scene.cpp" />
+    <ClCompile Include="ShopUI.cpp" />
     <ClCompile Include="Shader.cpp" />
     <ClCompile Include="stdafx.cpp">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Create</PrecompiledHeader>

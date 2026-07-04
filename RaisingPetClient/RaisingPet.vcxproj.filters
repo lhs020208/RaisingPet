@@ -82,6 +82,9 @@
     <ClInclude Include="GameScene.h">
       <Filter>Code\Scene</Filter>
     </ClInclude>
+    <ClInclude Include="ShopUI.h">
+      <Filter>Code\Scene</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Shader.cpp">
@@ -115,6 +118,9 @@
       <Filter>Code\Timer</Filter>
     </ClCompile>
     <ClCompile Include="GameScene.cpp">
+      <Filter>Code\Scene</Filter>
+    </ClCompile>
+    <ClCompile Include="ShopUI.cpp">
       <Filter>Code\Scene</Filter>
     </ClCompile>
   </ItemGroup>

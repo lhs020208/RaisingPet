@@ -10,7 +10,7 @@ class CScene
 {
 public:
 	CScene();
-    ~CScene();
+	virtual ~CScene();
 
 	virtual void OnProcessingMouseMessage(HWND hWnd, UINT nMessageID, WPARAM wParam, LPARAM lParam);
 	virtual void OnProcessingKeyboardMessage(HWND hWnd, UINT nMessageID, WPARAM wParam, LPARAM lParam);
