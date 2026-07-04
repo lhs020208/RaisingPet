@@ -30,7 +30,7 @@ private:
 	};
 
 	std::vector<PET_RENDER_RESOURCE> m_vPetResources;
-	UINT m_nActivePetIndex = 9;
+	UINT m_nActivePetIndex = 8;
 	CPet* m_pPointedPet = NULL;
 
 	ID3D12PipelineState* m_pd3dTextPipelineState = NULL;
