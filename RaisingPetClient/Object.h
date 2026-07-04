@@ -82,6 +82,7 @@ private:
 	};
 
 	void DecideNextState();
+	float GetRandomStateDuration(MOVE_STATE state);
 	void ChangeMoveState(MOVE_STATE newState);
 	void UpdateRotation(float fTimeElapsed);
 	void UpdateMoveSpeed(float fTimeElapsed);
@@ -90,7 +91,7 @@ private:
 	MOVE_STATE m_MoveState = MOVE_STATE::STOP;
 	std::mt19937 m_RandomEngine;
 
-	float m_fStateElapsedTime = 0.0f;
+	float m_fStateRemainingTime = 0.0f;
 	float m_fPossessionElapsedTime = 0.0f;
 	float m_fMaxChargeTime = 0.0f;
 	float m_fFullPossessionElapsedTime = 0.0f;

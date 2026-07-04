@@ -227,6 +227,7 @@ void CGameObject::SetRotationTransform(XMFLOAT4X4* pmxf4x4Transform)
 
 CPet::CPet() : m_RandomEngine(std::random_device{}())
 {
+	m_fStateRemainingTime = GetRandomStateDuration(MOVE_STATE::STOP);
 }
 
 void CPet::Animate(float fTimeElapsed)
@@ -238,15 +239,30 @@ void CPet::Animate(float fTimeElapsed)
 
 	XMFLOAT3 position = GetPosition();
 	position.x += m_fMoveDirection * m_fCurrentMoveSpeed * fTimeElapsed;
+	bool reachedMoveBoundary = false;
+	if (position.x <= -50.0f)
+	{
+		position.x = -50.0f;
+		reachedMoveBoundary = (m_MoveState == MOVE_STATE::LEFT);
+	}
+	else if (position.x >= 50.0f)
+	{
+		position.x = 50.0f;
+		reachedMoveBoundary = (m_MoveState == MOVE_STATE::RIGHT);
+	}
 	SetPosition(position);
+	if (reachedMoveBoundary)
+	{
+		ChangeMoveState(MOVE_STATE::STOP);
+		m_fStateRemainingTime = GetRandomStateDuration(MOVE_STATE::STOP);
+	}
 
 	UpdateRotation(fTimeElapsed);
 	UpdateBoundingBox();
 
-	m_fStateElapsedTime += fTimeElapsed;
-	while (m_fStateElapsedTime >= 1.0f)
+	m_fStateRemainingTime -= fTimeElapsed;
+	if (m_fStateRemainingTime <= 0.0f)
 	{
-		m_fStateElapsedTime -= 1.0f;
 		DecideNextState();
 	}
 }
@@ -302,27 +318,62 @@ bool CPet::ConsumeAutoCollectRequest()
 }
 void CPet::DecideNextState()
 {
+	const float positionX = GetPosition().x;
+	std::uniform_int_distribution<int> chanceDistribution(0, 99);
+	const int chance = chanceDistribution(m_RandomEngine);
+	MOVE_STATE nextState = m_MoveState;
+
 	if (m_MoveState == MOVE_STATE::STOP)
 	{
-		std::uniform_int_distribution<int> nextStateDistribution(0, 2);
-		switch (nextStateDistribution(m_RandomEngine))
-		{
-		case 0:
-			ChangeMoveState(MOVE_STATE::LEFT);
-			break;
-		case 1:
-			ChangeMoveState(MOVE_STATE::RIGHT);
-			break;
-		default:
-			break;
-		}
+		// At either boundary, never select a direction that points outside the movement area.
+		if (positionX <= -50.0f)
+			nextState = (chance < 80) ? MOVE_STATE::RIGHT : MOVE_STATE::STOP;
+		else if (positionX >= 50.0f)
+			nextState = (chance < 80) ? MOVE_STATE::LEFT : MOVE_STATE::STOP;
+		else if (chance < 40)
+			nextState = MOVE_STATE::LEFT;
+		else if (chance < 80)
+			nextState = MOVE_STATE::RIGHT;
+		else
+			nextState = MOVE_STATE::STOP;
+	}
+	else if (m_MoveState == MOVE_STATE::LEFT)
+	{
+		if (positionX <= -50.0f)
+			nextState = MOVE_STATE::STOP;
+		else if (chance < 70)
+			nextState = MOVE_STATE::STOP;
+		else if (chance < 80)
+			nextState = MOVE_STATE::RIGHT;
+		else
+			nextState = MOVE_STATE::LEFT;
 	}
 	else
 	{
-		std::uniform_int_distribution<int> continueDistribution(0, 1);
-		if (continueDistribution(m_RandomEngine) == 0)
-			ChangeMoveState(MOVE_STATE::STOP);
+		if (positionX >= 50.0f)
+			nextState = MOVE_STATE::STOP;
+		else if (chance < 70)
+			nextState = MOVE_STATE::STOP;
+		else if (chance < 80)
+			nextState = MOVE_STATE::LEFT;
+		else
+			nextState = MOVE_STATE::RIGHT;
 	}
+
+	ChangeMoveState(nextState);
+	m_fStateRemainingTime = GetRandomStateDuration(nextState);
+}
+
+float CPet::GetRandomStateDuration(MOVE_STATE state)
+{
+	if (state == MOVE_STATE::STOP)
+	{
+		std::uniform_real_distribution<float> durationDistribution(1.5f, 4.0f);
+		return durationDistribution(m_RandomEngine);
+	}
+
+	std::uniform_real_distribution<float> durationDistribution(2.0f, 7.0f);
+	return durationDistribution(m_RandomEngine);
 }
 
 void CPet::ChangeMoveState(MOVE_STATE newState)
