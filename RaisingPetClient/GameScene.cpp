@@ -746,7 +746,7 @@ void CGameScene::RenderCoinEffects(ID3D12GraphicsCommandList* pd3dCommandList, C
 void CGameScene::OnProcessingMouseMessage(HWND hWnd, UINT nMessageID, WPARAM wParam, LPARAM lParam)
 {
 	if (m_ShopUI.OnProcessingMouseMessage(hWnd, nMessageID, wParam, lParam,
-		m_nMoney, GetShopTextRenderContext()))
+		m_nMoney, m_vPetResources.size(), GetShopTextRenderContext()))
 		return;
 
 	if (nMessageID == WM_LBUTTONDOWN && m_pPointedPet)

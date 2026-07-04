@@ -45,6 +45,9 @@ struct SHOP_UI_LAYOUT
 	float fConfirmationHeight = 54.0f;
 	float fConfirmationBottomPadding = 20.0f;
 	float fConfirmationHorizontalOffset = -24.0f;
+	float fScrollWidth = 15.0f;
+	float fScrollRightPadding = 10.0f;
+	float fScrollVerticalPadding = 20.0f;
 };
 
 const MONEY_UI_LAYOUT gMoneyUiLayout;
@@ -142,6 +145,15 @@ XMFLOAT4 GetPetConfirmationRectangle(float width, float height, float offsetX = 
 	return(XMFLOAT4(centerX - gShopUiLayout.fConfirmationWidth * 0.5f, top,
 		centerX + gShopUiLayout.fConfirmationWidth * 0.5f, top + gShopUiLayout.fConfirmationHeight));
 }
+
+XMFLOAT4 GetPetScrollTrackRectangle(float width, float height, float offsetX = 0.0f, float offsetY = 0.0f)
+{
+	const XMFLOAT4 panel = GetPetContentPanelRectangle(false, width, height, offsetX, offsetY);
+	const float right = panel.z - gShopUiLayout.fScrollRightPadding;
+	return(XMFLOAT4(right - gShopUiLayout.fScrollWidth,
+		panel.y + gShopUiLayout.fScrollVerticalPadding, right,
+		panel.w - gShopUiLayout.fScrollVerticalPadding));
+}
 }
 
 void CShopUI::BuildObjects(ID3D12Device* device, ID3D12GraphicsCommandList* commandList,
@@ -234,6 +246,8 @@ void CShopUI::BuildObjects(ID3D12Device* device, ID3D12GraphicsCommandList* comm
 	loadImage(L"Assets/Image/EmptySquare.dds", m_EmptySquareResources[0]);
 	loadImage(L"Assets/Image/EmptySquare.dds", m_EmptySquareResources[1]);
 	loadImage(L"Assets/Image/PetConfirmationButton.dds", m_PetConfirmationButtonResource);
+	loadImage(L"Assets/Image/ScrollBackGround.dds", m_ScrollBackgroundResource);
+	loadImage(L"Assets/Image/Scroll.dds", m_ScrollResource);
 }
 
 void CShopUI::ReleaseObjects()
@@ -242,7 +256,8 @@ void CShopUI::ReleaseObjects()
 	UI_IMAGE_RESOURCE* images[] = { &m_ShopIconResource, &m_ShopBoardResource,
 		&m_ShopCloseIconResource, &m_ShopBackSpaceIconResource, &m_ShopSlotResources[0],
 		&m_ShopSlotResources[1], &m_ShopSlotResources[2], &m_ShopSlotResources[3],
-		&m_EmptySquareResources[0], &m_EmptySquareResources[1], &m_PetConfirmationButtonResource };
+		&m_EmptySquareResources[0], &m_EmptySquareResources[1], &m_PetConfirmationButtonResource,
+		&m_ScrollBackgroundResource, &m_ScrollResource };
 	for (UI_IMAGE_RESOURCE* image : images)
 	{
 		if (image->pd3dTexture) image->pd3dTexture->Release();
@@ -256,7 +271,8 @@ void CShopUI::ReleaseUploadBuffers()
 	UI_IMAGE_RESOURCE* images[] = { &m_ShopIconResource, &m_ShopBoardResource,
 		&m_ShopCloseIconResource, &m_ShopBackSpaceIconResource, &m_ShopSlotResources[0],
 		&m_ShopSlotResources[1], &m_ShopSlotResources[2], &m_ShopSlotResources[3],
-		&m_EmptySquareResources[0], &m_EmptySquareResources[1], &m_PetConfirmationButtonResource };
+		&m_EmptySquareResources[0], &m_EmptySquareResources[1], &m_PetConfirmationButtonResource,
+		&m_ScrollBackgroundResource, &m_ScrollResource };
 	for (UI_IMAGE_RESOURCE* image : images)
 	{
 		if (image->pd3dTextureUploadBuffer)
@@ -416,6 +432,7 @@ void CShopUI::Render(ID3D12GraphicsCommandList* commandList, CCamera* camera, UI
 	const std::vector<CPet*>& pets, const SHOP_TEXT_RENDER_CONTEXT& context)
 {
 	if (!camera) return;
+	UpdatePetScrollState(pets.size());
 	const float width = camera->m_d3dViewport.Width;
 	const float height = camera->m_d3dViewport.Height;
 	if (m_bShopActive)
@@ -438,14 +455,27 @@ void CShopUI::Render(ID3D12GraphicsCommandList* commandList, CCamera* camera, UI
 			RenderUiImage(commandList, camera, m_EmptySquareResources[1], rightPanel);
 			RenderUiImage(commandList, camera, m_PetConfirmationButtonResource,
 				GetPetConfirmationRectangle(width, height, m_xmf2ShopBoardOffset.x, m_xmf2ShopBoardOffset.y));
+			const XMFLOAT4 scrollTrack = GetPetScrollTrackRectangle(width, height,
+				m_xmf2ShopBoardOffset.x, m_xmf2ShopBoardOffset.y);
+			RenderUiImage(commandList, camera, m_ScrollBackgroundResource, scrollTrack);
+			const size_t effectivePetCount = (pets.size() > 10) ? pets.size() : 10;
+			const float trackHeight = scrollTrack.w - scrollTrack.y;
+			const float thumbHeight = trackHeight * (10.0f / static_cast<float>(effectivePetCount));
+			const size_t maximumOffset = (pets.size() > 10) ? pets.size() - 10 : 0;
+			const float scrollProgress = (maximumOffset > 0)
+				? static_cast<float>(m_nPetScrollOffset) / static_cast<float>(maximumOffset) : 0.0f;
+			const float thumbTop = scrollTrack.y + (trackHeight - thumbHeight) * scrollProgress;
+			RenderUiImage(commandList, camera, m_ScrollResource,
+				XMFLOAT4(scrollTrack.x, thumbTop, scrollTrack.z, thumbTop + thumbHeight));
 			const float rowHeight = (leftPanel.w - leftPanel.y) / 10.0f;
 			const float glyphScale = rowHeight / 320.0f;
-			for (size_t i = 0; i < pets.size() && i < 10; ++i)
+			for (size_t row = 0; row < 10; ++row)
 			{
-				if (!pets[i]) continue;
-				const std::string name = std::to_string(i + 1) + ". " + pets[i]->GetName();
+				const size_t petIndex = m_nPetScrollOffset + row;
+				if (petIndex >= pets.size() || !pets[petIndex]) continue;
+				const std::string name = std::to_string(petIndex + 1) + ". " + pets[petIndex]->GetName();
 				RenderTextLine(commandList, camera, name, leftPanel.x + 18.0f,
-					leftPanel.y + rowHeight * i + rowHeight * 0.15f, glyphScale, 0x00000000, context);
+					leftPanel.y + rowHeight * row + rowHeight * 0.15f, glyphScale, 0x00000000, context);
 			}
 		}
 		RenderMoneyUI(commandList, camera, money, context);
@@ -455,6 +485,12 @@ void CShopUI::Render(ID3D12GraphicsCommandList* commandList, CCamera* camera, UI
 			GetShopCloseRectangle(width, height, m_xmf2ShopBoardOffset.x, m_xmf2ShopBoardOffset.y));
 	}
 	RenderUiImage(commandList, camera, m_ShopIconResource, GetShopIconRectangle(width, height));
+}
+
+void CShopUI::UpdatePetScrollState(size_t nPetCount)
+{
+	const size_t maximumOffset = (nPetCount > 10) ? nPetCount - 10 : 0;
+	if (m_nPetScrollOffset > maximumOffset) m_nPetScrollOffset = maximumOffset;
 }
 
 bool CShopUI::IsPointOver(float x, float y, float width, float height) const
@@ -533,16 +569,39 @@ bool CShopUI::ProcessShopUIClick(float x, float y, float width, float height, UI
 }
 
 bool CShopUI::OnProcessingMouseMessage(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam,
-	UINT money, const SHOP_TEXT_RENDER_CONTEXT& context)
+	UINT money, size_t nPetCount, const SHOP_TEXT_RENDER_CONTEXT& context)
 {
 	RECT client;
 	GetClientRect(hWnd, &client);
 	const float width = static_cast<float>(client.right);
 	const float height = static_cast<float>(client.bottom);
-	const float x = static_cast<float>(static_cast<short>(LOWORD(lParam)));
-	const float y = static_cast<float>(static_cast<short>(HIWORD(lParam)));
+	POINT cursor = { static_cast<short>(LOWORD(lParam)), static_cast<short>(HIWORD(lParam)) };
+	if (message == WM_MOUSEWHEEL) ScreenToClient(hWnd, &cursor);
+	const float x = static_cast<float>(cursor.x);
+	const float y = static_cast<float>(cursor.y);
 	switch (message)
 	{
+	case WM_MOUSEWHEEL:
+		if (m_bShopActive && m_eShopPage == SHOP_PAGE::SLOT_CONTENT_1)
+		{
+			const XMFLOAT4 panel = GetPetContentPanelRectangle(false, width, height,
+				m_xmf2ShopBoardOffset.x, m_xmf2ShopBoardOffset.y);
+			if (IsPointInRectangle(x, y, panel))
+			{
+				UpdatePetScrollState(nPetCount);
+				const size_t maximumOffset = (nPetCount > 10) ? nPetCount - 10 : 0;
+				const int wheelDelta = static_cast<short>(HIWORD(wParam));
+				int steps = abs(wheelDelta) / WHEEL_DELTA;
+				if (steps < 1) steps = 1;
+				while (steps-- > 0)
+				{
+					if (wheelDelta < 0 && m_nPetScrollOffset < maximumOffset) ++m_nPetScrollOffset;
+					else if (wheelDelta > 0 && m_nPetScrollOffset > 0) --m_nPetScrollOffset;
+				}
+				return(true);
+			}
+		}
+		break;
 	case WM_LBUTTONDOWN:
 		if (ProcessShopUIClick(x, y, width, height, money, context)) return(true);
 		if (m_bShopActive)

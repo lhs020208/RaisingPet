@@ -36,7 +36,7 @@ public:
 		const std::vector<CPet*>& pets, const SHOP_TEXT_RENDER_CONTEXT& textContext);
 	bool IsPointOver(float x, float y, float fViewportWidth, float fViewportHeight) const;
 	bool OnProcessingMouseMessage(HWND hWnd, UINT nMessageID, WPARAM wParam, LPARAM lParam,
-		UINT nMoney, const SHOP_TEXT_RENDER_CONTEXT& textContext);
+		UINT nMoney, size_t nPetCount, const SHOP_TEXT_RENDER_CONTEXT& textContext);
 
 private:
 	struct UI_IMAGE_RESOURCE
@@ -63,6 +63,8 @@ private:
 	UI_IMAGE_RESOURCE m_ShopSlotResources[4];
 	UI_IMAGE_RESOURCE m_EmptySquareResources[2];
 	UI_IMAGE_RESOURCE m_PetConfirmationButtonResource;
+	UI_IMAGE_RESOURCE m_ScrollBackgroundResource;
+	UI_IMAGE_RESOURCE m_ScrollResource;
 
 	bool m_bShopActive = false;
 	SHOP_PAGE m_eShopPage = SHOP_PAGE::SLOT_MENU;
@@ -71,6 +73,7 @@ private:
 	bool m_bResetShopPositionOnNextOpen = false;
 	XMFLOAT2 m_xmf2ShopBoardOffset = XMFLOAT2(0.0f, 0.0f);
 	XMFLOAT2 m_xmf2ShopDragLastCursor = XMFLOAT2(0.0f, 0.0f);
+	size_t m_nPetScrollOffset = 0;
 
 	void RenderUiImage(ID3D12GraphicsCommandList* pd3dCommandList, CCamera* pCamera,
 		UI_IMAGE_RESOURCE& imageResource, const XMFLOAT4& rectangle);
@@ -87,4 +90,5 @@ private:
 	bool ProcessShopUIClick(float x, float y, float fViewportWidth, float fViewportHeight,
 		UINT nMoney, const SHOP_TEXT_RENDER_CONTEXT& textContext);
 	void DeactivateShop(float fViewportWidth, float fViewportHeight);
+	void UpdatePetScrollState(size_t nPetCount);
 };
