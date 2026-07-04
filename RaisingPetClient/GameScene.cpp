@@ -386,7 +386,7 @@ void CGameScene::BuildObjects(ID3D12Device* pd3dDevice, ID3D12GraphicsCommandLis
 	coinSrvDesc.Texture2D.MipLevels = m_pd3dCoinTexture->GetDesc().MipLevels;
 	pd3dDevice->CreateShaderResourceView(m_pd3dCoinTexture, &coinSrvDesc,
 		m_pd3dCoinSrvDescriptorHeap->GetCPUDescriptorHandleForHeapStart());
-	m_ShopUI.BuildObjects(pd3dDevice, pd3dCommandList, m_pd3dGraphicsRootSignature);
+	m_ShopUI.BuildObjects(pd3dDevice, pd3dCommandList, m_pd3dGraphicsRootSignature, m_vPetResources.size());
 }
 
 void CGameScene::ReleaseObjects()

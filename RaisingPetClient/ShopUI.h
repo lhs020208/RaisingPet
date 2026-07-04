@@ -28,7 +28,7 @@ class CShopUI
 {
 public:
 	void BuildObjects(ID3D12Device* pd3dDevice, ID3D12GraphicsCommandList* pd3dCommandList,
-		ID3D12RootSignature* pd3dRootSignature);
+		ID3D12RootSignature* pd3dRootSignature, size_t nInitialPetCount);
 	void ReleaseObjects();
 	void ReleaseUploadBuffers();
 
@@ -74,6 +74,11 @@ private:
 	XMFLOAT2 m_xmf2ShopBoardOffset = XMFLOAT2(0.0f, 0.0f);
 	XMFLOAT2 m_xmf2ShopDragLastCursor = XMFLOAT2(0.0f, 0.0f);
 	size_t m_nPetScrollOffset = 0;
+	size_t m_nCachedPetCount = 0;
+	size_t m_nMaximumPetScrollOffset = 0;
+	float m_fPetScrollThumbRatio = 1.0f;
+	bool m_bPetScrollDragging = false;
+	float m_fPetScrollDragLastY = 0.0f;
 
 	void RenderUiImage(ID3D12GraphicsCommandList* pd3dCommandList, CCamera* pCamera,
 		UI_IMAGE_RESOURCE& imageResource, const XMFLOAT4& rectangle);
@@ -90,5 +95,7 @@ private:
 	bool ProcessShopUIClick(float x, float y, float fViewportWidth, float fViewportHeight,
 		UINT nMoney, const SHOP_TEXT_RENDER_CONTEXT& textContext);
 	void DeactivateShop(float fViewportWidth, float fViewportHeight);
-	void UpdatePetScrollState(size_t nPetCount);
+	void RebuildPetScrollMetrics(size_t nPetCount);
+	void RebuildPetScrollMetricsIfNeeded(size_t nPetCount);
+	XMFLOAT4 GetPetScrollThumbRectangle(float fViewportWidth, float fViewportHeight) const;
 };

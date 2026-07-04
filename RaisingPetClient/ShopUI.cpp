@@ -157,8 +157,9 @@ XMFLOAT4 GetPetScrollTrackRectangle(float width, float height, float offsetX = 0
 }
 
 void CShopUI::BuildObjects(ID3D12Device* device, ID3D12GraphicsCommandList* commandList,
-	ID3D12RootSignature* rootSignature)
+	ID3D12RootSignature* rootSignature, size_t nInitialPetCount)
 {
+	RebuildPetScrollMetrics(nInitialPetCount);
 	ID3DBlob* vertexShader = NULL;
 	ID3DBlob* pixelShader = NULL;
 	ID3DBlob* errorBlob = NULL;
@@ -432,7 +433,7 @@ void CShopUI::Render(ID3D12GraphicsCommandList* commandList, CCamera* camera, UI
 	const std::vector<CPet*>& pets, const SHOP_TEXT_RENDER_CONTEXT& context)
 {
 	if (!camera) return;
-	UpdatePetScrollState(pets.size());
+	RebuildPetScrollMetricsIfNeeded(pets.size());
 	const float width = camera->m_d3dViewport.Width;
 	const float height = camera->m_d3dViewport.Height;
 	if (m_bShopActive)
@@ -458,15 +459,8 @@ void CShopUI::Render(ID3D12GraphicsCommandList* commandList, CCamera* camera, UI
 			const XMFLOAT4 scrollTrack = GetPetScrollTrackRectangle(width, height,
 				m_xmf2ShopBoardOffset.x, m_xmf2ShopBoardOffset.y);
 			RenderUiImage(commandList, camera, m_ScrollBackgroundResource, scrollTrack);
-			const size_t effectivePetCount = (pets.size() > 10) ? pets.size() : 10;
-			const float trackHeight = scrollTrack.w - scrollTrack.y;
-			const float thumbHeight = trackHeight * (10.0f / static_cast<float>(effectivePetCount));
-			const size_t maximumOffset = (pets.size() > 10) ? pets.size() - 10 : 0;
-			const float scrollProgress = (maximumOffset > 0)
-				? static_cast<float>(m_nPetScrollOffset) / static_cast<float>(maximumOffset) : 0.0f;
-			const float thumbTop = scrollTrack.y + (trackHeight - thumbHeight) * scrollProgress;
 			RenderUiImage(commandList, camera, m_ScrollResource,
-				XMFLOAT4(scrollTrack.x, thumbTop, scrollTrack.z, thumbTop + thumbHeight));
+				GetPetScrollThumbRectangle(width, height));
 			const float rowHeight = (leftPanel.w - leftPanel.y) / 10.0f;
 			const float glyphScale = rowHeight / 320.0f;
 			for (size_t row = 0; row < 10; ++row)
@@ -487,10 +481,30 @@ void CShopUI::Render(ID3D12GraphicsCommandList* commandList, CCamera* camera, UI
 	RenderUiImage(commandList, camera, m_ShopIconResource, GetShopIconRectangle(width, height));
 }
 
-void CShopUI::UpdatePetScrollState(size_t nPetCount)
+void CShopUI::RebuildPetScrollMetrics(size_t nPetCount)
 {
-	const size_t maximumOffset = (nPetCount > 10) ? nPetCount - 10 : 0;
-	if (m_nPetScrollOffset > maximumOffset) m_nPetScrollOffset = maximumOffset;
+	m_nCachedPetCount = nPetCount;
+	m_nMaximumPetScrollOffset = (nPetCount > 10) ? nPetCount - 10 : 0;
+	m_fPetScrollThumbRatio = 10.0f / static_cast<float>((nPetCount > 10) ? nPetCount : 10);
+	if (m_nPetScrollOffset > m_nMaximumPetScrollOffset)
+		m_nPetScrollOffset = m_nMaximumPetScrollOffset;
+}
+
+void CShopUI::RebuildPetScrollMetricsIfNeeded(size_t nPetCount)
+{
+	if (nPetCount != m_nCachedPetCount) RebuildPetScrollMetrics(nPetCount);
+}
+
+XMFLOAT4 CShopUI::GetPetScrollThumbRectangle(float width, float height) const
+{
+	const XMFLOAT4 track = GetPetScrollTrackRectangle(width, height,
+		m_xmf2ShopBoardOffset.x, m_xmf2ShopBoardOffset.y);
+	const float trackHeight = track.w - track.y;
+	const float thumbHeight = trackHeight * m_fPetScrollThumbRatio;
+	const float progress = (m_nMaximumPetScrollOffset > 0)
+		? static_cast<float>(m_nPetScrollOffset) / static_cast<float>(m_nMaximumPetScrollOffset) : 0.0f;
+	const float top = track.y + (trackHeight - thumbHeight) * progress;
+	return(XMFLOAT4(track.x, top, track.z, top + thumbHeight));
 }
 
 bool CShopUI::IsPointOver(float x, float y, float width, float height) const
@@ -511,6 +525,7 @@ void CShopUI::DeactivateShop(float width, float height)
 		|| board.y < -halfHeight || board.w > height + halfHeight;
 	m_bShopActive = false;
 	m_bShopBoardDragging = false;
+	m_bPetScrollDragging = false;
 }
 
 bool CShopUI::ProcessShopUIClick(float x, float y, float width, float height, UINT money,
@@ -588,14 +603,13 @@ bool CShopUI::OnProcessingMouseMessage(HWND hWnd, UINT message, WPARAM wParam, L
 				m_xmf2ShopBoardOffset.x, m_xmf2ShopBoardOffset.y);
 			if (IsPointInRectangle(x, y, panel))
 			{
-				UpdatePetScrollState(nPetCount);
-				const size_t maximumOffset = (nPetCount > 10) ? nPetCount - 10 : 0;
+				RebuildPetScrollMetricsIfNeeded(nPetCount);
 				const int wheelDelta = static_cast<short>(HIWORD(wParam));
 				int steps = abs(wheelDelta) / WHEEL_DELTA;
 				if (steps < 1) steps = 1;
 				while (steps-- > 0)
 				{
-					if (wheelDelta < 0 && m_nPetScrollOffset < maximumOffset) ++m_nPetScrollOffset;
+					if (wheelDelta < 0 && m_nPetScrollOffset < m_nMaximumPetScrollOffset) ++m_nPetScrollOffset;
 					else if (wheelDelta > 0 && m_nPetScrollOffset > 0) --m_nPetScrollOffset;
 				}
 				return(true);
@@ -603,6 +617,15 @@ bool CShopUI::OnProcessingMouseMessage(HWND hWnd, UINT message, WPARAM wParam, L
 		}
 		break;
 	case WM_LBUTTONDOWN:
+		RebuildPetScrollMetricsIfNeeded(nPetCount);
+		if (m_bShopActive && m_eShopPage == SHOP_PAGE::SLOT_CONTENT_1
+			&& m_nMaximumPetScrollOffset > 0
+			&& IsPointInRectangle(x, y, GetPetScrollThumbRectangle(width, height)))
+		{
+			m_bPetScrollDragging = true;
+			m_fPetScrollDragLastY = y;
+			return(true);
+		}
 		if (ProcessShopUIClick(x, y, width, height, money, context)) return(true);
 		if (m_bShopActive)
 		{
@@ -618,6 +641,42 @@ bool CShopUI::OnProcessingMouseMessage(HWND hWnd, UINT message, WPARAM wParam, L
 		}
 		break;
 	case WM_MOUSEMOVE:
+		if (m_bPetScrollDragging)
+		{
+			const bool outside = x < 0.0f || y < 0.0f || x >= width || y >= height;
+			if (!(wParam & MK_LBUTTON) || outside || m_nMaximumPetScrollOffset == 0)
+			{
+				m_bPetScrollDragging = false;
+				if (GetCapture() == hWnd) ReleaseCapture();
+				return(true);
+			}
+
+			const XMFLOAT4 track = GetPetScrollTrackRectangle(width, height,
+				m_xmf2ShopBoardOffset.x, m_xmf2ShopBoardOffset.y);
+			const XMFLOAT4 thumb = GetPetScrollThumbRectangle(width, height);
+			const float pageDistance = ((track.w - track.y) - (thumb.w - thumb.y))
+				/ static_cast<float>(m_nMaximumPetScrollOffset);
+			const float delta = y - m_fPetScrollDragLastY;
+			const int steps = (pageDistance > 0.0f) ? static_cast<int>(fabsf(delta) / pageDistance) : 0;
+			if (steps > 0)
+			{
+				if (delta > 0.0f)
+				{
+					const size_t remaining = m_nMaximumPetScrollOffset - m_nPetScrollOffset;
+					m_nPetScrollOffset += (static_cast<size_t>(steps) < remaining)
+						? static_cast<size_t>(steps) : remaining;
+					m_fPetScrollDragLastY += pageDistance * steps;
+				}
+				else
+				{
+					const size_t move = (static_cast<size_t>(steps) < m_nPetScrollOffset)
+						? static_cast<size_t>(steps) : m_nPetScrollOffset;
+					m_nPetScrollOffset -= move;
+					m_fPetScrollDragLastY -= pageDistance * steps;
+				}
+			}
+			return(true);
+		}
 		if (m_bShopBoardDragging)
 		{
 			const bool outside = x < 0.0f || y < 0.0f || x >= width || y >= height;
@@ -634,6 +693,7 @@ bool CShopUI::OnProcessingMouseMessage(HWND hWnd, UINT message, WPARAM wParam, L
 		}
 		break;
 	case WM_LBUTTONUP:
+		if (m_bPetScrollDragging) { m_bPetScrollDragging = false; return(true); }
 		if (m_bShopBoardDragging) { m_bShopBoardDragging = false; return(true); }
 		break;
 	}
