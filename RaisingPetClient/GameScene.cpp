@@ -46,7 +46,7 @@ void CGameScene::BuildObjects(ID3D12Device* pd3dDevice, ID3D12GraphicsCommandLis
 		{ "Touma5", "Assets/Touma/ToumaMesh.obj", L"Assets/Touma/ToumaTexture.dds"},
 		{ "Touma6", "Assets/Touma/ToumaMesh.obj", L"Assets/Touma/ToumaTexture.dds"},
 		{ "Touma7", "Assets/Touma/ToumaMesh.obj", L"Assets/Touma/ToumaTexture.dds"},
-		{ "Touma8", "Assets/Touma/ToumaMesh.obj", L"Assets/Touma/ToumaTexture.dds"},
+		{ "Poideu", "Assets/Poideu/PoideuMesh.obj", L"Assets/Poideu/PoideuTexture.dds"},
 		{ "Rune", "Assets/Rune/RuneMesh.obj", L"Assets/Rune/RuneTexture.dds"}
 	};
 
