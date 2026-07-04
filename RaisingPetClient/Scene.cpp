@@ -276,7 +276,8 @@ void CGameScene::BuildObjects(ID3D12Device* pd3dDevice, ID3D12GraphicsCommandLis
 	const PET_ASSET_DESC petAssets[] =
 	{
 		{ "TheCA", "Assets/TheCA/TheCAMesh.obj", L"Assets/TheCA/TheCATexture.dds"},
-		{ "Touma", "Assets/Touma/ToumaMesh.obj", L"Assets/Touma/ToumaTexture.dds"}
+		{ "Touma", "Assets/Touma/ToumaMesh.obj", L"Assets/Touma/ToumaTexture.dds"},
+		{ "Rune", "Assets/Rune/RuneMesh.obj", L"Assets/Rune/RuneTexture.dds"}
 	};
 
 	CPseudoLightingShader* pObjectShader = new CPseudoLightingShader();

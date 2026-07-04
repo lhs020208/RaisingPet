@@ -59,7 +59,7 @@ private:
 	};
 
 	std::vector<PET_RENDER_RESOURCE> m_vPetResources;
-	UINT m_nActivePetIndex = 0;
+	UINT m_nActivePetIndex = 2;
 	CPet* m_pPointedPet = NULL;
 
 	struct TEXT_GLYPH_RESOURCE
