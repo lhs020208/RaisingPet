@@ -141,6 +141,7 @@ xcopy "$(ProjectDir)Assets\Image\Test.dds" "$(ProjectDir)Executable\Assets\Image
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="Camera.h" />
+    <ClInclude Include="GameScene.h" />
     <ClInclude Include="d3dx12.h" />
     <ClInclude Include="DDSTextureLoader12.h" />
     <ClInclude Include="GameFramework.h" />
@@ -158,6 +159,7 @@ xcopy "$(ProjectDir)Assets\Image\Test.dds" "$(ProjectDir)Executable\Assets\Image
     <ClCompile Include="Camera.cpp" />
     <ClCompile Include="DDSTextureLoader12.cpp" />
     <ClCompile Include="GameFramework.cpp" />
+    <ClCompile Include="GameScene.cpp" />
     <ClCompile Include="RaisingPet.cpp" />
     <ClCompile Include="Mesh.cpp" />
     <ClCompile Include="Object.cpp" />

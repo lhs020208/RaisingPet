@@ -6,6 +6,7 @@
 #include "Timer.h"
 #include "Camera.h"
 #include "Scene.h"
+#include "GameScene.h"
 
 class CGameFramework
 {

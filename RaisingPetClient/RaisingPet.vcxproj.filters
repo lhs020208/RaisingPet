@@ -79,6 +79,9 @@
     <ClInclude Include="Timer.h">
       <Filter>Code\Timer</Filter>
     </ClInclude>
+    <ClInclude Include="GameScene.h">
+      <Filter>Code\Scene</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Shader.cpp">
@@ -110,6 +113,9 @@
     </ClCompile>
     <ClCompile Include="Timer.cpp">
       <Filter>Code\Timer</Filter>
+    </ClCompile>
+    <ClCompile Include="GameScene.cpp">
+      <Filter>Code\Scene</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
