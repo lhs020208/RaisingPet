@@ -253,6 +253,12 @@ void CShopUI::BuildObjects(ID3D12Device* device, ID3D12GraphicsCommandList* comm
 
 void CShopUI::ReleaseObjects()
 {
+	if (m_pPreviewPet)
+	{
+		delete m_pPreviewPet;
+		m_pPreviewPet = NULL;
+		m_nPreviewPetIndex = static_cast<size_t>(-1);
+	}
 	if (m_pd3dUiImagePipelineState) m_pd3dUiImagePipelineState->Release();
 	UI_IMAGE_RESOURCE* images[] = { &m_ShopIconResource, &m_ShopBoardResource,
 		&m_ShopCloseIconResource, &m_ShopBackSpaceIconResource, &m_ShopSlotResources[0],
@@ -265,6 +271,12 @@ void CShopUI::ReleaseObjects()
 		if (image->pd3dTextureUploadBuffer) image->pd3dTextureUploadBuffer->Release();
 		if (image->pd3dSrvDescriptorHeap) image->pd3dSrvDescriptorHeap->Release();
 	}
+}
+
+void CShopUI::Animate(float elapsedTime)
+{
+	if (m_bShopActive && m_eShopPage == SHOP_PAGE::SLOT_CONTENT_1 && m_pPreviewPet)
+		m_pPreviewPet->AnimateWithoutMovement(elapsedTime);
 }
 
 void CShopUI::ReleaseUploadBuffers()
@@ -429,8 +441,67 @@ void CShopUI::RenderMoneyUI(ID3D12GraphicsCommandList* commandList, CCamera* cam
 	RenderTextLine(commandList, camera, text, left, top, gMoneyUiLayout.fGlyphScale, 0x00000000, context);
 }
 
+void CShopUI::EnsurePreviewPet(const std::vector<SHOP_PET_RENDER_RESOURCE>& pets)
+{
+	if (m_nSelectedPetIndex >= pets.size() || !pets[m_nSelectedPetIndex].pPet)
+	{
+		if (m_pPreviewPet) delete m_pPreviewPet;
+		m_pPreviewPet = NULL;
+		m_nPreviewPetIndex = static_cast<size_t>(-1);
+		return;
+	}
+	if (m_pPreviewPet && m_nPreviewPetIndex == m_nSelectedPetIndex) return;
+
+	if (m_pPreviewPet) delete m_pPreviewPet;
+	CPet* sourcePet = pets[m_nSelectedPetIndex].pPet;
+	m_pPreviewPet = new CPet();
+	m_pPreviewPet->SetMesh(sourcePet->m_pMesh);
+	m_pPreviewPet->SetShader(sourcePet->m_pShader);
+	m_pPreviewPet->SetName(sourcePet->GetName());
+	m_pPreviewPet->SetPay(sourcePet->GetPay());
+	m_pPreviewPet->GetMaxPossession(sourcePet->GetMaxPossession());
+	m_pPreviewPet->GetNowPossession(0);
+	m_pPreviewPet->SetPosition(0.0f, -28.0f, 0.0f);
+	m_nPreviewPetIndex = m_nSelectedPetIndex;
+}
+
+void CShopUI::RenderPreviewPet(ID3D12GraphicsCommandList* commandList, CCamera* mainCamera,
+	const XMFLOAT4& panel, const std::vector<SHOP_PET_RENDER_RESOURCE>& pets)
+{
+	EnsurePreviewPet(pets);
+	if (!m_pPreviewPet || m_nPreviewPetIndex >= pets.size()
+		|| !pets[m_nPreviewPetIndex].pd3dSrvDescriptorHeap) return;
+
+	const LONG inset = 3;
+	const LONG left = static_cast<LONG>(panel.x) + inset;
+	const LONG top = static_cast<LONG>(panel.y) + inset;
+	const LONG right = static_cast<LONG>(panel.z) - inset;
+	const LONG bottom = static_cast<LONG>(panel.w) - inset;
+	const int viewportWidth = right - left;
+	const int viewportHeight = bottom - top;
+	if (viewportWidth <= 0 || viewportHeight <= 0) return;
+
+	m_PreviewPetCamera.SetViewport(left, top, viewportWidth, viewportHeight, 0.0f, 0.2f);
+	m_PreviewPetCamera.SetScissorRect(left, top, right, bottom);
+	m_PreviewPetCamera.GenerateViewMatrix(XMFLOAT3(0.0f, 5.0f, -50.0f),
+		XMFLOAT3(0.0f, 0.0f, 0.0f), XMFLOAT3(0.0f, 1.0f, 0.0f));
+	m_PreviewPetCamera.GenerateProjectionMatrix(0.1f, 1000.0f,
+		static_cast<float>(viewportWidth) / static_cast<float>(viewportHeight), 60.0f);
+	m_PreviewPetCamera.SetViewportsAndScissorRects(commandList);
+	m_PreviewPetCamera.UpdateShaderVariables(commandList);
+
+	ID3D12DescriptorHeap* descriptorHeaps[] = { pets[m_nPreviewPetIndex].pd3dSrvDescriptorHeap };
+	commandList->SetDescriptorHeaps(1, descriptorHeaps);
+	commandList->SetGraphicsRootDescriptorTable(3,
+		pets[m_nPreviewPetIndex].pd3dSrvDescriptorHeap->GetGPUDescriptorHandleForHeapStart());
+	m_pPreviewPet->Render(commandList, &m_PreviewPetCamera);
+
+	mainCamera->SetViewportsAndScissorRects(commandList);
+	mainCamera->UpdateShaderVariables(commandList);
+}
+
 void CShopUI::Render(ID3D12GraphicsCommandList* commandList, CCamera* camera, UINT money,
-	const std::vector<CPet*>& pets, const SHOP_TEXT_RENDER_CONTEXT& context)
+	const std::vector<SHOP_PET_RENDER_RESOURCE>& pets, const SHOP_TEXT_RENDER_CONTEXT& context)
 {
 	if (!camera) return;
 	RebuildPetScrollMetricsIfNeeded(pets.size());
@@ -454,6 +525,7 @@ void CShopUI::Render(ID3D12GraphicsCommandList* commandList, CCamera* camera, UI
 				m_xmf2ShopBoardOffset.x, m_xmf2ShopBoardOffset.y);
 			RenderUiImage(commandList, camera, m_EmptySquareResources[0], leftPanel);
 			RenderUiImage(commandList, camera, m_EmptySquareResources[1], rightPanel);
+			RenderPreviewPet(commandList, camera, rightPanel, pets);
 			RenderUiImage(commandList, camera, m_PetConfirmationButtonResource,
 				GetPetConfirmationRectangle(width, height, m_xmf2ShopBoardOffset.x, m_xmf2ShopBoardOffset.y));
 			const XMFLOAT4 scrollTrack = GetPetScrollTrackRectangle(width, height,
@@ -466,14 +538,14 @@ void CShopUI::Render(ID3D12GraphicsCommandList* commandList, CCamera* camera, UI
 			for (size_t row = 0; row < 10; ++row)
 			{
 				const size_t petIndex = m_nPetScrollOffset + row;
-				if (petIndex >= pets.size() || !pets[petIndex]) continue;
+				if (petIndex >= pets.size() || !pets[petIndex].pPet) continue;
 				if (petIndex == m_nSelectedPetIndex)
 				{
 					const XMFLOAT4 selection = GetPetListRowRectangle(row, width, height);
 					RenderSolidUiRectangle(commandList, camera, selection.x, selection.y,
 						selection.z, selection.w, 0x00BFBFBF, context);
 				}
-				const std::string name = std::to_string(petIndex + 1) + ". " + pets[petIndex]->GetName();
+				const std::string name = std::to_string(petIndex + 1) + ". " + pets[petIndex].pPet->GetName();
 				RenderTextLine(commandList, camera, name, leftPanel.x + 18.0f,
 					leftPanel.y + rowHeight * row + rowHeight * 0.15f, glyphScale, 0x00000000, context);
 			}

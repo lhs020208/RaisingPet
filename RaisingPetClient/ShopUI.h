@@ -24,6 +24,12 @@ struct SHOP_TEXT_RENDER_CONTEXT
 	std::vector<TEXT_GLYPH_RESOURCE>* pGlyphResources = NULL;
 };
 
+struct SHOP_PET_RENDER_RESOURCE
+{
+	CPet* pPet = NULL;
+	ID3D12DescriptorHeap* pd3dSrvDescriptorHeap = NULL;
+};
+
 class CShopUI
 {
 public:
@@ -31,9 +37,11 @@ public:
 		ID3D12RootSignature* pd3dRootSignature, size_t nInitialPetCount);
 	void ReleaseObjects();
 	void ReleaseUploadBuffers();
+	void Animate(float fElapsedTime);
 
 	void Render(ID3D12GraphicsCommandList* pd3dCommandList, CCamera* pCamera, UINT nMoney,
-		const std::vector<CPet*>& pets, const SHOP_TEXT_RENDER_CONTEXT& textContext);
+		const std::vector<SHOP_PET_RENDER_RESOURCE>& pets,
+		const SHOP_TEXT_RENDER_CONTEXT& textContext);
 	bool IsPointOver(float x, float y, float fViewportWidth, float fViewportHeight) const;
 	bool OnProcessingMouseMessage(HWND hWnd, UINT nMessageID, WPARAM wParam, LPARAM lParam,
 		UINT nMoney, size_t nPetCount, size_t nActivePetIndex,
@@ -81,6 +89,9 @@ private:
 	bool m_bPetScrollDragging = false;
 	float m_fPetScrollDragLastY = 0.0f;
 	size_t m_nSelectedPetIndex = 0;
+	size_t m_nPreviewPetIndex = static_cast<size_t>(-1);
+	CPet* m_pPreviewPet = NULL;
+	CCamera m_PreviewPetCamera;
 
 	void RenderUiImage(ID3D12GraphicsCommandList* pd3dCommandList, CCamera* pCamera,
 		UI_IMAGE_RESOURCE& imageResource, const XMFLOAT4& rectangle);
@@ -103,4 +114,7 @@ private:
 	void RebuildPetScrollMetricsIfNeeded(size_t nPetCount);
 	XMFLOAT4 GetPetScrollThumbRectangle(float fViewportWidth, float fViewportHeight) const;
 	XMFLOAT4 GetPetListRowRectangle(size_t nRow, float fViewportWidth, float fViewportHeight) const;
+	void EnsurePreviewPet(const std::vector<SHOP_PET_RENDER_RESOURCE>& pets);
+	void RenderPreviewPet(ID3D12GraphicsCommandList* pd3dCommandList, CCamera* pMainCamera,
+		const XMFLOAT4& panel, const std::vector<SHOP_PET_RENDER_RESOURCE>& pets);
 };

@@ -475,9 +475,10 @@ void CGameScene::Render(ID3D12GraphicsCommandList* pd3dCommandList, CCamera* pCa
 		RenderPetPossessionText(pd3dCommandList, pCamera, m_vPetResources[m_nActivePetIndex].pPet);
 
 	RenderCoinEffects(pd3dCommandList, pCamera);
-	std::vector<CPet*> shopPets;
+	std::vector<SHOP_PET_RENDER_RESOURCE> shopPets;
 	shopPets.reserve(m_vPetResources.size());
-	for (PET_RENDER_RESOURCE& petResource : m_vPetResources) shopPets.push_back(petResource.pPet);
+	for (PET_RENDER_RESOURCE& petResource : m_vPetResources)
+		shopPets.push_back({ petResource.pPet, petResource.pd3dSrvDescriptorHeap });
 	m_ShopUI.Render(pd3dCommandList, pCamera, m_nMoney, shopPets, GetShopTextRenderContext());
 }
 void CGameScene::RenderPetPossessionText(ID3D12GraphicsCommandList* pd3dCommandList, CCamera* pCamera, CPet* pPet)
@@ -765,6 +766,7 @@ void CGameScene::Animate(float fElapsedTime)
 		}
 	}
 	AnimateCoinEffects(fElapsedTime);
+	m_ShopUI.Animate(fElapsedTime);
 }
 
 bool CGameScene::DiscountMoney(UINT p)

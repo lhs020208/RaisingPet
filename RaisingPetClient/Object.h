@@ -72,6 +72,7 @@ public:
 	virtual ~CPet() {}
 
 	virtual void Animate(float fTimeElapsed) override;
+	void AnimateWithoutMovement(float fTimeElapsed);
 
 private:
 	enum class MOVE_STATE

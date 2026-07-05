@@ -267,6 +267,19 @@ void CPet::Animate(float fTimeElapsed)
 	}
 }
 
+void CPet::AnimateWithoutMovement(float fTimeElapsed)
+{
+	if (fTimeElapsed <= 0.0f) return;
+
+	UpdateMoveSpeed(fTimeElapsed);
+	UpdateRotation(fTimeElapsed);
+	UpdateBoundingBox();
+
+	m_fStateRemainingTime -= fTimeElapsed;
+	if (m_fStateRemainingTime <= 0.0f)
+		DecideNextState();
+}
+
 void CPet::UpdatePossession(float fTimeElapsed)
 {
 	if (m_nNowPossession == 0)
