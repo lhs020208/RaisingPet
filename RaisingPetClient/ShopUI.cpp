@@ -467,6 +467,12 @@ void CShopUI::Render(ID3D12GraphicsCommandList* commandList, CCamera* camera, UI
 			{
 				const size_t petIndex = m_nPetScrollOffset + row;
 				if (petIndex >= pets.size() || !pets[petIndex]) continue;
+				if (petIndex == m_nSelectedPetIndex)
+				{
+					const XMFLOAT4 selection = GetPetListRowRectangle(row, width, height);
+					RenderSolidUiRectangle(commandList, camera, selection.x, selection.y,
+						selection.z, selection.w, 0x00BFBFBF, context);
+				}
 				const std::string name = std::to_string(petIndex + 1) + ". " + pets[petIndex]->GetName();
 				RenderTextLine(commandList, camera, name, leftPanel.x + 18.0f,
 					leftPanel.y + rowHeight * row + rowHeight * 0.15f, glyphScale, 0x00000000, context);
@@ -507,6 +513,23 @@ XMFLOAT4 CShopUI::GetPetScrollThumbRectangle(float width, float height) const
 	return(XMFLOAT4(track.x, top, track.z, top + thumbHeight));
 }
 
+XMFLOAT4 CShopUI::GetPetListRowRectangle(size_t row, float width, float height) const
+{
+	const XMFLOAT4 panel = GetPetContentPanelRectangle(false, width, height,
+		m_xmf2ShopBoardOffset.x, m_xmf2ShopBoardOffset.y);
+	const XMFLOAT4 track = GetPetScrollTrackRectangle(width, height,
+		m_xmf2ShopBoardOffset.x, m_xmf2ShopBoardOffset.y);
+	const float rowHeight = (panel.w - panel.y) / 10.0f;
+	const float verticalMargin = rowHeight * 0.08f;
+	return(XMFLOAT4(panel.x + 10.0f, panel.y + rowHeight * row + verticalMargin,
+		track.x - 10.0f, panel.y + rowHeight * (row + 1) - verticalMargin));
+}
+
+void CShopUI::ResetSelectedPet(size_t activePetIndex, size_t petCount)
+{
+	m_nSelectedPetIndex = (activePetIndex < petCount) ? activePetIndex : 0;
+}
+
 bool CShopUI::IsPointOver(float x, float y, float width, float height) const
 {
 	if (IsPointInRectangle(x, y, GetShopIconRectangle(width, height))) return(true);
@@ -515,7 +538,7 @@ bool CShopUI::IsPointOver(float x, float y, float width, float height) const
 		GetShopBoardRectangle(width, height, m_xmf2ShopBoardOffset.x, m_xmf2ShopBoardOffset.y)));
 }
 
-void CShopUI::DeactivateShop(float width, float height)
+void CShopUI::DeactivateShop(float width, float height, size_t activePetIndex)
 {
 	const XMFLOAT4 board = GetShopBoardRectangle(width, height,
 		m_xmf2ShopBoardOffset.x, m_xmf2ShopBoardOffset.y);
@@ -526,17 +549,18 @@ void CShopUI::DeactivateShop(float width, float height)
 	m_bShopActive = false;
 	m_bShopBoardDragging = false;
 	m_bPetScrollDragging = false;
+	ResetSelectedPet(activePetIndex, m_nCachedPetCount);
 }
 
 bool CShopUI::ProcessShopUIClick(float x, float y, float width, float height, UINT money,
-	const SHOP_TEXT_RENDER_CONTEXT& context)
+	size_t petCount, size_t activePetIndex, const SHOP_TEXT_RENDER_CONTEXT& context)
 {
 	const bool iconClicked = IsPointInRectangle(x, y, GetShopIconRectangle(width, height));
 	const bool closeClicked = m_bShopActive && IsPointInRectangle(x, y,
 		GetShopCloseRectangle(width, height, m_xmf2ShopBoardOffset.x, m_xmf2ShopBoardOffset.y));
 	if (iconClicked || closeClicked)
 	{
-		if (m_bShopActive) DeactivateShop(width, height);
+		if (m_bShopActive) DeactivateShop(width, height, activePetIndex);
 		else
 		{
 			if (m_bResetShopPositionOnNextOpen)
@@ -547,6 +571,7 @@ bool CShopUI::ProcessShopUIClick(float x, float y, float width, float height, UI
 			m_bShopActive = true;
 			m_eShopPage = SHOP_PAGE::SLOT_MENU;
 			m_nSelectedShopSlot = -1;
+			ResetSelectedPet(activePetIndex, petCount);
 		}
 		return(true);
 	}
@@ -554,8 +579,13 @@ bool CShopUI::ProcessShopUIClick(float x, float y, float width, float height, UI
 	if (IsPointInRectangle(x, y,
 		GetShopBackRectangle(width, height, m_xmf2ShopBoardOffset.x, m_xmf2ShopBoardOffset.y)))
 	{
-		if (m_eShopPage == SHOP_PAGE::SLOT_MENU) DeactivateShop(width, height);
-		else { m_eShopPage = SHOP_PAGE::SLOT_MENU; m_nSelectedShopSlot = -1; }
+		if (m_eShopPage == SHOP_PAGE::SLOT_MENU) DeactivateShop(width, height, activePetIndex);
+		else
+		{
+			m_eShopPage = SHOP_PAGE::SLOT_MENU;
+			m_nSelectedShopSlot = -1;
+			ResetSelectedPet(activePetIndex, petCount);
+		}
 		return(true);
 	}
 	if (m_eShopPage == SHOP_PAGE::SLOT_MENU)
@@ -566,6 +596,8 @@ bool CShopUI::ProcessShopUIClick(float x, float y, float width, float height, UI
 				m_xmf2ShopBoardOffset.x, m_xmf2ShopBoardOffset.y))) continue;
 			m_eShopPage = static_cast<SHOP_PAGE>(static_cast<int>(SHOP_PAGE::SLOT_CONTENT_1) + i);
 			m_nSelectedShopSlot = i;
+			if (m_eShopPage == SHOP_PAGE::SLOT_CONTENT_1)
+				ResetSelectedPet(activePetIndex, petCount);
 			return(true);
 		}
 	}
@@ -577,6 +609,14 @@ bool CShopUI::ProcessShopUIClick(float x, float y, float width, float height, UI
 			m_xmf2ShopBoardOffset.x, m_xmf2ShopBoardOffset.y);
 		const XMFLOAT4 confirm = GetPetConfirmationRectangle(width, height,
 			m_xmf2ShopBoardOffset.x, m_xmf2ShopBoardOffset.y);
+		for (size_t row = 0; row < 10; ++row)
+		{
+			const size_t petIndex = m_nPetScrollOffset + row;
+			if (petIndex >= petCount) break;
+			if (!IsPointInRectangle(x, y, GetPetListRowRectangle(row, width, height))) continue;
+			m_nSelectedPetIndex = petIndex;
+			return(true);
+		}
 		if (IsPointInRectangle(x, y, left) || IsPointInRectangle(x, y, right)
 			|| IsPointInRectangle(x, y, confirm)) return(true);
 	}
@@ -584,7 +624,7 @@ bool CShopUI::ProcessShopUIClick(float x, float y, float width, float height, UI
 }
 
 bool CShopUI::OnProcessingMouseMessage(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam,
-	UINT money, size_t nPetCount, const SHOP_TEXT_RENDER_CONTEXT& context)
+	UINT money, size_t nPetCount, size_t activePetIndex, const SHOP_TEXT_RENDER_CONTEXT& context)
 {
 	RECT client;
 	GetClientRect(hWnd, &client);
@@ -626,7 +666,7 @@ bool CShopUI::OnProcessingMouseMessage(HWND hWnd, UINT message, WPARAM wParam, L
 			m_fPetScrollDragLastY = y;
 			return(true);
 		}
-		if (ProcessShopUIClick(x, y, width, height, money, context)) return(true);
+		if (ProcessShopUIClick(x, y, width, height, money, nPetCount, activePetIndex, context)) return(true);
 		if (m_bShopActive)
 		{
 			const XMFLOAT4 board = GetShopBoardRectangle(width, height,

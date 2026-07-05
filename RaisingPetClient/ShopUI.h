@@ -36,7 +36,8 @@ public:
 		const std::vector<CPet*>& pets, const SHOP_TEXT_RENDER_CONTEXT& textContext);
 	bool IsPointOver(float x, float y, float fViewportWidth, float fViewportHeight) const;
 	bool OnProcessingMouseMessage(HWND hWnd, UINT nMessageID, WPARAM wParam, LPARAM lParam,
-		UINT nMoney, size_t nPetCount, const SHOP_TEXT_RENDER_CONTEXT& textContext);
+		UINT nMoney, size_t nPetCount, size_t nActivePetIndex,
+		const SHOP_TEXT_RENDER_CONTEXT& textContext);
 
 private:
 	struct UI_IMAGE_RESOURCE
@@ -79,6 +80,7 @@ private:
 	float m_fPetScrollThumbRatio = 1.0f;
 	bool m_bPetScrollDragging = false;
 	float m_fPetScrollDragLastY = 0.0f;
+	size_t m_nSelectedPetIndex = 0;
 
 	void RenderUiImage(ID3D12GraphicsCommandList* pd3dCommandList, CCamera* pCamera,
 		UI_IMAGE_RESOURCE& imageResource, const XMFLOAT4& rectangle);
@@ -93,9 +95,12 @@ private:
 	XMFLOAT4 GetMoneyUiRectangle(float fViewportWidth, float fViewportHeight, UINT nMoney,
 		const SHOP_TEXT_RENDER_CONTEXT& textContext) const;
 	bool ProcessShopUIClick(float x, float y, float fViewportWidth, float fViewportHeight,
-		UINT nMoney, const SHOP_TEXT_RENDER_CONTEXT& textContext);
-	void DeactivateShop(float fViewportWidth, float fViewportHeight);
+		UINT nMoney, size_t nPetCount, size_t nActivePetIndex,
+		const SHOP_TEXT_RENDER_CONTEXT& textContext);
+	void DeactivateShop(float fViewportWidth, float fViewportHeight, size_t nActivePetIndex);
+	void ResetSelectedPet(size_t nActivePetIndex, size_t nPetCount);
 	void RebuildPetScrollMetrics(size_t nPetCount);
 	void RebuildPetScrollMetricsIfNeeded(size_t nPetCount);
 	XMFLOAT4 GetPetScrollThumbRectangle(float fViewportWidth, float fViewportHeight) const;
+	XMFLOAT4 GetPetListRowRectangle(size_t nRow, float fViewportWidth, float fViewportHeight) const;
 };
