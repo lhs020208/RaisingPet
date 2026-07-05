@@ -461,7 +461,7 @@ void CShopUI::EnsurePreviewPet(const std::vector<SHOP_PET_RENDER_RESOURCE>& pets
 	m_pPreviewPet->SetPay(sourcePet->GetPay());
 	m_pPreviewPet->GetMaxPossession(sourcePet->GetMaxPossession());
 	m_pPreviewPet->GetNowPossession(0);
-	m_pPreviewPet->SetPosition(0.0f, -28.0f, 0.0f);
+	m_pPreviewPet->SetPosition(0.0f, 0.0f, 0.0f);
 	m_nPreviewPetIndex = m_nSelectedPetIndex;
 }
 
@@ -483,10 +483,26 @@ void CShopUI::RenderPreviewPet(ID3D12GraphicsCommandList* commandList, CCamera* 
 
 	m_PreviewPetCamera.SetViewport(left, top, viewportWidth, viewportHeight, 0.0f, 0.2f);
 	m_PreviewPetCamera.SetScissorRect(left, top, right, bottom);
-	m_PreviewPetCamera.GenerateViewMatrix(XMFLOAT3(0.0f, 5.0f, -50.0f),
-		XMFLOAT3(0.0f, 0.0f, 0.0f), XMFLOAT3(0.0f, 1.0f, 0.0f));
+
+	const BoundingOrientedBox& bounds = m_pPreviewPet->m_pMesh->m_xmOOBB;
+	XMFLOAT3 target = bounds.Center;
+	XMStoreFloat3(&target, XMVector3TransformCoord(XMLoadFloat3(&bounds.Center),
+		XMLoadFloat4x4(&m_pPreviewPet->m_xmf4x4World)));
+	const float aspectRatio = static_cast<float>(viewportWidth) / static_cast<float>(viewportHeight);
+	const float fieldOfView = 45.0f;
+	const float tanHalfVerticalFov = tanf(XMConvertToRadians(fieldOfView * 0.5f));
+	const float tanHalfHorizontalFov = tanHalfVerticalFov * aspectRatio;
+	const float horizontalRadius = sqrtf(bounds.Extents.x * bounds.Extents.x
+		+ bounds.Extents.z * bounds.Extents.z);
+	const float verticalDistance = bounds.Extents.y / (tanHalfVerticalFov * 0.70f);
+	const float horizontalDistance = horizontalRadius / (tanHalfHorizontalFov * 0.70f);
+	float cameraDistance = ((verticalDistance > horizontalDistance)
+		? verticalDistance : horizontalDistance) + horizontalRadius;
+	if (cameraDistance < 1.0f) cameraDistance = 10.0f;
+	const XMFLOAT3 cameraPosition(target.x, target.y, target.z - cameraDistance);
+	m_PreviewPetCamera.GenerateViewMatrix(cameraPosition, target, XMFLOAT3(0.0f, 1.0f, 0.0f));
 	m_PreviewPetCamera.GenerateProjectionMatrix(0.1f, 1000.0f,
-		static_cast<float>(viewportWidth) / static_cast<float>(viewportHeight), 60.0f);
+		aspectRatio, fieldOfView);
 	m_PreviewPetCamera.SetViewportsAndScissorRects(commandList);
 	m_PreviewPetCamera.UpdateShaderVariables(commandList);
 
