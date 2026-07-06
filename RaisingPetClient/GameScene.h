@@ -60,6 +60,7 @@ private:
 	void SpawnCoinEffects(CPet* pPet, UINT nPossessionBeforeCollection);
 	void AnimateCoinEffects(float fElapsedTime);
 	void RenderCoinEffects(ID3D12GraphicsCommandList* pd3dCommandList, CCamera* pCamera);
+	void ChangeActivePet(size_t nPetIndex);
 	SHOP_TEXT_RENDER_CONTEXT GetShopTextRenderContext();
 
 public:

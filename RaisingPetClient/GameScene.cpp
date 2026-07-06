@@ -741,12 +741,29 @@ void CGameScene::RenderCoinEffects(ID3D12GraphicsCommandList* pd3dCommandList, C
 }
 void CGameScene::OnProcessingMouseMessage(HWND hWnd, UINT nMessageID, WPARAM wParam, LPARAM lParam)
 {
-	if (m_ShopUI.OnProcessingMouseMessage(hWnd, nMessageID, wParam, lParam,
-		m_nMoney, m_vPetResources.size(), m_nActivePetIndex, GetShopTextRenderContext()))
+	const bool bShopMessageProcessed = m_ShopUI.OnProcessingMouseMessage(hWnd, nMessageID, wParam, lParam,
+		m_nMoney, m_vPetResources.size(), m_nActivePetIndex, GetShopTextRenderContext());
+	size_t nConfirmedPetIndex = 0;
+	if (m_ShopUI.ConsumePetConfirmationRequest(nConfirmedPetIndex))
+		ChangeActivePet(nConfirmedPetIndex);
+	if (bShopMessageProcessed)
 		return;
 
 	if (nMessageID == WM_LBUTTONDOWN && m_pPointedPet)
 		CollectPetPossession(m_pPointedPet);
+}
+
+void CGameScene::ChangeActivePet(size_t petIndex)
+{
+	if (petIndex >= m_vPetResources.size() || m_nActivePetIndex >= m_vPetResources.size()
+		|| petIndex == m_nActivePetIndex) return;
+	PET_RENDER_RESOURCE& currentResource = m_vPetResources[m_nActivePetIndex];
+	PET_RENDER_RESOURCE& selectedResource = m_vPetResources[petIndex];
+	if (!currentResource.pPet || !selectedResource.pPet) return;
+
+	selectedResource.pPet->CopyRuntimeStateFrom(*currentResource.pPet);
+	m_nActivePetIndex = static_cast<UINT>(petIndex);
+	m_pPointedPet = NULL;
 }
 void CGameScene::Animate(float fElapsedTime)
 {

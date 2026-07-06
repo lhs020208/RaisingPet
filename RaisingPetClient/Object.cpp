@@ -280,6 +280,37 @@ void CPet::AnimateWithoutMovement(float fTimeElapsed)
 		DecideNextState();
 }
 
+void CPet::CopyRuntimeStateFrom(const CPet& sourcePet)
+{
+	m_xmf4x4World = sourcePet.m_xmf4x4World;
+	m_xmOOBB = sourcePet.m_xmOOBB;
+	m_MoveState = sourcePet.m_MoveState;
+	m_RandomEngine = sourcePet.m_RandomEngine;
+	m_fStateRemainingTime = sourcePet.m_fStateRemainingTime;
+	m_fPossessionElapsedTime = sourcePet.m_fPossessionElapsedTime;
+	m_fMaxChargeTime = sourcePet.m_fMaxChargeTime;
+	m_fFullPossessionElapsedTime = sourcePet.m_fFullPossessionElapsedTime;
+	m_bAutoCollectRequested = sourcePet.m_bAutoCollectRequested;
+	m_fMoveSpeed = sourcePet.m_fMoveSpeed;
+	m_fMoveDirection = sourcePet.m_fMoveDirection;
+	m_fCurrentMoveSpeed = sourcePet.m_fCurrentMoveSpeed;
+	m_fSpeedStart = sourcePet.m_fSpeedStart;
+	m_fSpeedTarget = sourcePet.m_fSpeedTarget;
+	m_fSpeedElapsedTime = sourcePet.m_fSpeedElapsedTime;
+	m_fSpeedTransitionDuration = sourcePet.m_fSpeedTransitionDuration;
+	m_bSpeedTransitioning = sourcePet.m_bSpeedTransitioning;
+	m_fCurrentYaw = sourcePet.m_fCurrentYaw;
+	m_fRotationStartYaw = sourcePet.m_fRotationStartYaw;
+	m_fRotationTargetYaw = sourcePet.m_fRotationTargetYaw;
+	m_fRotationElapsedTime = sourcePet.m_fRotationElapsedTime;
+	m_fRotationDuration = sourcePet.m_fRotationDuration;
+	m_bRotating = sourcePet.m_bRotating;
+	m_nPay = sourcePet.m_nPay;
+	m_nMaxPossession = sourcePet.m_nMaxPossession;
+	m_nNowPossession = sourcePet.m_nNowPossession;
+	UpdateBoundingBox();
+}
+
 void CPet::UpdatePossession(float fTimeElapsed)
 {
 	if (m_nNowPossession == 0)

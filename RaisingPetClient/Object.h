@@ -73,6 +73,7 @@ public:
 
 	virtual void Animate(float fTimeElapsed) override;
 	void AnimateWithoutMovement(float fTimeElapsed);
+	void CopyRuntimeStateFrom(const CPet& sourcePet);
 
 private:
 	enum class MOVE_STATE

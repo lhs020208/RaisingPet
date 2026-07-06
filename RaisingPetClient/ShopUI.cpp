@@ -618,6 +618,14 @@ void CShopUI::ResetSelectedPet(size_t activePetIndex, size_t petCount)
 	m_nSelectedPetIndex = (activePetIndex < petCount) ? activePetIndex : 0;
 }
 
+bool CShopUI::ConsumePetConfirmationRequest(size_t& selectedPetIndex)
+{
+	if (m_nPendingConfirmedPetIndex == static_cast<size_t>(-1)) return(false);
+	selectedPetIndex = m_nPendingConfirmedPetIndex;
+	m_nPendingConfirmedPetIndex = static_cast<size_t>(-1);
+	return(true);
+}
+
 bool CShopUI::IsPointOver(float x, float y, float width, float height) const
 {
 	if (IsPointInRectangle(x, y, GetShopIconRectangle(width, height))) return(true);
@@ -697,6 +705,12 @@ bool CShopUI::ProcessShopUIClick(float x, float y, float width, float height, UI
 			m_xmf2ShopBoardOffset.x, m_xmf2ShopBoardOffset.y);
 		const XMFLOAT4 confirm = GetPetConfirmationRectangle(width, height,
 			m_xmf2ShopBoardOffset.x, m_xmf2ShopBoardOffset.y);
+		if (IsPointInRectangle(x, y, confirm))
+		{
+			if (m_nSelectedPetIndex < petCount)
+				m_nPendingConfirmedPetIndex = m_nSelectedPetIndex;
+			return(true);
+		}
 		for (size_t row = 0; row < 10; ++row)
 		{
 			const size_t petIndex = m_nPetScrollOffset + row;
@@ -705,8 +719,7 @@ bool CShopUI::ProcessShopUIClick(float x, float y, float width, float height, UI
 			m_nSelectedPetIndex = petIndex;
 			return(true);
 		}
-		if (IsPointInRectangle(x, y, left) || IsPointInRectangle(x, y, right)
-			|| IsPointInRectangle(x, y, confirm)) return(true);
+		if (IsPointInRectangle(x, y, left) || IsPointInRectangle(x, y, right)) return(true);
 	}
 	return(false);
 }

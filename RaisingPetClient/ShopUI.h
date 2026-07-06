@@ -46,6 +46,7 @@ public:
 	bool OnProcessingMouseMessage(HWND hWnd, UINT nMessageID, WPARAM wParam, LPARAM lParam,
 		UINT nMoney, size_t nPetCount, size_t nActivePetIndex,
 		const SHOP_TEXT_RENDER_CONTEXT& textContext);
+	bool ConsumePetConfirmationRequest(size_t& nSelectedPetIndex);
 
 private:
 	struct UI_IMAGE_RESOURCE
@@ -89,6 +90,7 @@ private:
 	bool m_bPetScrollDragging = false;
 	float m_fPetScrollDragLastY = 0.0f;
 	size_t m_nSelectedPetIndex = 0;
+	size_t m_nPendingConfirmedPetIndex = static_cast<size_t>(-1);
 	size_t m_nPreviewPetIndex = static_cast<size_t>(-1);
 	CPet* m_pPreviewPet = NULL;
 	CCamera m_PreviewPetCamera;
