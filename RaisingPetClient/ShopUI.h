@@ -40,13 +40,14 @@ public:
 	void Animate(float fElapsedTime);
 
 	void Render(ID3D12GraphicsCommandList* pd3dCommandList, CCamera* pCamera, UINT nMoney,
-		const std::vector<SHOP_PET_RENDER_RESOURCE>& pets,
+		size_t nActivePetIndex, const std::vector<SHOP_PET_RENDER_RESOURCE>& pets,
 		const SHOP_TEXT_RENDER_CONTEXT& textContext);
 	bool IsPointOver(float x, float y, float fViewportWidth, float fViewportHeight) const;
 	bool OnProcessingMouseMessage(HWND hWnd, UINT nMessageID, WPARAM wParam, LPARAM lParam,
 		UINT nMoney, size_t nPetCount, size_t nActivePetIndex,
 		const SHOP_TEXT_RENDER_CONTEXT& textContext);
 	bool ConsumePetConfirmationRequest(size_t& nSelectedPetIndex);
+	bool ConsumePetEnhancementRequest(int& nEnhancementType);
 
 private:
 	struct UI_IMAGE_RESOURCE
@@ -75,6 +76,9 @@ private:
 	UI_IMAGE_RESOURCE m_PetConfirmationButtonResource;
 	UI_IMAGE_RESOURCE m_ScrollBackgroundResource;
 	UI_IMAGE_RESOURCE m_ScrollResource;
+	UI_IMAGE_RESOURCE m_EmptyFrameResource;
+	UI_IMAGE_RESOURCE m_PetEnhanceButtonResource;
+	UI_IMAGE_RESOURCE m_PetEnhanceLogResources[2];
 
 	bool m_bShopActive = false;
 	SHOP_PAGE m_eShopPage = SHOP_PAGE::SLOT_MENU;
@@ -94,9 +98,11 @@ private:
 	size_t m_nPreviewPetIndex = static_cast<size_t>(-1);
 	CPet* m_pPreviewPet = NULL;
 	CCamera m_PreviewPetCamera;
+	int m_nPressedEnhanceButton = -1;
+	int m_nPendingEnhancementType = -1;
 
 	void RenderUiImage(ID3D12GraphicsCommandList* pd3dCommandList, CCamera* pCamera,
-		UI_IMAGE_RESOURCE& imageResource, const XMFLOAT4& rectangle);
+		UI_IMAGE_RESOURCE& imageResource, const XMFLOAT4& rectangle, UINT nTintColor = 0x00FFFFFF);
 	void RenderMoneyUI(ID3D12GraphicsCommandList* pd3dCommandList, CCamera* pCamera, UINT nMoney,
 		const SHOP_TEXT_RENDER_CONTEXT& textContext);
 	void RenderSolidUiRectangle(ID3D12GraphicsCommandList* pd3dCommandList, CCamera* pCamera,
@@ -119,4 +125,7 @@ private:
 	void EnsurePreviewPet(const std::vector<SHOP_PET_RENDER_RESOURCE>& pets);
 	void RenderPreviewPet(ID3D12GraphicsCommandList* pd3dCommandList, CCamera* pMainCamera,
 		const XMFLOAT4& panel, const std::vector<SHOP_PET_RENDER_RESOURCE>& pets);
+	void RenderEnhancementPage(ID3D12GraphicsCommandList* pd3dCommandList, CCamera* pCamera,
+		CPet* pActivePet, const SHOP_TEXT_RENDER_CONTEXT& textContext);
+	XMFLOAT4 GetEnhanceButtonRectangle(int nType, float fViewportWidth, float fViewportHeight) const;
 };

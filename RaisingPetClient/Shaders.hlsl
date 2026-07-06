@@ -285,5 +285,9 @@ float4 PSUiImage(VS_FULLSCREEN_OUTPUT input) : SV_TARGET
 {
 	float4 color = gFullscreenTexture.Sample(gFullscreenSampler, input.uv);
 	clip(color.a - 0.01f);
-	return color;
+	float3 tint = float3(
+		(gnPackedUIColor >> 16) & 255,
+		(gnPackedUIColor >> 8) & 255,
+		gnPackedUIColor & 255) / 255.0f;
+	return float4(color.rgb * tint, color.a);
 }

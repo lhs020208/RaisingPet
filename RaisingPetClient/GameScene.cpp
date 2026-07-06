@@ -210,6 +210,7 @@ void CGameScene::BuildObjects(ID3D12Device* pd3dDevice, ID3D12GraphicsCommandLis
 		{ '9', L"Assets/Image/Numbers/9.dds", 441, 521, 159, 136, 282, 322 },
 		{ '.', L"Assets/Image/Numbers/Point.dds", 363, 521, 161, 283, 203, 322 },
 		{ '/', L"Assets/Image/Numbers/Slash.dds", 407, 521, 144, 139, 261, 348 },
+		{ '$', L"Assets/Image/Numbers/Dollar.dds", 441, 521, 165, 116, 280, 345 },
 		{ 'k', L"Assets/Image/Spellings/k.dds", 435, 521, 166, 129, 288, 318 },
 		{ 'm', L"Assets/Image/Spellings/m.dds", 527, 521, 167, 187, 363, 319 },
 		{ 'b', L"Assets/Image/Spellings/b.dds", 453, 521, 166, 129, 295, 322 },
@@ -475,7 +476,8 @@ void CGameScene::Render(ID3D12GraphicsCommandList* pd3dCommandList, CCamera* pCa
 	shopPets.reserve(m_vPetResources.size());
 	for (PET_RENDER_RESOURCE& petResource : m_vPetResources)
 		shopPets.push_back({ petResource.pPet, petResource.pd3dSrvDescriptorHeap });
-	m_ShopUI.Render(pd3dCommandList, pCamera, m_nMoney, shopPets, GetShopTextRenderContext());
+	m_ShopUI.Render(pd3dCommandList, pCamera, m_nMoney, m_nActivePetIndex,
+		shopPets, GetShopTextRenderContext());
 }
 void CGameScene::RenderPetPossessionText(ID3D12GraphicsCommandList* pd3dCommandList, CCamera* pCamera, CPet* pPet)
 {
@@ -747,6 +749,9 @@ void CGameScene::OnProcessingMouseMessage(HWND hWnd, UINT nMessageID, WPARAM wPa
 	size_t nConfirmedPetIndex = 0;
 	if (m_ShopUI.ConsumePetConfirmationRequest(nConfirmedPetIndex))
 		ChangeActivePet(nConfirmedPetIndex);
+	int nEnhancementType = -1;
+	if (m_ShopUI.ConsumePetEnhancementRequest(nEnhancementType))
+		EnhanceActivePet(nEnhancementType);
 	if (bShopMessageProcessed)
 		return;
 
@@ -765,6 +770,22 @@ void CGameScene::ChangeActivePet(size_t petIndex)
 	selectedResource.pPet->CopyRuntimeStateFrom(*currentResource.pPet);
 	m_nActivePetIndex = static_cast<UINT>(petIndex);
 	m_pPointedPet = NULL;
+}
+
+void CGameScene::EnhanceActivePet(int enhancementType)
+{
+	if (m_nActivePetIndex >= m_vPetResources.size()) return;
+	CPet* activePet = m_vPetResources[m_nActivePetIndex].pPet;
+	if (!activePet) return;
+	auto enhancedValue = [](UINT value) -> UINT
+	{
+		const UINT64 result = (static_cast<UINT64>(value) * 11 + 9) / 10;
+		return static_cast<UINT>((result > UINT_MAX) ? UINT_MAX : result);
+	};
+	if (enhancementType == 0)
+		activePet->SetPay(enhancedValue(activePet->GetPay()));
+	else if (enhancementType == 1)
+		activePet->GetMaxPossession(enhancedValue(activePet->GetMaxPossession()));
 }
 void CGameScene::Animate(float fElapsedTime)
 {

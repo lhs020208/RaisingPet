@@ -30,7 +30,7 @@ private:
 	};
 
 	std::vector<PET_RENDER_RESOURCE> m_vPetResources;
-	UINT m_nActivePetIndex = 5;
+	UINT m_nActivePetIndex = 0;
 	CPet* m_pPointedPet = NULL;
 
 	ID3D12PipelineState* m_pd3dTextPipelineState = NULL;
@@ -61,6 +61,7 @@ private:
 	void AnimateCoinEffects(float fElapsedTime);
 	void RenderCoinEffects(ID3D12GraphicsCommandList* pd3dCommandList, CCamera* pCamera);
 	void ChangeActivePet(size_t nPetIndex);
+	void EnhanceActivePet(int nEnhancementType);
 	SHOP_TEXT_RENDER_CONTEXT GetShopTextRenderContext();
 
 public:

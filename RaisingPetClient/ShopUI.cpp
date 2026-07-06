@@ -249,6 +249,10 @@ void CShopUI::BuildObjects(ID3D12Device* device, ID3D12GraphicsCommandList* comm
 	loadImage(L"Assets/Image/PetConfirmationButton.dds", m_PetConfirmationButtonResource);
 	loadImage(L"Assets/Image/ScrollBackGround.dds", m_ScrollBackgroundResource);
 	loadImage(L"Assets/Image/Scroll.dds", m_ScrollResource);
+	loadImage(L"Assets/Image/EmptyFrame.dds", m_EmptyFrameResource);
+	loadImage(L"Assets/Image/PetEnhanceButton.dds", m_PetEnhanceButtonResource);
+	loadImage(L"Assets/Image/PetEnhanceLog1.dds", m_PetEnhanceLogResources[0]);
+	loadImage(L"Assets/Image/PetEnhanceLog2.dds", m_PetEnhanceLogResources[1]);
 }
 
 void CShopUI::ReleaseObjects()
@@ -264,7 +268,8 @@ void CShopUI::ReleaseObjects()
 		&m_ShopCloseIconResource, &m_ShopBackSpaceIconResource, &m_ShopSlotResources[0],
 		&m_ShopSlotResources[1], &m_ShopSlotResources[2], &m_ShopSlotResources[3],
 		&m_EmptySquareResources[0], &m_EmptySquareResources[1], &m_PetConfirmationButtonResource,
-		&m_ScrollBackgroundResource, &m_ScrollResource };
+		&m_ScrollBackgroundResource, &m_ScrollResource, &m_EmptyFrameResource,
+		&m_PetEnhanceButtonResource, &m_PetEnhanceLogResources[0], &m_PetEnhanceLogResources[1] };
 	for (UI_IMAGE_RESOURCE* image : images)
 	{
 		if (image->pd3dTexture) image->pd3dTexture->Release();
@@ -285,7 +290,8 @@ void CShopUI::ReleaseUploadBuffers()
 		&m_ShopCloseIconResource, &m_ShopBackSpaceIconResource, &m_ShopSlotResources[0],
 		&m_ShopSlotResources[1], &m_ShopSlotResources[2], &m_ShopSlotResources[3],
 		&m_EmptySquareResources[0], &m_EmptySquareResources[1], &m_PetConfirmationButtonResource,
-		&m_ScrollBackgroundResource, &m_ScrollResource };
+		&m_ScrollBackgroundResource, &m_ScrollResource, &m_EmptyFrameResource,
+		&m_PetEnhanceButtonResource, &m_PetEnhanceLogResources[0], &m_PetEnhanceLogResources[1] };
 	for (UI_IMAGE_RESOURCE* image : images)
 	{
 		if (image->pd3dTextureUploadBuffer)
@@ -297,7 +303,7 @@ void CShopUI::ReleaseUploadBuffers()
 }
 
 void CShopUI::RenderUiImage(ID3D12GraphicsCommandList* commandList, CCamera* camera,
-	UI_IMAGE_RESOURCE& image, const XMFLOAT4& rectangle)
+	UI_IMAGE_RESOURCE& image, const XMFLOAT4& rectangle, UINT tintColor)
 {
 	if (!m_pd3dUiImagePipelineState || !camera || !image.pd3dSrvDescriptorHeap) return;
 	const float width = camera->m_d3dViewport.Width;
@@ -310,6 +316,7 @@ void CShopUI::RenderUiImage(ID3D12GraphicsCommandList* commandList, CCamera* cam
 	commandList->SetGraphicsRootDescriptorTable(3,
 		image.pd3dSrvDescriptorHeap->GetGPUDescriptorHandleForHeapStart());
 	commandList->SetGraphicsRoot32BitConstants(4, 4, constants, 0);
+	commandList->SetGraphicsRoot32BitConstant(5, tintColor, 0);
 	commandList->SetPipelineState(m_pd3dUiImagePipelineState);
 	commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 	commandList->DrawInstanced(6, 1, 0, 0);
@@ -516,8 +523,91 @@ void CShopUI::RenderPreviewPet(ID3D12GraphicsCommandList* commandList, CCamera* 
 	mainCamera->UpdateShaderVariables(commandList);
 }
 
+XMFLOAT4 CShopUI::GetEnhanceButtonRectangle(int type, float width, float height) const
+{
+	const XMFLOAT4 panel = GetPetContentPanelRectangle(type != 0, width, height,
+		m_xmf2ShopBoardOffset.x, m_xmf2ShopBoardOffset.y);
+	const float panelWidth = panel.z - panel.x;
+	const float panelHeight = panel.w - panel.y;
+	const float buttonWidth = panelWidth * 0.45f;
+	const float buttonHeight = buttonWidth * (216.0f / 447.0f);
+	const float left = panel.x + panelWidth * 0.12f;
+	const float top = panel.y + panelHeight * 0.76f;
+	return(XMFLOAT4(left, top, left + buttonWidth, top + buttonHeight));
+}
+
+void CShopUI::RenderEnhancementPage(ID3D12GraphicsCommandList* commandList, CCamera* camera,
+	CPet* activePet, const SHOP_TEXT_RENDER_CONTEXT& context)
+{
+	if (!activePet) return;
+	const float width = camera->m_d3dViewport.Width;
+	const float height = camera->m_d3dViewport.Height;
+	auto nextValue = [](UINT value) -> UINT
+	{
+		const UINT64 enhanced = (static_cast<UINT64>(value) * 11 + 9) / 10;
+		return static_cast<UINT>((enhanced > UINT_MAX) ? UINT_MAX : enhanced);
+	};
+	auto measureText = [&context](const std::string& text, float scale) -> float
+	{
+		if (!context.pGlyphResources) return(0.0f);
+		const float gap = (scale * 8.0f > 1.0f) ? scale * 8.0f : 1.0f;
+		const float space = scale * 70.0f;
+		float result = 0.0f;
+		for (char ch : text)
+		{
+			if (ch == ' ') { result += space; continue; }
+			for (const TEXT_GLYPH_RESOURCE& glyph : *context.pGlyphResources)
+				if (glyph.ch == ch) { result += glyph.fPixelWidth * scale + gap; break; }
+		}
+		if (!text.empty() && result >= gap) result -= gap;
+		return result;
+	};
+
+	const UINT currentValues[2] = { activePet->GetPay(), activePet->GetMaxPossession() };
+	for (int type = 0; type < 2; ++type)
+	{
+		const XMFLOAT4 panel = GetPetContentPanelRectangle(type != 0, width, height,
+			m_xmf2ShopBoardOffset.x, m_xmf2ShopBoardOffset.y);
+		const float panelWidth = panel.z - panel.x;
+		const float panelHeight = panel.w - panel.y;
+		RenderUiImage(commandList, camera, m_EmptySquareResources[type], panel);
+
+		const float logWidth = panelWidth * 0.84f;
+		const float logHeight = logWidth * (193.0f / 737.0f);
+		const float logLeft = (panel.x + panel.z - logWidth) * 0.5f;
+		RenderUiImage(commandList, camera, m_PetEnhanceLogResources[type],
+			XMFLOAT4(logLeft, panel.y + panelHeight * 0.05f,
+				logLeft + logWidth, panel.y + panelHeight * 0.05f + logHeight));
+
+		const float frameWidth = panelWidth * 0.75f;
+		const float frameHeight = frameWidth * (162.0f / 743.0f);
+		const float frameLeft = (panel.x + panel.z - frameWidth) * 0.5f;
+		const float frameTops[2] = { panel.y + panelHeight * 0.30f, panel.y + panelHeight * 0.56f };
+		const UINT values[2] = { currentValues[type], nextValue(currentValues[type]) };
+		for (int frameIndex = 0; frameIndex < 2; ++frameIndex)
+		{
+			const XMFLOAT4 frame(frameLeft, frameTops[frameIndex], frameLeft + frameWidth,
+				frameTops[frameIndex] + frameHeight);
+			RenderUiImage(commandList, camera, m_EmptyFrameResource, frame);
+			const std::string text = FormatPossession(values[frameIndex])
+				+ ((type == 0) ? "$ / S" : "$");
+			const float scale = 0.12f;
+			const float textLeft = (frame.x + frame.z - measureText(text, scale)) * 0.5f;
+			const float visibleHeight = 190.0f * scale;
+			const float textTop = frame.y + ((frame.w - frame.y - visibleHeight) * 0.5f)
+				+ 129.0f * scale - frameHeight * 0.35f;
+			RenderTextLine(commandList, camera, text, textLeft, textTop, scale, 0x00000000, context);
+		}
+
+		const UINT buttonTint = (m_nPressedEnhanceButton == type) ? 0x00BFBFBF : 0x00FFFFFF;
+		RenderUiImage(commandList, camera, m_PetEnhanceButtonResource,
+			GetEnhanceButtonRectangle(type, width, height), buttonTint);
+	}
+}
+
 void CShopUI::Render(ID3D12GraphicsCommandList* commandList, CCamera* camera, UINT money,
-	const std::vector<SHOP_PET_RENDER_RESOURCE>& pets, const SHOP_TEXT_RENDER_CONTEXT& context)
+	size_t activePetIndex, const std::vector<SHOP_PET_RENDER_RESOURCE>& pets,
+	const SHOP_TEXT_RENDER_CONTEXT& context)
 {
 	if (!camera) return;
 	RebuildPetScrollMetricsIfNeeded(pets.size());
@@ -565,6 +655,11 @@ void CShopUI::Render(ID3D12GraphicsCommandList* commandList, CCamera* camera, UI
 				RenderTextLine(commandList, camera, name, leftPanel.x + 18.0f,
 					leftPanel.y + rowHeight * row + rowHeight * 0.15f, glyphScale, 0x00000000, context);
 			}
+		}
+		else if (m_eShopPage == SHOP_PAGE::SLOT_CONTENT_2)
+		{
+			CPet* activePet = (activePetIndex < pets.size()) ? pets[activePetIndex].pPet : NULL;
+			RenderEnhancementPage(commandList, camera, activePet, context);
 		}
 		RenderMoneyUI(commandList, camera, money, context);
 		RenderUiImage(commandList, camera, m_ShopBackSpaceIconResource,
@@ -626,6 +721,14 @@ bool CShopUI::ConsumePetConfirmationRequest(size_t& selectedPetIndex)
 	return(true);
 }
 
+bool CShopUI::ConsumePetEnhancementRequest(int& enhancementType)
+{
+	if (m_nPendingEnhancementType < 0) return(false);
+	enhancementType = m_nPendingEnhancementType;
+	m_nPendingEnhancementType = -1;
+	return(true);
+}
+
 bool CShopUI::IsPointOver(float x, float y, float width, float height) const
 {
 	if (IsPointInRectangle(x, y, GetShopIconRectangle(width, height))) return(true);
@@ -645,6 +748,7 @@ void CShopUI::DeactivateShop(float width, float height, size_t activePetIndex)
 	m_bShopActive = false;
 	m_bShopBoardDragging = false;
 	m_bPetScrollDragging = false;
+	m_nPressedEnhanceButton = -1;
 	ResetSelectedPet(activePetIndex, m_nCachedPetCount);
 }
 
@@ -680,6 +784,7 @@ bool CShopUI::ProcessShopUIClick(float x, float y, float width, float height, UI
 		{
 			m_eShopPage = SHOP_PAGE::SLOT_MENU;
 			m_nSelectedShopSlot = -1;
+			m_nPressedEnhanceButton = -1;
 			ResetSelectedPet(activePetIndex, petCount);
 		}
 		return(true);
@@ -721,6 +826,14 @@ bool CShopUI::ProcessShopUIClick(float x, float y, float width, float height, UI
 		}
 		if (IsPointInRectangle(x, y, left) || IsPointInRectangle(x, y, right)) return(true);
 	}
+	else if (m_eShopPage == SHOP_PAGE::SLOT_CONTENT_2)
+	{
+		const XMFLOAT4 left = GetPetContentPanelRectangle(false, width, height,
+			m_xmf2ShopBoardOffset.x, m_xmf2ShopBoardOffset.y);
+		const XMFLOAT4 right = GetPetContentPanelRectangle(true, width, height,
+			m_xmf2ShopBoardOffset.x, m_xmf2ShopBoardOffset.y);
+		if (IsPointInRectangle(x, y, left) || IsPointInRectangle(x, y, right)) return(true);
+	}
 	return(false);
 }
 
@@ -759,6 +872,16 @@ bool CShopUI::OnProcessingMouseMessage(HWND hWnd, UINT message, WPARAM wParam, L
 		break;
 	case WM_LBUTTONDOWN:
 		RebuildPetScrollMetricsIfNeeded(nPetCount);
+		if (m_bShopActive && m_eShopPage == SHOP_PAGE::SLOT_CONTENT_2)
+		{
+			for (int type = 0; type < 2; ++type)
+			{
+				if (!IsPointInRectangle(x, y, GetEnhanceButtonRectangle(type, width, height))) continue;
+				m_nPressedEnhanceButton = type;
+				SetCapture(hWnd);
+				return(true);
+			}
+		}
 		if (m_bShopActive && m_eShopPage == SHOP_PAGE::SLOT_CONTENT_1
 			&& m_nMaximumPetScrollOffset > 0
 			&& IsPointInRectangle(x, y, GetPetScrollThumbRectangle(width, height)))
@@ -834,6 +957,16 @@ bool CShopUI::OnProcessingMouseMessage(HWND hWnd, UINT message, WPARAM wParam, L
 		}
 		break;
 	case WM_LBUTTONUP:
+		if (m_nPressedEnhanceButton >= 0)
+		{
+			const int pressedButton = m_nPressedEnhanceButton;
+			m_nPressedEnhanceButton = -1;
+			if (m_bShopActive && m_eShopPage == SHOP_PAGE::SLOT_CONTENT_2
+				&& IsPointInRectangle(x, y, GetEnhanceButtonRectangle(pressedButton, width, height)))
+				m_nPendingEnhancementType = pressedButton;
+			if (GetCapture() == hWnd) ReleaseCapture();
+			return(true);
+		}
 		if (m_bPetScrollDragging) { m_bPetScrollDragging = false; return(true); }
 		if (m_bShopBoardDragging) { m_bShopBoardDragging = false; return(true); }
 		break;
