@@ -42,6 +42,7 @@ void CGameScene::BuildObjects(ID3D12Device* pd3dDevice, ID3D12GraphicsCommandLis
 		{ "Janmang", "Assets/Janmang/JanmangMesh.obj", L"Assets/Janmang/JanmangTexture.dds"},
 		{ "Poideu", "Assets/Poideu/PoideuMesh.obj", L"Assets/Poideu/PoideuTexture.dds"},
 		{ "Rune", "Assets/Rune/RuneMesh.obj", L"Assets/Rune/RuneTexture.dds"},
+		{ "Ritsu", "Assets/Ritsu/RitsuMesh.obj", L"Assets/Ritsu/RitsuTexture.dds"},
 		{ "Rope", "Assets/Rope/RopeMesh.obj", L"Assets/Rope/RopeTexture.dds"},
 		{ "Bbangbugi", "Assets/Bbangbugi/BbangbugiMesh.obj", L"Assets/Bbangbugi/BbangbugiTexture.dds" }
 	};
