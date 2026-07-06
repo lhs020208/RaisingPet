@@ -12,7 +12,7 @@ struct MONEY_UI_LAYOUT
 	float fOutlineThickness = 2.0f;
 	float fGlyphScale = 0.12f;
 	float fGlyphGap = 1.0f;
-	const char* pWidthReferenceText = "100.0k";
+	const char* pWidthReferenceText = "100.0k$";
 };
 
 struct SHOP_UI_LAYOUT
@@ -251,6 +251,7 @@ void CShopUI::BuildObjects(ID3D12Device* device, ID3D12GraphicsCommandList* comm
 	loadImage(L"Assets/Image/Scroll.dds", m_ScrollResource);
 	loadImage(L"Assets/Image/EmptyFrame.dds", m_EmptyFrameResource);
 	loadImage(L"Assets/Image/PetEnhanceButton.dds", m_PetEnhanceButtonResource);
+	loadImage(L"Assets/Image/PetEnhancePriceFrame.dds", m_PetEnhancePriceFrameResource);
 	loadImage(L"Assets/Image/PetEnhanceLog1.dds", m_PetEnhanceLogResources[0]);
 	loadImage(L"Assets/Image/PetEnhanceLog2.dds", m_PetEnhanceLogResources[1]);
 }
@@ -269,7 +270,8 @@ void CShopUI::ReleaseObjects()
 		&m_ShopSlotResources[1], &m_ShopSlotResources[2], &m_ShopSlotResources[3],
 		&m_EmptySquareResources[0], &m_EmptySquareResources[1], &m_PetConfirmationButtonResource,
 		&m_ScrollBackgroundResource, &m_ScrollResource, &m_EmptyFrameResource,
-		&m_PetEnhanceButtonResource, &m_PetEnhanceLogResources[0], &m_PetEnhanceLogResources[1] };
+		&m_PetEnhanceButtonResource, &m_PetEnhancePriceFrameResource,
+		&m_PetEnhanceLogResources[0], &m_PetEnhanceLogResources[1] };
 	for (UI_IMAGE_RESOURCE* image : images)
 	{
 		if (image->pd3dTexture) image->pd3dTexture->Release();
@@ -291,7 +293,8 @@ void CShopUI::ReleaseUploadBuffers()
 		&m_ShopSlotResources[1], &m_ShopSlotResources[2], &m_ShopSlotResources[3],
 		&m_EmptySquareResources[0], &m_EmptySquareResources[1], &m_PetConfirmationButtonResource,
 		&m_ScrollBackgroundResource, &m_ScrollResource, &m_EmptyFrameResource,
-		&m_PetEnhanceButtonResource, &m_PetEnhanceLogResources[0], &m_PetEnhanceLogResources[1] };
+		&m_PetEnhanceButtonResource, &m_PetEnhancePriceFrameResource,
+		&m_PetEnhanceLogResources[0], &m_PetEnhanceLogResources[1] };
 	for (UI_IMAGE_RESOURCE* image : images)
 	{
 		if (image->pd3dTextureUploadBuffer)
@@ -401,7 +404,7 @@ XMFLOAT4 CShopUI::GetMoneyUiRectangle(float width, float height, UINT money,
 	if (fixedWidth > 0.0f) fixedWidth -= gMoneyUiLayout.fGlyphGap;
 	float minimumTop = FLT_MAX;
 	float maximumBottom = -FLT_MAX;
-	for (char ch : FormatPossession(money))
+	for (char ch : FormatPossession(money) + "$")
 	{
 		const TEXT_GLYPH_RESOURCE* glyph = findGlyph(ch);
 		if (!glyph) continue;
@@ -423,7 +426,7 @@ void CShopUI::RenderMoneyUI(ID3D12GraphicsCommandList* commandList, CCamera* cam
 	const SHOP_TEXT_RENDER_CONTEXT& context)
 {
 	if (!context.pGlyphResources || !camera) return;
-	const std::string text = FormatPossession(money);
+	const std::string text = FormatPossession(money) + "$";
 	float textWidth = 0.0f;
 	float minimumTop = FLT_MAX;
 	for (char ch : text)
@@ -529,15 +532,26 @@ XMFLOAT4 CShopUI::GetEnhanceButtonRectangle(int type, float width, float height)
 		m_xmf2ShopBoardOffset.x, m_xmf2ShopBoardOffset.y);
 	const float panelWidth = panel.z - panel.x;
 	const float panelHeight = panel.w - panel.y;
-	const float buttonWidth = panelWidth * 0.45f;
+	const float buttonWidth = panelWidth * 0.40f;
 	const float buttonHeight = buttonWidth * (216.0f / 447.0f);
-	const float left = panel.x + panelWidth * 0.12f;
+	const float left = panel.x + panelWidth * 0.06f;
 	const float top = panel.y + panelHeight * 0.76f;
 	return(XMFLOAT4(left, top, left + buttonWidth, top + buttonHeight));
 }
 
+XMFLOAT4 CShopUI::GetEnhancePriceRectangle(int type, float width, float height) const
+{
+	const XMFLOAT4 button = GetEnhanceButtonRectangle(type, width, height);
+	const float buttonHeight = button.w - button.y;
+	const float priceHeight = buttonHeight * 0.70f;
+	const float priceWidth = buttonHeight * (493.0f / 213.0f);
+	const float gap = (button.z - button.x) * 0.05f;
+	const float top = (button.y + button.w - priceHeight) * 0.5f;
+	return(XMFLOAT4(button.z + gap, top, button.z + gap + priceWidth, top + priceHeight));
+}
+
 void CShopUI::RenderEnhancementPage(ID3D12GraphicsCommandList* commandList, CCamera* camera,
-	CPet* activePet, const SHOP_TEXT_RENDER_CONTEXT& context)
+	CPet* activePet, UINT money, const SHOP_TEXT_RENDER_CONTEXT& context)
 {
 	if (!activePet) return;
 	const float width = camera->m_d3dViewport.Width;
@@ -546,6 +560,13 @@ void CShopUI::RenderEnhancementPage(ID3D12GraphicsCommandList* commandList, CCam
 	{
 		const UINT64 enhanced = (static_cast<UINT64>(value) * 11 + 9) / 10;
 		return static_cast<UINT>((enhanced > UINT_MAX) ? UINT_MAX : enhanced);
+	};
+	auto enhancementPrice = [](UINT value, int type) -> UINT
+	{
+		const UINT64 price = (type == 0)
+			? static_cast<UINT64>(value) * 10
+			: (static_cast<UINT64>(value) * 4 + 4) / 5;
+		return static_cast<UINT>((price > UINT_MAX) ? UINT_MAX : price);
 	};
 	auto measureText = [&context](const std::string& text, float scale) -> float
 	{
@@ -602,6 +623,17 @@ void CShopUI::RenderEnhancementPage(ID3D12GraphicsCommandList* commandList, CCam
 		const UINT buttonTint = (m_nPressedEnhanceButton == type) ? 0x00BFBFBF : 0x00FFFFFF;
 		RenderUiImage(commandList, camera, m_PetEnhanceButtonResource,
 			GetEnhanceButtonRectangle(type, width, height), buttonTint);
+		const XMFLOAT4 priceFrame = GetEnhancePriceRectangle(type, width, height);
+		RenderUiImage(commandList, camera, m_PetEnhancePriceFrameResource, priceFrame);
+		const UINT price = enhancementPrice(currentValues[type], type);
+		const std::string priceText = FormatPossession(price) + "$";
+		const float priceScale = 0.12f;
+		const float priceLeft = (priceFrame.x + priceFrame.z - measureText(priceText, priceScale)) * 0.5f;
+		const float priceVisibleHeight = 190.0f * priceScale;
+		const float priceTop = priceFrame.y + ((priceFrame.w - priceFrame.y - priceVisibleHeight) * 0.5f)
+			+ 129.0f * priceScale - (priceFrame.w - priceFrame.y) * 0.38f;
+		RenderTextLine(commandList, camera, priceText, priceLeft, priceTop, priceScale,
+			(money < price) ? 0x00FF0000 : 0x00000000, context);
 	}
 }
 
@@ -659,7 +691,7 @@ void CShopUI::Render(ID3D12GraphicsCommandList* commandList, CCamera* camera, UI
 		else if (m_eShopPage == SHOP_PAGE::SLOT_CONTENT_2)
 		{
 			CPet* activePet = (activePetIndex < pets.size()) ? pets[activePetIndex].pPet : NULL;
-			RenderEnhancementPage(commandList, camera, activePet, context);
+			RenderEnhancementPage(commandList, camera, activePet, money, context);
 		}
 		RenderMoneyUI(commandList, camera, money, context);
 		RenderUiImage(commandList, camera, m_ShopBackSpaceIconResource,

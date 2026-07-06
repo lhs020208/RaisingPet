@@ -78,6 +78,7 @@ private:
 	UI_IMAGE_RESOURCE m_ScrollResource;
 	UI_IMAGE_RESOURCE m_EmptyFrameResource;
 	UI_IMAGE_RESOURCE m_PetEnhanceButtonResource;
+	UI_IMAGE_RESOURCE m_PetEnhancePriceFrameResource;
 	UI_IMAGE_RESOURCE m_PetEnhanceLogResources[2];
 
 	bool m_bShopActive = false;
@@ -126,6 +127,7 @@ private:
 	void RenderPreviewPet(ID3D12GraphicsCommandList* pd3dCommandList, CCamera* pMainCamera,
 		const XMFLOAT4& panel, const std::vector<SHOP_PET_RENDER_RESOURCE>& pets);
 	void RenderEnhancementPage(ID3D12GraphicsCommandList* pd3dCommandList, CCamera* pCamera,
-		CPet* pActivePet, const SHOP_TEXT_RENDER_CONTEXT& textContext);
+		CPet* pActivePet, UINT nMoney, const SHOP_TEXT_RENDER_CONTEXT& textContext);
 	XMFLOAT4 GetEnhanceButtonRectangle(int nType, float fViewportWidth, float fViewportHeight) const;
+	XMFLOAT4 GetEnhancePriceRectangle(int nType, float fViewportWidth, float fViewportHeight) const;
 };

@@ -782,10 +782,24 @@ void CGameScene::EnhanceActivePet(int enhancementType)
 		const UINT64 result = (static_cast<UINT64>(value) * 11 + 9) / 10;
 		return static_cast<UINT>((result > UINT_MAX) ? UINT_MAX : result);
 	};
+	auto enhancementPrice = [](UINT value, int type) -> UINT
+	{
+		const UINT64 result = (type == 0)
+			? static_cast<UINT64>(value) * 10
+			: (static_cast<UINT64>(value) * 4 + 4) / 5;
+		return static_cast<UINT>((result > UINT_MAX) ? UINT_MAX : result);
+	};
+	if (enhancementType != 0 && enhancementType != 1) return;
+	const UINT currentValue = (enhancementType == 0)
+		? activePet->GetPay() : activePet->GetMaxPossession();
+	const UINT nextValue = enhancedValue(currentValue);
+	if (nextValue == currentValue) return;
+	const UINT price = enhancementPrice(currentValue, enhancementType);
+	if (!DiscountMoney(price)) return;
 	if (enhancementType == 0)
-		activePet->SetPay(enhancedValue(activePet->GetPay()));
+		activePet->SetPay(nextValue);
 	else if (enhancementType == 1)
-		activePet->GetMaxPossession(enhancedValue(activePet->GetMaxPossession()));
+		activePet->GetMaxPossession(nextValue);
 }
 void CGameScene::Animate(float fElapsedTime)
 {
