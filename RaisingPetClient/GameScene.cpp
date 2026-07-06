@@ -39,15 +39,10 @@ void CGameScene::BuildObjects(ID3D12Device* pd3dDevice, ID3D12GraphicsCommandLis
 	{
 		{ "TheCA", "Assets/TheCA/TheCAMesh.obj", L"Assets/TheCA/TheCATexture.dds"},
 		{ "Touma", "Assets/Touma/ToumaMesh.obj", L"Assets/Touma/ToumaTexture.dds"},
-		/*{ "Touma1", "Assets/Touma/ToumaMesh.obj", L"Assets/Touma/ToumaTexture.dds"},
-		{ "Touma2", "Assets/Touma/ToumaMesh.obj", L"Assets/Touma/ToumaTexture.dds"},
-		{ "Touma3", "Assets/Touma/ToumaMesh.obj", L"Assets/Touma/ToumaTexture.dds"},
-		{ "Touma4", "Assets/Touma/ToumaMesh.obj", L"Assets/Touma/ToumaTexture.dds"},
-		{ "Touma5", "Assets/Touma/ToumaMesh.obj", L"Assets/Touma/ToumaTexture.dds"},
-		{ "Touma6", "Assets/Touma/ToumaMesh.obj", L"Assets/Touma/ToumaTexture.dds"},*/
 		{ "Janmang", "Assets/Janmang/JanmangMesh.obj", L"Assets/Janmang/JanmangTexture.dds"},
 		{ "Poideu", "Assets/Poideu/PoideuMesh.obj", L"Assets/Poideu/PoideuTexture.dds"},
-		{ "Rune", "Assets/Rune/RuneMesh.obj", L"Assets/Rune/RuneTexture.dds"}
+		{ "Rune", "Assets/Rune/RuneMesh.obj", L"Assets/Rune/RuneTexture.dds"},
+		{ "Bbangbugi", "Assets/Bbangbugi/BbangbugiMesh.obj", L"Assets/Bbangbugi/BbangbugiTexture.dds" }
 	};
 
 	CPseudoLightingShader* pObjectShader = new CPseudoLightingShader();
