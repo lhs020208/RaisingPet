@@ -68,6 +68,23 @@ std::string FormatPossession(UINT nValue)
 	return(std::to_string(nTenths / 10) + "." + std::to_string(nTenths % 10) + suffixes[nSuffixIndex]);
 }
 
+std::string FormatPossessionTwoDecimals(UINT nValue)
+{
+	if (nValue < 1000) return(std::to_string(nValue));
+	static const char suffixes[] = { 'k', 'm', 'b' };
+	UINT64 divisor = 1000;
+	int suffixIndex = 0;
+	while ((nValue / divisor) >= 1000 && suffixIndex < 2)
+	{
+		divisor *= 1000;
+		++suffixIndex;
+	}
+	const UINT64 hundredths = (static_cast<UINT64>(nValue) * 100) / divisor;
+	const UINT64 fraction = hundredths % 100;
+	return(std::to_string(hundredths / 100) + "."
+		+ ((fraction < 10) ? "0" : "") + std::to_string(fraction) + suffixes[suffixIndex]);
+}
+
 bool IsPointInRectangle(float x, float y, const XMFLOAT4& rectangle)
 {
 	return(x >= rectangle.x && x <= rectangle.z && y >= rectangle.y && y <= rectangle.w);
@@ -556,9 +573,14 @@ void CShopUI::RenderEnhancementPage(ID3D12GraphicsCommandList* commandList, CCam
 	if (!activePet) return;
 	const float width = camera->m_d3dViewport.Width;
 	const float height = camera->m_d3dViewport.Height;
-	auto nextValue = [](UINT value) -> UINT
+	auto nextValue = [](UINT value, int type) -> UINT
 	{
-		const UINT64 enhanced = (static_cast<UINT64>(value) * 11 + 9) / 10;
+		UINT ratePercent = 110;
+		if ((type == 0 && value >= 1000) || (type == 1 && value >= 10000))
+			ratePercent = 101;
+		else if ((type == 0 && value >= 100) || (type == 1 && value >= 1000))
+			ratePercent = 105;
+		const UINT64 enhanced = (static_cast<UINT64>(value) * ratePercent + 99) / 100;
 		return static_cast<UINT>((enhanced > UINT_MAX) ? UINT_MAX : enhanced);
 	};
 	auto enhancementPrice = [](UINT value, int type) -> UINT
@@ -604,13 +626,14 @@ void CShopUI::RenderEnhancementPage(ID3D12GraphicsCommandList* commandList, CCam
 		const float frameHeight = frameWidth * (162.0f / 743.0f);
 		const float frameLeft = (panel.x + panel.z - frameWidth) * 0.5f;
 		const float frameTops[2] = { panel.y + panelHeight * 0.30f, panel.y + panelHeight * 0.56f };
-		const UINT values[2] = { currentValues[type], nextValue(currentValues[type]) };
+		const UINT values[2] = { currentValues[type], nextValue(currentValues[type], type) };
 		for (int frameIndex = 0; frameIndex < 2; ++frameIndex)
 		{
 			const XMFLOAT4 frame(frameLeft, frameTops[frameIndex], frameLeft + frameWidth,
 				frameTops[frameIndex] + frameHeight);
 			RenderUiImage(commandList, camera, m_EmptyFrameResource, frame);
-			const std::string text = FormatPossession(values[frameIndex])
+			const std::string text = ((type == 1)
+				? FormatPossessionTwoDecimals(values[frameIndex]) : FormatPossession(values[frameIndex]))
 				+ ((type == 0) ? "$ / S" : "$");
 			const float scale = 0.12f;
 			const float textLeft = (frame.x + frame.z - measureText(text, scale)) * 0.5f;

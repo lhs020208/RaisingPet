@@ -778,9 +778,14 @@ void CGameScene::EnhanceActivePet(int enhancementType)
 	if (m_nActivePetIndex >= m_vPetResources.size()) return;
 	CPet* activePet = m_vPetResources[m_nActivePetIndex].pPet;
 	if (!activePet) return;
-	auto enhancedValue = [](UINT value) -> UINT
+	auto enhancedValue = [](UINT value, int type) -> UINT
 	{
-		const UINT64 result = (static_cast<UINT64>(value) * 11 + 9) / 10;
+		UINT ratePercent = 110;
+		if ((type == 0 && value >= 1000) || (type == 1 && value >= 10000))
+			ratePercent = 101;
+		else if ((type == 0 && value >= 100) || (type == 1 && value >= 1000))
+			ratePercent = 105;
+		const UINT64 result = (static_cast<UINT64>(value) * ratePercent + 99) / 100;
 		return static_cast<UINT>((result > UINT_MAX) ? UINT_MAX : result);
 	};
 	auto enhancementPrice = [](UINT value, int type) -> UINT
@@ -793,7 +798,7 @@ void CGameScene::EnhanceActivePet(int enhancementType)
 	if (enhancementType != 0 && enhancementType != 1) return;
 	const UINT currentValue = (enhancementType == 0)
 		? activePet->GetPay() : activePet->GetMaxPossession();
-	const UINT nextValue = enhancedValue(currentValue);
+	const UINT nextValue = enhancedValue(currentValue, enhancementType);
 	if (nextValue == currentValue) return;
 	const UINT price = enhancementPrice(currentValue, enhancementType);
 	if (!DiscountMoney(price)) return;
