@@ -105,6 +105,9 @@
     <ClCompile Include="Mesh.cpp">
       <Filter>Code\Mesh</Filter>
     </ClCompile>
+	<ClCompile Include="MeshBinLoader.cpp">
+	  <Filter>Code\Mesh</Filter>
+	</ClCompile>
     <ClCompile Include="Camera.cpp">
       <Filter>Code\Camera</Filter>
     </ClCompile>

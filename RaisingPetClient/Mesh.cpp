@@ -28,7 +28,14 @@ void CPolygon::SetVertex(int nIndex, CVertex& vertex)
 
 CMesh::CMesh(ID3D12Device *pd3dDevice, ID3D12GraphicsCommandList *pd3dCommandList, char *pstrFileName)
 {
-	if (pstrFileName) LoadMeshFromFile(pd3dDevice, pd3dCommandList, pstrFileName);
+	if (pstrFileName)
+	{
+		const char* pExtension = strrchr(pstrFileName, '.');
+		if (pExtension && _stricmp(pExtension, ".bin") == 0)
+			LoadMeshFromBin(pd3dDevice, pd3dCommandList, pstrFileName);
+		else
+			LoadMeshFromFile(pd3dDevice, pd3dCommandList, pstrFileName);
+	}
 }
 CMesh::CMesh(int nPolygons)
 {
