@@ -34,7 +34,6 @@ CGameFramework::CGameFramework()
 	m_nWndClientWidth = FRAME_BUFFER_WIDTH;
 	m_nWndClientHeight = FRAME_BUFFER_HEIGHT;
 
-	m_pScene = NULL;
 	m_pCamera = NULL;
 
 	_tcscpy_s(m_pszFrameRate, _T("RaisingPet ("));
@@ -281,7 +280,8 @@ void CGameFramework::ChangeSwapChainState()
 }
 void CGameFramework::OnProcessingMouseMessage(HWND hWnd, UINT nMessageID, WPARAM wParam, LPARAM lParam)
 {
-	if (m_pScene) m_pScene->OnProcessingMouseMessage(hWnd, nMessageID, wParam, lParam);
+	CScene* pScene = m_SceneManager.GetCurrentScene();
+	if (pScene) pScene->OnProcessingMouseMessage(hWnd, nMessageID, wParam, lParam);
 
 	switch (nMessageID)
 	{
@@ -303,7 +303,8 @@ void CGameFramework::OnProcessingMouseMessage(HWND hWnd, UINT nMessageID, WPARAM
 
 void CGameFramework::OnProcessingKeyboardMessage(HWND hWnd, UINT nMessageID, WPARAM wParam, LPARAM lParam)
 {
-	if (m_pScene) m_pScene->OnProcessingKeyboardMessage(hWnd, nMessageID, wParam, lParam);
+	CScene* pScene = m_SceneManager.GetCurrentScene();
+	if (pScene) pScene->OnProcessingKeyboardMessage(hWnd, nMessageID, wParam, lParam);
 
 	switch (nMessageID)
 	{
@@ -392,11 +393,6 @@ void CGameFramework::OnDestroy()
 
 void CGameFramework::BuildObjects()
 {
-	m_pd3dCommandList->Reset(m_pd3dCommandAllocator, NULL);
-
-	m_pScene = new CGameScene();
-	m_pScene->BuildGraphicsRootSignature(m_pd3dDevice); // 따로 분리한 함수
-	auto pRootSignature = m_pScene->GetGraphicsRootSignature();
 
 	m_pCamera = new CCamera();
 	m_pCamera->SetViewport(0, 0, m_nWndClientWidth, m_nWndClientHeight);
@@ -407,15 +403,9 @@ void CGameFramework::BuildObjects()
 		XMFLOAT3(0.0f, 1.0f, 0.0f));
 	m_pCamera->GenerateProjectionMatrix(0.1f, 1000.0f, float(m_nWndClientWidth) / float(m_nWndClientHeight), 60.0f);
 
-	if (m_pScene) m_pScene->BuildObjects(m_pd3dDevice, m_pd3dCommandList);
+	m_SceneManager.RequestSceneChange(SCENE_TYPE::LOGIN);
+	ProcessSceneChange();
 
-	m_pd3dCommandList->Close();
-	ID3D12CommandList *ppd3dCommandLists[] = { m_pd3dCommandList };
-	m_pd3dCommandQueue->ExecuteCommandLists(1, ppd3dCommandLists);
-
-	WaitForGpuComplete();
-
-	if (m_pScene) m_pScene->ReleaseUploadBuffers();
 
 	m_GameTimer.Reset();
 }
@@ -425,10 +415,27 @@ void CGameFramework::ReleaseObjects()
 	if (m_pCamera) delete m_pCamera;
 	m_pCamera = NULL;
 
-	if (m_pScene) m_pScene->ReleaseObjects();
-	if (m_pScene) delete m_pScene;
+	m_SceneManager.ReleaseCurrentScene();
 }
 
+void CGameFramework::ProcessSceneChange()
+{
+	if (!m_SceneManager.HasPendingSceneChange()) return;
+	WaitForGpuComplete();
+	m_pd3dCommandAllocator->Reset();
+	m_pd3dCommandList->Reset(m_pd3dCommandAllocator, NULL);
+	CScene* pScene = m_SceneManager.ApplyPendingSceneChange();
+	if (pScene)
+	{
+		pScene->BuildGraphicsRootSignature(m_pd3dDevice);
+		pScene->BuildObjects(m_pd3dDevice, m_pd3dCommandList);
+	}
+	m_pd3dCommandList->Close();
+	ID3D12CommandList* commandLists[] = { m_pd3dCommandList };
+	m_pd3dCommandQueue->ExecuteCommandLists(1, commandLists);
+	WaitForGpuComplete();
+	if (pScene) pScene->ReleaseUploadBuffers();
+}
 void CGameFramework::ProcessInput()
 {
 	// Keep the native cursor visible and allow it to move while interacting with pets and UI.
@@ -436,7 +443,8 @@ void CGameFramework::ProcessInput()
 
 void CGameFramework::AnimateObjects()
 {
-	if (m_pScene) m_pScene->Animate(m_GameTimer.GetTimeElapsed());
+	CScene* pScene = m_SceneManager.GetCurrentScene();
+	if (pScene) pScene->Animate(m_GameTimer.GetTimeElapsed());
 }
 
 void CGameFramework::CreateShaderVariables()
@@ -492,18 +500,19 @@ void CGameFramework::MoveToNextFrame()
 
 bool CGameFramework::IsPointOverPet(int xClient, int yClient)
 {
-	if (!m_hWnd || !m_pScene || !m_pCamera) return(false);
+	CScene* pScene = m_SceneManager.GetCurrentScene();
+	if (!m_hWnd || !pScene || !m_pCamera) return(false);
 
 	RECT clientRect;
 	::GetClientRect(m_hWnd, &clientRect);
 	POINT clientPoint = { xClient, yClient };
 	if (!::PtInRect(&clientRect, clientPoint)) return(false);
 
-	return(m_pScene->PickObjectPointedByCursor(xClient, yClient, m_pCamera) != NULL);
+	return(pScene->PickObjectPointedByCursor(xClient, yClient, m_pCamera) != NULL);
 }
 void CGameFramework::UpdateMouseTransparency()
 {
-	if (!m_hWnd || !m_pScene || !m_pCamera) return;
+	if (!m_hWnd || !m_SceneManager.GetCurrentScene() || !m_pCamera) return;
 
 	POINT cursorPosition;
 	::GetCursorPos(&cursorPosition);
@@ -528,6 +537,7 @@ void CGameFramework::UpdateMouseTransparency()
 }
 void CGameFramework::FrameAdvance()
 {    
+	ProcessSceneChange();
 	m_GameTimer.Tick(0.0f);
 	
 	ProcessInput();
@@ -560,9 +570,10 @@ void CGameFramework::FrameAdvance()
 
 	m_pd3dCommandList->OMSetRenderTargets(1, &d3dRtvCPUDescriptorHandle, TRUE, &d3dDsvCPUDescriptorHandle);
 
-	if (m_pScene) m_pScene->PrepareRender(m_pd3dCommandList);
+	CScene* pScene = m_SceneManager.GetCurrentScene();
+	if (pScene) pScene->PrepareRender(m_pd3dCommandList);
 	UpdateShaderVariables();
-	if (m_pScene) m_pScene->Render(m_pd3dCommandList, m_pCamera);
+	if (pScene) pScene->Render(m_pd3dCommandList, m_pCamera);
 
 #ifdef _WITH_PLAYER_TOP
 	m_pd3dCommandList->ClearDepthStencilView(d3dDsvCPUDescriptorHandle, D3D12_CLEAR_FLAG_DEPTH | D3D12_CLEAR_FLAG_STENCIL, 1.0f, 0, 0, NULL);

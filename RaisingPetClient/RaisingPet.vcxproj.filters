@@ -82,6 +82,12 @@
     <ClInclude Include="GameScene.h">
       <Filter>Code\Scene</Filter>
     </ClInclude>
+	<ClInclude Include="LoginScene.h">
+	  <Filter>Code\Scene</Filter>
+	</ClInclude>
+	<ClInclude Include="SceneManager.h">
+	  <Filter>Code\Scene</Filter>
+	</ClInclude>
     <ClInclude Include="ShopUI.h">
       <Filter>Code\Scene</Filter>
     </ClInclude>
@@ -120,6 +126,12 @@
     <ClCompile Include="GameScene.cpp">
       <Filter>Code\Scene</Filter>
     </ClCompile>
+	<ClCompile Include="LoginScene.cpp">
+	  <Filter>Code\Scene</Filter>
+	</ClCompile>
+	<ClCompile Include="SceneManager.cpp">
+	  <Filter>Code\Scene</Filter>
+	</ClCompile>
     <ClCompile Include="ShopUI.cpp">
       <Filter>Code\Scene</Filter>
     </ClCompile>
