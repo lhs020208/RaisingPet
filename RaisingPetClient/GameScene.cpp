@@ -61,9 +61,9 @@ void CGameScene::BuildObjects(ID3D12Device* pd3dDevice, ID3D12GraphicsCommandLis
 		petResource.pPet->SetName(petAsset.pName);
 		petResource.pPet->SetShader(pObjectShader);
 		petResource.pPet->SetPosition(0.0f, -28.0f, 0.0f);
-		petResource.pPet->SetPay(10);
+		petResource.pPet->SetPay(1);
 		petResource.pPet->GetNowPossession(0);
-		petResource.pPet->GetMaxPossession(100);
+		petResource.pPet->GetMaxPossession(20);
 
 		std::unique_ptr<uint8_t[]> textureData;
 		std::vector<D3D12_SUBRESOURCE_DATA> textureSubresources;
@@ -212,6 +212,7 @@ void CGameScene::BuildObjects(ID3D12Device* pd3dDevice, ID3D12GraphicsCommandLis
 		{ '.', L"Assets/Image/Numbers/Point.dds", 363, 521, 161, 283, 203, 322 },
 		{ '/', L"Assets/Image/Numbers/Slash.dds", 407, 521, 144, 139, 261, 348 },
 		{ '$', L"Assets/Image/Numbers/Dollar.dds", 441, 521, 165, 116, 280, 345 },
+		{ '-', L"Assets/Image/Numbers/Hyphen.dds", 400, 521, 166, 237, 235, 262 },
 		{ 'k', L"Assets/Image/Spellings/k.dds", 435, 521, 166, 129, 288, 318 },
 		{ 'm', L"Assets/Image/Spellings/m.dds", 527, 521, 167, 187, 363, 319 },
 		{ 'b', L"Assets/Image/Spellings/b.dds", 453, 521, 166, 129, 295, 322 },
@@ -780,19 +781,25 @@ void CGameScene::EnhanceActivePet(int enhancementType)
 	if (!activePet) return;
 	auto enhancedValue = [](UINT value, int type) -> UINT
 	{
-		UINT ratePercent = 110;
-		if ((type == 0 && value >= 1000) || (type == 1 && value >= 10000))
-			ratePercent = 101;
-		else if ((type == 0 && value >= 100) || (type == 1 && value >= 1000))
-			ratePercent = 105;
-		const UINT64 result = (static_cast<UINT64>(value) * ratePercent + 99) / 100;
-		return static_cast<UINT>((result > UINT_MAX) ? UINT_MAX : result);
+		const UINT maxValue = (type == 0) ? 1000 : 10000;
+		if (value >= maxValue) return value;
+		UINT64 result = 0;
+		if (type == 0)
+			result = (value < 100) ? static_cast<UINT64>(value) + 1
+				: (static_cast<UINT64>(value) * 101 + 99) / 100;
+		else
+			result = (value < 1000) ? static_cast<UINT64>(value) + 10
+				: (static_cast<UINT64>(value) * 101 + 99) / 100;
+		if (result > maxValue) result = maxValue;
+		return static_cast<UINT>(result);
 	};
 	auto enhancementPrice = [](UINT value, int type) -> UINT
 	{
+		const UINT maxValue = (type == 0) ? 1000 : 10000;
+		if (value >= maxValue) return UINT_MAX;
 		const UINT64 result = (type == 0)
-			? static_cast<UINT64>(value) * 10
-			: (static_cast<UINT64>(value) * 4 + 4) / 5;
+			? 100 + (static_cast<UINT64>(value) * value * 7 + 9) / 10
+			: 50 + (static_cast<UINT64>(value) * 3 + 1) / 2;
 		return static_cast<UINT>((result > UINT_MAX) ? UINT_MAX : result);
 	};
 	if (enhancementType != 0 && enhancementType != 1) return;

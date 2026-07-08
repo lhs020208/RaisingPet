@@ -575,19 +575,25 @@ void CShopUI::RenderEnhancementPage(ID3D12GraphicsCommandList* commandList, CCam
 	const float height = camera->m_d3dViewport.Height;
 	auto nextValue = [](UINT value, int type) -> UINT
 	{
-		UINT ratePercent = 110;
-		if ((type == 0 && value >= 1000) || (type == 1 && value >= 10000))
-			ratePercent = 101;
-		else if ((type == 0 && value >= 100) || (type == 1 && value >= 1000))
-			ratePercent = 105;
-		const UINT64 enhanced = (static_cast<UINT64>(value) * ratePercent + 99) / 100;
-		return static_cast<UINT>((enhanced > UINT_MAX) ? UINT_MAX : enhanced);
+		const UINT maxValue = (type == 0) ? 1000 : 10000;
+		if (value >= maxValue) return value;
+		UINT64 enhanced = 0;
+		if (type == 0)
+			enhanced = (value < 100) ? static_cast<UINT64>(value) + 1
+				: (static_cast<UINT64>(value) * 101 + 99) / 100;
+		else
+			enhanced = (value < 1000) ? static_cast<UINT64>(value) + 10
+				: (static_cast<UINT64>(value) * 101 + 99) / 100;
+		if (enhanced > maxValue) enhanced = maxValue;
+		return static_cast<UINT>(enhanced);
 	};
 	auto enhancementPrice = [](UINT value, int type) -> UINT
 	{
+		const UINT maxValue = (type == 0) ? 1000 : 10000;
+		if (value >= maxValue) return UINT_MAX;
 		const UINT64 price = (type == 0)
-			? static_cast<UINT64>(value) * 10
-			: (static_cast<UINT64>(value) * 4 + 4) / 5;
+			? 100 + (static_cast<UINT64>(value) * value * 7 + 9) / 10
+			: 50 + (static_cast<UINT64>(value) * 3 + 1) / 2;
 		return static_cast<UINT>((price > UINT_MAX) ? UINT_MAX : price);
 	};
 	auto measureText = [&context](const std::string& text, float scale) -> float
@@ -626,15 +632,18 @@ void CShopUI::RenderEnhancementPage(ID3D12GraphicsCommandList* commandList, CCam
 		const float frameHeight = frameWidth * (162.0f / 743.0f);
 		const float frameLeft = (panel.x + panel.z - frameWidth) * 0.5f;
 		const float frameTops[2] = { panel.y + panelHeight * 0.30f, panel.y + panelHeight * 0.56f };
+		const bool maxEnhanced = (type == 0) ? (currentValues[type] >= 1000) : (currentValues[type] >= 10000);
 		const UINT values[2] = { currentValues[type], nextValue(currentValues[type], type) };
 		for (int frameIndex = 0; frameIndex < 2; ++frameIndex)
 		{
 			const XMFLOAT4 frame(frameLeft, frameTops[frameIndex], frameLeft + frameWidth,
 				frameTops[frameIndex] + frameHeight);
 			RenderUiImage(commandList, camera, m_EmptyFrameResource, frame);
-			const std::string text = ((type == 1)
-				? FormatPossessionTwoDecimals(values[frameIndex]) : FormatPossession(values[frameIndex]))
-				+ ((type == 0) ? "$ / S" : "$");
+			const std::string text = (maxEnhanced && frameIndex == 1)
+				? "-"
+				: (((type == 1)
+					? FormatPossessionTwoDecimals(values[frameIndex]) : FormatPossession(values[frameIndex]))
+					+ ((type == 0) ? "$ / S" : "$"));
 			const float scale = 0.12f;
 			const float textLeft = (frame.x + frame.z - measureText(text, scale)) * 0.5f;
 			const float visibleHeight = 190.0f * scale;
@@ -649,14 +658,14 @@ void CShopUI::RenderEnhancementPage(ID3D12GraphicsCommandList* commandList, CCam
 		const XMFLOAT4 priceFrame = GetEnhancePriceRectangle(type, width, height);
 		RenderUiImage(commandList, camera, m_PetEnhancePriceFrameResource, priceFrame);
 		const UINT price = enhancementPrice(currentValues[type], type);
-		const std::string priceText = FormatPossession(price) + "$";
+		const std::string priceText = maxEnhanced ? "-" : (FormatPossession(price) + "$");
 		const float priceScale = 0.12f;
 		const float priceLeft = (priceFrame.x + priceFrame.z - measureText(priceText, priceScale)) * 0.5f;
 		const float priceVisibleHeight = 190.0f * priceScale;
 		const float priceTop = priceFrame.y + ((priceFrame.w - priceFrame.y - priceVisibleHeight) * 0.5f)
 			+ 129.0f * priceScale - (priceFrame.w - priceFrame.y) * 0.38f;
 		RenderTextLine(commandList, camera, priceText, priceLeft, priceTop, priceScale,
-			(money < price) ? 0x00FF0000 : 0x00000000, context);
+			(!maxEnhanced && money < price) ? 0x00FF0000 : 0x00000000, context);
 	}
 }
 

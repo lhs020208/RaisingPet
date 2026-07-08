@@ -130,7 +130,7 @@ public:
 
 private:
 	string m_sName;
-	UINT m_nPay = 10;
-	UINT m_nMaxPossession = 100;
+	UINT m_nPay = 1;
+	UINT m_nMaxPossession = 20;
 	UINT m_nNowPossession = 0;
 };
