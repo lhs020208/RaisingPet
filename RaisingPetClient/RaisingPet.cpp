@@ -142,6 +142,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 	case WM_RBUTTONUP:
 	case WM_MOUSEMOVE:
 	case WM_MOUSEWHEEL:
+	case WM_CHAR:
 	case WM_KEYDOWN:
 	case WM_KEYUP:
 		gGameFramework.OnProcessingWindowMessage(hWnd, message, wParam, lParam);

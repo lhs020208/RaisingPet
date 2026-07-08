@@ -86,6 +86,53 @@ XMFLOAT4 GetTextFrameRectangle(bool password, float width, float height)
 	return(XMFLOAT4(left, centerY - textHeight * 0.5f,
 		left + textWidth, centerY + textHeight * 0.5f));
 }
+
+struct GLYPH_METRIC
+{
+	char ch;
+	float imageWidth;
+	float left;
+	float top;
+	float right;
+	float bottom;
+};
+
+const GLYPH_METRIC gGlyphMetrics[] =
+{
+	{ '0',441,158,136,284,322 }, { '1',441,175,136,248,318 },
+	{ '2',441,164,136,278,318 }, { '3',441,166,136,278,322 },
+	{ '4',441,155,139,286,318 }, { '5',441,167,139,278,322 },
+	{ '6',441,161,136,284,322 }, { '7',441,160,139,282,318 },
+	{ '8',441,161,136,283,322 }, { '9',441,159,136,282,322 },
+	{ '.',363,161,283,203,322 }, { ',',363,154,287,199,350 },
+	{ '/',407,144,139,261,348 }, { '$',441,165,116,280,345 },
+	{ 'a',433,157,187,269,322 }, { 'A',472,150,139,321,318 },
+	{ 'b',453,166,129,295,322 }, { 'B',455,170,139,297,318 },
+	{ 'c',419,159,187,261,322 }, { 'C',456,158,136,296,322 },
+	{ 'd',453,159,129,287,322 }, { 'D',483,170,139,325,318 },
+	{ 'e',435,159,187,278,322 }, { 'E',431,170,139,274,318 },
+	{ 'f',390,154,126,244,318 }, { 'F',428,169,139,270,318 },
+	{ 'g',453,159,187,287,378 }, { 'G',477,159,136,313,322 },
+	{ 'h',448,166,129,284,318 }, { 'H',488,169,139,318,318 },
+	{ 'i',366,163,130,203,319 }, { 'I',375,170,139,205,318 },
+	{ 'j',367,130,130,204,378 }, { 'J',405,153,139,237,322 },
+	{ 'k',435,166,129,288,318 }, { 'K',458,169,139,311,318 },
+	{ 'l',366,165,129,200,318 }, { 'L',425,170,139,273,318 },
+	{ 'm',527,167,187,363,319 }, { 'M',537,170,139,368,318 },
+	{ 'n',449,167,187,285,319 }, { 'N',495,170,139,326,318 },
+	{ 'o',451,158,187,293,322 }, { 'O',490,158,136,332,322 },
+	{ 'p',453,166,187,295,377 }, { 'P',451,170,139,295,318 },
+	{ 'q',453,159,187,287,377 }, { 'Q',490,158,136,349,342 },
+	{ 'r',395,166,188,245,319 }, { 'R',459,170,139,313,318 },
+	{ 's',413,162,187,257,322 }, { 'S',438,161,136,280,322 },
+	{ 't',393,154,152,239,321 }, { 'T',443,153,139,291,318 },
+	{ 'u',449,164,190,283,322 }, { 'U',479,168,139,312,322 },
+	{ 'v',431,150,190,282,319 }, { 'V',464,150,139,314,318 },
+	{ 'w',495,151,190,344,319 }, { 'W',548,151,139,397,318 },
+	{ 'x',431,150,190,281,319 }, { 'X',459,150,139,309,318 },
+	{ 'y',431,150,190,283,378 }, { 'Y',448,149,139,299,318 },
+	{ 'z',418,152,190,264,319 }, { 'Z',449,153,139,295,318 }
+};
 }
 
 void CLoginScene::BuildObjects(ID3D12Device* device, ID3D12GraphicsCommandList* commandList)
@@ -122,8 +169,18 @@ void CLoginScene::BuildObjects(ID3D12Device* device, ID3D12GraphicsCommandList* 
 	pipeline.SampleDesc.Count = 1;
 	device->CreateGraphicsPipelineState(&pipeline, __uuidof(ID3D12PipelineState),
 		reinterpret_cast<void**>(&m_pd3dUiPipelineState));
-	vertexShader->Release();
 	pixelShader->Release();
+	pixelShader = NULL;
+	D3DCompileFromFile(L"Shaders.hlsl", NULL, NULL, "PSTextGlyph", "ps_5_1",
+		D3DCOMPILE_ENABLE_STRICTNESS, 0, &pixelShader, NULL);
+	if (pixelShader)
+	{
+		pipeline.PS = { pixelShader->GetBufferPointer(), pixelShader->GetBufferSize() };
+		device->CreateGraphicsPipelineState(&pipeline, __uuidof(ID3D12PipelineState),
+			reinterpret_cast<void**>(&m_pd3dTextPipelineState));
+		pixelShader->Release();
+	}
+	vertexShader->Release();
 
 	auto loadImage = [device, commandList](const wchar_t* fileName, UI_IMAGE_RESOURCE& image)
 	{
@@ -167,14 +224,44 @@ void CLoginScene::BuildObjects(ID3D12Device* device, ID3D12GraphicsCommandList* 
 	loadImage(L"Assets/Image/TextFrame.dds", m_TextFrame);
 	loadImage(L"Assets/Image/LoginButton.dds", m_LoginButton);
 	loadImage(L"Assets/Image/GuestButton.dds", m_GuestButton);
+	loadImage(L"Assets/Image/TextCursor.dds", m_TextCursor);
+	for (const GLYPH_METRIC& metric : gGlyphMetrics)
+	{
+		m_Glyphs.emplace_back();
+		GLYPH_RESOURCE& glyph = m_Glyphs.back();
+		glyph.ch = metric.ch;
+		glyph.imageWidth = metric.imageWidth;
+		glyph.imageHeight = 521.0f;
+		glyph.pixelWidth = metric.right - metric.left;
+		glyph.pixelHeight = metric.bottom - metric.top;
+		glyph.u0 = metric.left / metric.imageWidth;
+		glyph.v0 = metric.top / 521.0f;
+		glyph.topOffset = metric.top - 129.0f;
+		std::wstring fileName;
+		if (metric.ch >= '0' && metric.ch <= '9')
+			fileName = L"Assets/Image/Numbers/" + std::wstring(1, static_cast<wchar_t>(metric.ch)) + L".dds";
+		else if (metric.ch == '.') fileName = L"Assets/Image/Numbers/Point.dds";
+		else if (metric.ch == ',') fileName = L"Assets/Image/Numbers/Comma.dds";
+		else if (metric.ch == '/') fileName = L"Assets/Image/Numbers/Slash.dds";
+		else if (metric.ch == '$') fileName = L"Assets/Image/Numbers/Dollar.dds";
+		else
+		{
+			const wchar_t lower = static_cast<wchar_t>(tolower(static_cast<unsigned char>(metric.ch)));
+			fileName = L"Assets/Image/Spellings/" + std::wstring(1, lower)
+				+ ((metric.ch >= 'A' && metric.ch <= 'Z') ? L"2.dds" : L".dds");
+		}
+		loadImage(fileName.c_str(), glyph.image);
+	}
 }
 
 void CLoginScene::ReleaseObjects()
 {
 	if (m_pd3dUiPipelineState) m_pd3dUiPipelineState->Release();
 	m_pd3dUiPipelineState = NULL;
+	if (m_pd3dTextPipelineState) m_pd3dTextPipelineState->Release();
+	m_pd3dTextPipelineState = NULL;
 	UI_IMAGE_RESOURCE* resources[] = { &m_ShopBoard, &m_CloseIcon, &m_LoginFrame,
-		&m_IdLog, &m_PasswordLog, &m_TextFrame, &m_LoginButton, &m_GuestButton };
+		&m_IdLog, &m_PasswordLog, &m_TextFrame, &m_LoginButton, &m_GuestButton, &m_TextCursor };
 	for (UI_IMAGE_RESOURCE* resource : resources)
 	{
 		if (resource->pd3dTexture) resource->pd3dTexture->Release();
@@ -182,6 +269,13 @@ void CLoginScene::ReleaseObjects()
 		if (resource->pd3dSrvDescriptorHeap) resource->pd3dSrvDescriptorHeap->Release();
 		*resource = UI_IMAGE_RESOURCE();
 	}
+	for (GLYPH_RESOURCE& glyph : m_Glyphs)
+	{
+		if (glyph.image.pd3dTexture) glyph.image.pd3dTexture->Release();
+		if (glyph.image.pd3dTextureUploadBuffer) glyph.image.pd3dTextureUploadBuffer->Release();
+		if (glyph.image.pd3dSrvDescriptorHeap) glyph.image.pd3dSrvDescriptorHeap->Release();
+	}
+	m_Glyphs.clear();
 	if (m_pd3dGraphicsRootSignature) m_pd3dGraphicsRootSignature->Release();
 	m_pd3dGraphicsRootSignature = NULL;
 }
@@ -189,12 +283,18 @@ void CLoginScene::ReleaseObjects()
 void CLoginScene::ReleaseUploadBuffers()
 {
 	UI_IMAGE_RESOURCE* resources[] = { &m_ShopBoard, &m_CloseIcon, &m_LoginFrame,
-		&m_IdLog, &m_PasswordLog, &m_TextFrame, &m_LoginButton, &m_GuestButton };
+		&m_IdLog, &m_PasswordLog, &m_TextFrame, &m_LoginButton, &m_GuestButton, &m_TextCursor };
 	for (UI_IMAGE_RESOURCE* resource : resources)
 	{
 		if (!resource->pd3dTextureUploadBuffer) continue;
 		resource->pd3dTextureUploadBuffer->Release();
 		resource->pd3dTextureUploadBuffer = NULL;
+	}
+	for (GLYPH_RESOURCE& glyph : m_Glyphs)
+	{
+		if (!glyph.image.pd3dTextureUploadBuffer) continue;
+		glyph.image.pd3dTextureUploadBuffer->Release();
+		glyph.image.pd3dTextureUploadBuffer = NULL;
 	}
 }
 
@@ -218,6 +318,115 @@ void CLoginScene::RenderUiImage(ID3D12GraphicsCommandList* commandList, CCamera*
 	commandList->DrawInstanced(6, 1, 0, 0);
 }
 
+CLoginScene::GLYPH_RESOURCE* CLoginScene::FindGlyph(char ch)
+{
+	for (GLYPH_RESOURCE& glyph : m_Glyphs)
+		if (glyph.ch == ch) return(&glyph);
+	return(NULL);
+}
+
+float CLoginScene::GetGlyphAdvance(char ch, float scale) const
+{
+	for (const GLYPH_RESOURCE& glyph : m_Glyphs)
+		if (glyph.ch == ch) return(glyph.pixelWidth * scale + max(3.0f, scale * 24.0f));
+	return(0.0f);
+}
+
+float CLoginScene::MeasureText(const std::string& text, size_t characterCount, float scale) const
+{
+	float width = 0.0f;
+	const size_t count = min(characterCount, text.size());
+	for (size_t i = 0; i < count; ++i) width += GetGlyphAdvance(text[i], scale);
+	return(width);
+}
+
+void CLoginScene::RenderTextField(ID3D12GraphicsCommandList* commandList, CCamera* camera,
+	int fieldIndex, const XMFLOAT4& rectangle)
+{
+	if (!m_pd3dTextPipelineState || !camera) return;
+	const std::string& text = (fieldIndex == 0) ? m_LoginId : m_LoginPassword;
+	const float frameHeight = rectangle.w - rectangle.y;
+	const float scale = frameHeight / 330.0f;
+	const float left = rectangle.x + frameHeight * 0.30f;
+	const float top = rectangle.y + (frameHeight - 190.0f * scale) * 0.5f
+		+ 129.0f * scale - frameHeight * 0.40f;
+	const float viewportWidth = camera->m_d3dViewport.Width;
+	const float viewportHeight = camera->m_d3dViewport.Height;
+	float cursorX = left;
+
+	commandList->SetPipelineState(m_pd3dTextPipelineState);
+	commandList->SetGraphicsRoot32BitConstant(5, 0x00000000, 0);
+	commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+	for (char ch : text)
+	{
+		GLYPH_RESOURCE* glyph = FindGlyph(ch);
+		if (!glyph || !glyph->image.pd3dSrvDescriptorHeap) continue;
+		const float imageLeft = cursorX - glyph->u0 * glyph->imageWidth * scale;
+		const float imageTop = top + glyph->topOffset * scale - glyph->v0 * glyph->imageHeight * scale;
+		const float constants[4] = {
+			imageLeft / viewportWidth * 2.0f - 1.0f,
+			1.0f - imageTop / viewportHeight * 2.0f,
+			(imageLeft + glyph->imageWidth * scale) / viewportWidth * 2.0f - 1.0f,
+			1.0f - (imageTop + glyph->imageHeight * scale) / viewportHeight * 2.0f
+		};
+		ID3D12DescriptorHeap* heaps[] = { glyph->image.pd3dSrvDescriptorHeap };
+		commandList->SetDescriptorHeaps(1, heaps);
+		commandList->SetGraphicsRootDescriptorTable(3,
+			glyph->image.pd3dSrvDescriptorHeap->GetGPUDescriptorHandleForHeapStart());
+		commandList->SetGraphicsRoot32BitConstants(4, 4, constants, 0);
+		commandList->DrawInstanced(6, 1, 0, 0);
+		cursorX += GetGlyphAdvance(ch, scale);
+	}
+
+	if (m_nActiveTextField == fieldIndex && m_fCursorBlinkElapsed < 0.5f)
+	{
+		const float caretX = left + MeasureText(text, m_CursorIndices[fieldIndex], scale) - 3.0f;
+		const float caretHeight = frameHeight * 0.62f;
+		const float caretWidth = max(2.0f, caretHeight * (7.0f / 112.0f));
+		const float caretTop = (rectangle.y + rectangle.w - caretHeight) * 0.5f;
+		RenderUiImage(commandList, camera, m_TextCursor,
+			XMFLOAT4(caretX, caretTop, caretX + caretWidth, caretTop + caretHeight));
+	}
+}
+
+void CLoginScene::ResetCursorBlink()
+{
+	m_fCursorBlinkElapsed = 0.0f;
+}
+
+void CLoginScene::MoveCursorFromClick(int fieldIndex, float x, const XMFLOAT4& rectangle)
+{
+	const std::string& text = (fieldIndex == 0) ? m_LoginId : m_LoginPassword;
+	const float frameHeight = rectangle.w - rectangle.y;
+	const float scale = frameHeight / 330.0f;
+	const float textLeft = rectangle.x + frameHeight * 0.30f;
+	if (text.empty() || x <= textLeft)
+	{
+		m_CursorIndices[fieldIndex] = 0;
+		return;
+	}
+	const float textRight = textLeft + MeasureText(text, text.size(), scale);
+	if (x >= textRight)
+	{
+		m_CursorIndices[fieldIndex] = text.size();
+		return;
+	}
+	float boundary = textLeft;
+	float nearestDistance = fabsf(x - boundary);
+	size_t nearestIndex = 0;
+	for (size_t i = 0; i < text.size(); ++i)
+	{
+		boundary += GetGlyphAdvance(text[i], scale);
+		const float distance = fabsf(x - boundary);
+		if (distance < nearestDistance)
+		{
+			nearestDistance = distance;
+			nearestIndex = i + 1;
+		}
+	}
+	m_CursorIndices[fieldIndex] = nearestIndex;
+}
+
 void CLoginScene::Render(ID3D12GraphicsCommandList* commandList, CCamera* camera)
 {
 	if (!camera) return;
@@ -231,6 +440,8 @@ void CLoginScene::Render(ID3D12GraphicsCommandList* commandList, CCamera* camera
 	RenderUiImage(commandList, camera, m_PasswordLog, GetLabelRectangle(true, width, height));
 	RenderUiImage(commandList, camera, m_TextFrame, GetTextFrameRectangle(false, width, height));
 	RenderUiImage(commandList, camera, m_TextFrame, GetTextFrameRectangle(true, width, height));
+	RenderTextField(commandList, camera, 0, GetTextFrameRectangle(false, width, height));
+	RenderTextField(commandList, camera, 1, GetTextFrameRectangle(true, width, height));
 	RenderUiImage(commandList, camera, m_LoginButton, GetLoginButtonRectangle(false, width, height));
 	RenderUiImage(commandList, camera, m_GuestButton, GetLoginButtonRectangle(true, width, height));
 	RenderUiImage(commandList, camera, m_CloseIcon, GetCloseRectangle(width, height));
@@ -245,11 +456,92 @@ void CLoginScene::OnProcessingMouseMessage(HWND hWnd, UINT message, WPARAM, LPAR
 	const float height = static_cast<float>(client.bottom);
 	const float x = static_cast<float>(static_cast<short>(LOWORD(lParam)));
 	const float y = static_cast<float>(static_cast<short>(HIWORD(lParam)));
+	for (int fieldIndex = 0; fieldIndex < 2; ++fieldIndex)
+	{
+		const XMFLOAT4 textFrame = GetTextFrameRectangle(fieldIndex == 1, width, height);
+		if (!PointInRectangle(x, y, textFrame)) continue;
+		m_nActiveTextField = fieldIndex;
+		MoveCursorFromClick(fieldIndex, x, textFrame);
+		ResetCursorBlink();
+		return;
+	}
+	m_nActiveTextField = -1;
 	if (PointInRectangle(x, y, GetCloseRectangle(width, height)))
 		PostMessage(hWnd, WM_CLOSE, 0, 0);
 	else if (PointInRectangle(x, y, GetLoginButtonRectangle(false, width, height))
 		|| PointInRectangle(x, y, GetLoginButtonRectangle(true, width, height)))
 		g_pFramework->RequestSceneChange(SCENE_TYPE::GAME);
+}
+
+void CLoginScene::OnProcessingKeyboardMessage(HWND hWnd, UINT message, WPARAM wParam, LPARAM)
+{
+	if (m_nActiveTextField < 0) return;
+	std::string& text = (m_nActiveTextField == 0) ? m_LoginId : m_LoginPassword;
+	size_t& cursorIndex = m_CursorIndices[m_nActiveTextField];
+	cursorIndex = min(cursorIndex, text.size());
+
+	if (message == WM_CHAR)
+	{
+		const char ch = static_cast<char>(wParam);
+		if (ch == '\b')
+		{
+			if (cursorIndex == 0) return;
+			text.erase(cursorIndex - 1, 1);
+			--cursorIndex;
+			ResetCursorBlink();
+			return;
+		}
+		if (static_cast<unsigned char>(ch) < 32 || !FindGlyph(ch)) return;
+		RECT client;
+		GetClientRect(hWnd, &client);
+		const XMFLOAT4 frame = GetTextFrameRectangle(m_nActiveTextField == 1,
+			static_cast<float>(client.right), static_cast<float>(client.bottom));
+		const float scale = (frame.w - frame.y) / 330.0f;
+		std::string candidate = text;
+		candidate.insert(candidate.begin() + cursorIndex, ch);
+		const float availableWidth = (frame.z - frame.x) - (frame.w - frame.y) * 0.60f;
+		if (MeasureText(candidate, candidate.size(), scale) > availableWidth) return;
+		text.swap(candidate);
+		++cursorIndex;
+		ResetCursorBlink();
+		return;
+	}
+
+	if (message != WM_KEYDOWN) return;
+	switch (wParam)
+	{
+	case VK_LEFT:
+		if (cursorIndex > 0) --cursorIndex;
+		break;
+	case VK_RIGHT:
+		if (cursorIndex < text.size()) ++cursorIndex;
+		break;
+	case VK_HOME:
+		cursorIndex = 0;
+		break;
+	case VK_END:
+		cursorIndex = text.size();
+		break;
+	case VK_DELETE:
+		if (cursorIndex < text.size()) text.erase(cursorIndex, 1);
+		else return;
+		break;
+	case VK_TAB:
+		m_nActiveTextField = 1 - m_nActiveTextField;
+		m_CursorIndices[m_nActiveTextField] = (m_nActiveTextField == 0)
+			? m_LoginId.size() : m_LoginPassword.size();
+		break;
+	default:
+		return;
+	}
+	ResetCursorBlink();
+}
+
+void CLoginScene::Animate(float elapsedTime)
+{
+	if (m_nActiveTextField < 0) return;
+	m_fCursorBlinkElapsed += elapsedTime;
+	while (m_fCursorBlinkElapsed >= 1.0f) m_fCursorBlinkElapsed -= 1.0f;
 }
 
 CGameObject* CLoginScene::PickObjectPointedByCursor(int x, int y, CCamera* camera)
