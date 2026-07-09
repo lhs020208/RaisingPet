@@ -13,6 +13,12 @@ bool PointInRectangle(float x, float y, const XMFLOAT4& rectangle)
 	return(x >= rectangle.x && x <= rectangle.z && y >= rectangle.y && y <= rectangle.w);
 }
 
+bool IsLoginInputCharacter(char ch)
+{
+	return((ch >= 'A' && ch <= 'Z') || (ch >= 'a' && ch <= 'z') ||
+		(ch >= '0' && ch <= '9'));
+}
+
 XMFLOAT4 GetBoardRectangle(float width, float height)
 {
 	float boardWidth = min(width * 0.82f, 900.0f);
@@ -491,7 +497,7 @@ void CLoginScene::OnProcessingKeyboardMessage(HWND hWnd, UINT message, WPARAM wP
 			ResetCursorBlink();
 			return;
 		}
-		if (static_cast<unsigned char>(ch) < 32 || !FindGlyph(ch)) return;
+		if (!IsLoginInputCharacter(ch) || !FindGlyph(ch)) return;
 		RECT client;
 		GetClientRect(hWnd, &client);
 		const XMFLOAT4 frame = GetTextFrameRectangle(m_nActiveTextField == 1,
