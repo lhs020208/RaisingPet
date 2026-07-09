@@ -289,5 +289,7 @@ float4 PSUiImage(VS_FULLSCREEN_OUTPUT input) : SV_TARGET
 		(gnPackedUIColor >> 16) & 255,
 		(gnPackedUIColor >> 8) & 255,
 		gnPackedUIColor & 255) / 255.0f;
-	return float4(color.rgb * tint, color.a);
+	float alpha = ((gnPackedUIColor >> 24) & 255) / 255.0f;
+	alpha = (alpha <= 0.0f) ? 1.0f : alpha;
+	return float4(color.rgb * tint, color.a * alpha);
 }

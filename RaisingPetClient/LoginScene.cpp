@@ -67,6 +67,19 @@ XMFLOAT4 GetLoginButtonRectangle(bool guest, float width, float height)
 	return(XMFLOAT4(left, top, left + buttonWidth, top + buttonHeight));
 }
 
+XMFLOAT4 GetLoginErrorLogRectangle(float width, float height)
+{
+	const XMFLOAT4 board = GetBoardRectangle(width, height);
+	const XMFLOAT4 loginButton = GetLoginButtonRectangle(false, width, height);
+	const float boardWidth = board.z - board.x;
+	const float boardHeight = board.w - board.y;
+	const float logWidth = boardWidth * 0.48f;
+	const float logHeight = logWidth * (134.0f / 1473.0f);
+	const float centerX = (loginButton.x + loginButton.z) * 0.5f;
+	const float top = loginButton.y - logHeight - boardHeight * 0.035f;
+	return(XMFLOAT4(centerX - logWidth * 0.5f, top, centerX + logWidth * 0.5f, top + logHeight));
+}
+
 XMFLOAT4 GetLabelRectangle(bool password, float width, float height)
 {
 	const XMFLOAT4 frame = GetLoginFrameRectangle(width, height);
@@ -231,6 +244,7 @@ void CLoginScene::BuildObjects(ID3D12Device* device, ID3D12GraphicsCommandList* 
 	loadImage(L"Assets/Image/LoginButton.dds", m_LoginButton);
 	loadImage(L"Assets/Image/GuestButton.dds", m_GuestButton);
 	loadImage(L"Assets/Image/TextCursor.dds", m_TextCursor);
+	loadImage(L"Assets/Image/LoginErrorLog.dds", m_LoginErrorLog);
 	for (const GLYPH_METRIC& metric : gGlyphMetrics)
 	{
 		m_Glyphs.emplace_back();
@@ -267,7 +281,8 @@ void CLoginScene::ReleaseObjects()
 	if (m_pd3dTextPipelineState) m_pd3dTextPipelineState->Release();
 	m_pd3dTextPipelineState = NULL;
 	UI_IMAGE_RESOURCE* resources[] = { &m_ShopBoard, &m_CloseIcon, &m_LoginFrame,
-		&m_IdLog, &m_PasswordLog, &m_TextFrame, &m_LoginButton, &m_GuestButton, &m_TextCursor };
+		&m_IdLog, &m_PasswordLog, &m_TextFrame, &m_LoginButton, &m_GuestButton,
+		&m_TextCursor, &m_LoginErrorLog };
 	for (UI_IMAGE_RESOURCE* resource : resources)
 	{
 		if (resource->pd3dTexture) resource->pd3dTexture->Release();
@@ -289,7 +304,8 @@ void CLoginScene::ReleaseObjects()
 void CLoginScene::ReleaseUploadBuffers()
 {
 	UI_IMAGE_RESOURCE* resources[] = { &m_ShopBoard, &m_CloseIcon, &m_LoginFrame,
-		&m_IdLog, &m_PasswordLog, &m_TextFrame, &m_LoginButton, &m_GuestButton, &m_TextCursor };
+		&m_IdLog, &m_PasswordLog, &m_TextFrame, &m_LoginButton, &m_GuestButton,
+		&m_TextCursor, &m_LoginErrorLog };
 	for (UI_IMAGE_RESOURCE* resource : resources)
 	{
 		if (!resource->pd3dTextureUploadBuffer) continue;
@@ -305,7 +321,7 @@ void CLoginScene::ReleaseUploadBuffers()
 }
 
 void CLoginScene::RenderUiImage(ID3D12GraphicsCommandList* commandList, CCamera* camera,
-	UI_IMAGE_RESOURCE& resource, const XMFLOAT4& rectangle)
+	UI_IMAGE_RESOURCE& resource, const XMFLOAT4& rectangle, UINT color)
 {
 	if (!m_pd3dUiPipelineState || !resource.pd3dSrvDescriptorHeap || !camera) return;
 	const float width = camera->m_d3dViewport.Width;
@@ -318,7 +334,7 @@ void CLoginScene::RenderUiImage(ID3D12GraphicsCommandList* commandList, CCamera*
 	commandList->SetGraphicsRootDescriptorTable(3,
 		resource.pd3dSrvDescriptorHeap->GetGPUDescriptorHandleForHeapStart());
 	commandList->SetGraphicsRoot32BitConstants(4, 4, constants, 0);
-	commandList->SetGraphicsRoot32BitConstant(5, 0x00FFFFFF, 0);
+	commandList->SetGraphicsRoot32BitConstant(5, color, 0);
 	commandList->SetPipelineState(m_pd3dUiPipelineState);
 	commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 	commandList->DrawInstanced(6, 1, 0, 0);
@@ -433,6 +449,14 @@ void CLoginScene::MoveCursorFromClick(int fieldIndex, float x, const XMFLOAT4& r
 	m_CursorIndices[fieldIndex] = nearestIndex;
 }
 
+void CLoginScene::SpawnLoginErrorLog(float viewportWidth, float viewportHeight)
+{
+	LOGIN_ERROR_LOG log;
+	log.rectangle = GetLoginErrorLogRectangle(viewportWidth, viewportHeight);
+	log.elapsedTime = 0.0f;
+	m_LoginErrorLogs.push_back(log);
+}
+
 void CLoginScene::Render(ID3D12GraphicsCommandList* commandList, CCamera* camera)
 {
 	if (!camera) return;
@@ -451,6 +475,16 @@ void CLoginScene::Render(ID3D12GraphicsCommandList* commandList, CCamera* camera
 	RenderUiImage(commandList, camera, m_LoginButton, GetLoginButtonRectangle(false, width, height));
 	RenderUiImage(commandList, camera, m_GuestButton, GetLoginButtonRectangle(true, width, height));
 	RenderUiImage(commandList, camera, m_CloseIcon, GetCloseRectangle(width, height));
+	for (const LOGIN_ERROR_LOG& log : m_LoginErrorLogs)
+	{
+		const float alphaRatio = max(0.0f, 1.0f - log.elapsedTime);
+		const UINT alpha = max(1u, static_cast<UINT>(alphaRatio * 255.0f + 0.5f));
+		const float moveY = -20.0f * log.elapsedTime;
+		RenderUiImage(commandList, camera, m_LoginErrorLog,
+			XMFLOAT4(log.rectangle.x, log.rectangle.y + moveY,
+				log.rectangle.z, log.rectangle.w + moveY),
+			(alpha << 24) | 0x00FFFFFF);
+	}
 }
 
 void CLoginScene::OnProcessingMouseMessage(HWND hWnd, UINT message, WPARAM, LPARAM lParam)
@@ -474,8 +508,16 @@ void CLoginScene::OnProcessingMouseMessage(HWND hWnd, UINT message, WPARAM, LPAR
 	m_nActiveTextField = -1;
 	if (PointInRectangle(x, y, GetCloseRectangle(width, height)))
 		PostMessage(hWnd, WM_CLOSE, 0, 0);
-	else if (PointInRectangle(x, y, GetLoginButtonRectangle(false, width, height))
-		|| PointInRectangle(x, y, GetLoginButtonRectangle(true, width, height)))
+	else if (PointInRectangle(x, y, GetLoginButtonRectangle(false, width, height)))
+	{
+		if (m_LoginId.empty() || m_LoginPassword.empty())
+		{
+			SpawnLoginErrorLog(width, height);
+			return;
+		}
+		g_pFramework->RequestSceneChange(SCENE_TYPE::GAME);
+	}
+	else if (PointInRectangle(x, y, GetLoginButtonRectangle(true, width, height)))
 		g_pFramework->RequestSceneChange(SCENE_TYPE::GAME);
 }
 
@@ -545,9 +587,17 @@ void CLoginScene::OnProcessingKeyboardMessage(HWND hWnd, UINT message, WPARAM wP
 
 void CLoginScene::Animate(float elapsedTime)
 {
-	if (m_nActiveTextField < 0) return;
-	m_fCursorBlinkElapsed += elapsedTime;
-	while (m_fCursorBlinkElapsed >= 1.0f) m_fCursorBlinkElapsed -= 1.0f;
+	for (LOGIN_ERROR_LOG& log : m_LoginErrorLogs)
+		log.elapsedTime += elapsedTime;
+	m_LoginErrorLogs.erase(std::remove_if(m_LoginErrorLogs.begin(), m_LoginErrorLogs.end(),
+		[](const LOGIN_ERROR_LOG& log) { return(log.elapsedTime >= 1.0f); }),
+		m_LoginErrorLogs.end());
+
+	if (m_nActiveTextField >= 0)
+	{
+		m_fCursorBlinkElapsed += elapsedTime;
+		while (m_fCursorBlinkElapsed >= 1.0f) m_fCursorBlinkElapsed -= 1.0f;
+	}
 }
 
 CGameObject* CLoginScene::PickObjectPointedByCursor(int x, int y, CCamera* camera)

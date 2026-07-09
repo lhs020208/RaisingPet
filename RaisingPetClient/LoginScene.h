@@ -37,6 +37,11 @@ private:
 		float v0 = 0.0f;
 		float topOffset = 0.0f;
 	};
+	struct LOGIN_ERROR_LOG
+	{
+		XMFLOAT4 rectangle = XMFLOAT4(0.0f, 0.0f, 0.0f, 0.0f);
+		float elapsedTime = 0.0f;
+	};
 
 	ID3D12PipelineState* m_pd3dUiPipelineState = NULL;
 	ID3D12PipelineState* m_pd3dTextPipelineState = NULL;
@@ -49,7 +54,9 @@ private:
 	UI_IMAGE_RESOURCE m_LoginButton;
 	UI_IMAGE_RESOURCE m_GuestButton;
 	UI_IMAGE_RESOURCE m_TextCursor;
+	UI_IMAGE_RESOURCE m_LoginErrorLog;
 	std::vector<GLYPH_RESOURCE> m_Glyphs;
+	std::vector<LOGIN_ERROR_LOG> m_LoginErrorLogs;
 	std::string m_LoginId;
 	std::string m_LoginPassword;
 	size_t m_CursorIndices[2] = { 0, 0 };
@@ -58,7 +65,7 @@ private:
 	CGameObject m_UiHitObject;
 
 	void RenderUiImage(ID3D12GraphicsCommandList* pd3dCommandList, CCamera* pCamera,
-		UI_IMAGE_RESOURCE& resource, const XMFLOAT4& rectangle);
+		UI_IMAGE_RESOURCE& resource, const XMFLOAT4& rectangle, UINT nColor = 0x00FFFFFF);
 	void RenderTextField(ID3D12GraphicsCommandList* pd3dCommandList, CCamera* pCamera,
 		int nFieldIndex, const XMFLOAT4& rectangle);
 	GLYPH_RESOURCE* FindGlyph(char ch);
@@ -66,4 +73,5 @@ private:
 	float MeasureText(const std::string& text, size_t characterCount, float scale) const;
 	void ResetCursorBlink();
 	void MoveCursorFromClick(int nFieldIndex, float x, const XMFLOAT4& rectangle);
+	void SpawnLoginErrorLog(float fViewportWidth, float fViewportHeight);
 };
