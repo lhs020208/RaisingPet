@@ -46,7 +46,13 @@ private:
 	enum class LOGIN_PAGE
 	{
 		INPUT,
-		LOADING
+		LOADING,
+		REGISTER
+	};
+	enum class REGISTER_RESULT
+	{
+		SUCCESS,
+		FAILURE
 	};
 
 	ID3D12PipelineState* m_pd3dUiPipelineState = NULL;
@@ -60,12 +66,16 @@ private:
 	UI_IMAGE_RESOURCE m_TextFrame;
 	UI_IMAGE_RESOURCE m_LoginButton;
 	UI_IMAGE_RESOURCE m_GuestButton;
+	UI_IMAGE_RESOURCE m_RegisterButton;
 	UI_IMAGE_RESOURCE m_TextCursor;
 	UI_IMAGE_RESOURCE m_LoginErrorLog;
 	UI_IMAGE_RESOURCE m_LoginErrorLog2;
+	UI_IMAGE_RESOURCE m_RegisterSuccessLog;
+	UI_IMAGE_RESOURCE m_RegisterFailLog;
 	UI_IMAGE_RESOURCE m_LoginLoading;
 	UI_IMAGE_RESOURCE m_LoadingTexts[3];
 	UI_IMAGE_RESOURCE m_DirectStartButton;
+	UI_IMAGE_RESOURCE m_LoginBackButton;
 	UI_IMAGE_RESOURCE m_PasswordHideIcon;
 	UI_IMAGE_RESOURCE m_PasswordHideCheckBox;
 	std::vector<GLYPH_RESOURCE> m_Glyphs;
@@ -88,6 +98,8 @@ private:
 		float fViewportWidth, float fViewportHeight);
 	void RenderLoadingPage(ID3D12GraphicsCommandList* pd3dCommandList, CCamera* pCamera,
 		float fViewportWidth, float fViewportHeight);
+	void RenderRegisterPage(ID3D12GraphicsCommandList* pd3dCommandList, CCamera* pCamera,
+		float fViewportWidth, float fViewportHeight);
 	void RenderTextField(ID3D12GraphicsCommandList* pd3dCommandList, CCamera* pCamera,
 		int nFieldIndex, const XMFLOAT4& rectangle);
 	GLYPH_RESOURCE* FindGlyph(char ch);
@@ -98,6 +110,9 @@ private:
 	void SpawnLoginErrorLog(float fViewportWidth, float fViewportHeight, int nType = 0);
 	void EnterLoadingPage();
 	void ReturnToInputPageWithLoginFailure(float fViewportWidth, float fViewportHeight);
+	void EnterRegisterPage();
+	void ReturnToInputPageWithRegisterResult(float fViewportWidth, float fViewportHeight,
+		REGISTER_RESULT eResult);
 	void LoadSavedAccountInformation();
 	void SaveAccountInformation() const;
 };
