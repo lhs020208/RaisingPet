@@ -1,5 +1,6 @@
 #include <WinSock2.h>
 #include <WS2tcpip.h>
+#include <mysql.h>
 
 #include <array>
 #include <iostream>
@@ -77,10 +78,69 @@ bool TryParsePort(const char* text, unsigned short& port) {
 }
 } // namespace
 
+bool TestDatabaseConnection()
+{
+	MYSQL* connection = mysql_init(nullptr);
+	if (!connection)
+	{
+		std::cerr << "mysql_init failed\n";
+		return false;
+	}
+
+	MYSQL* result = mysql_real_connect(
+		connection,
+		"127.0.0.1",
+		"raisingpet_server",
+		"12345678",
+		"RaisingPet",
+		3306,
+		nullptr,
+		0
+	);
+
+	if (!result)
+	{
+		std::cerr << "MySQL connection failed: "
+			<< mysql_error(connection) << '\n';
+		mysql_close(connection);
+		return false;
+	}
+
+	std::cout << "MySQL connected successfully.\n";
+
+	if (mysql_query(connection, "SELECT VERSION()") != 0)
+	{
+		std::cerr << "SELECT VERSION() failed: "
+			<< mysql_error(connection) << '\n';
+		mysql_close(connection);
+		return false;
+	}
+
+	MYSQL_RES* queryResult = mysql_store_result(connection);
+	if (queryResult)
+	{
+		MYSQL_ROW row = mysql_fetch_row(queryResult);
+		if (row && row[0])
+		{
+			std::cout << "MySQL version: " << row[0] << '\n';
+		}
+		mysql_free_result(queryResult);
+	}
+
+	mysql_close(connection);
+	return true;
+}
+
 int main(int argc, char* argv[]) {
 	unsigned short port = kDefaultPort;
 	if (argc > 2 || (argc == 2 && !TryParsePort(argv[1], port))) {
 		std::cerr << "Usage: RaisingPetServer.exe [port]\n";
+		return 1;
+	}
+
+	if (!TestDatabaseConnection())
+	{
+		std::cerr << "Database connection test failed.\n";
 		return 1;
 	}
 
