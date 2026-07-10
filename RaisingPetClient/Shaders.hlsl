@@ -235,6 +235,34 @@ VS_FULLSCREEN_OUTPUT VSTextGlyph(uint vertexId : SV_VertexID)
 	return output;
 }
 
+VS_FULLSCREEN_OUTPUT VSLoginLoading(uint vertexId : SV_VertexID)
+{
+	static const uint2 corners[6] =
+	{
+		uint2(0, 0), uint2(1, 0), uint2(0, 1),
+		uint2(0, 1), uint2(1, 0), uint2(1, 1)
+	};
+
+	uint2 corner = corners[vertexId];
+	float2 center = (gf4TextRect.xy + gf4TextRect.zw) * 0.5f;
+	float2 halfSize = (gf4TextRect.zw - gf4TextRect.xy) * 0.5f;
+	float2 local = (float2(corner) - 0.5f) * 2.0f * halfSize;
+	float ndcWidth = max(abs(gf4TextRect.z - gf4TextRect.x), 0.0001f);
+	float ndcHeight = max(abs(gf4TextRect.w - gf4TextRect.y), 0.0001f);
+	float viewportAspect = ndcHeight / ndcWidth;
+	float angle = -floor(gfCurrentTime * 12.0f) * 0.5235987756f;
+	float s = sin(angle);
+	float c = cos(angle);
+	float2 rotated = float2(
+		local.x * c - local.y / viewportAspect * s,
+		local.x * viewportAspect * s + local.y * c);
+
+	VS_FULLSCREEN_OUTPUT output;
+	output.positionH = float4(center + rotated, 0.0f, 1.0f);
+	output.uv = float2(corner);
+	return output;
+}
+
 float4 PSTextGlyph(VS_FULLSCREEN_OUTPUT input) : SV_TARGET
 {
 	float4 color = gFullscreenTexture.Sample(gFullscreenSampler, input.uv);

@@ -42,9 +42,15 @@ private:
 		XMFLOAT4 rectangle = XMFLOAT4(0.0f, 0.0f, 0.0f, 0.0f);
 		float elapsedTime = 0.0f;
 	};
+	enum class LOGIN_PAGE
+	{
+		INPUT,
+		LOADING
+	};
 
 	ID3D12PipelineState* m_pd3dUiPipelineState = NULL;
 	ID3D12PipelineState* m_pd3dTextPipelineState = NULL;
+	ID3D12PipelineState* m_pd3dRotatingUiPipelineState = NULL;
 	UI_IMAGE_RESOURCE m_ShopBoard;
 	UI_IMAGE_RESOURCE m_CloseIcon;
 	UI_IMAGE_RESOURCE m_LoginFrame;
@@ -55,6 +61,9 @@ private:
 	UI_IMAGE_RESOURCE m_GuestButton;
 	UI_IMAGE_RESOURCE m_TextCursor;
 	UI_IMAGE_RESOURCE m_LoginErrorLog;
+	UI_IMAGE_RESOURCE m_LoginLoading;
+	UI_IMAGE_RESOURCE m_LoadingTexts[3];
+	UI_IMAGE_RESOURCE m_DirectStartButton;
 	std::vector<GLYPH_RESOURCE> m_Glyphs;
 	std::vector<LOGIN_ERROR_LOG> m_LoginErrorLogs;
 	std::string m_LoginId;
@@ -62,10 +71,18 @@ private:
 	size_t m_CursorIndices[2] = { 0, 0 };
 	int m_nActiveTextField = -1;
 	float m_fCursorBlinkElapsed = 0.0f;
+	float m_fLoadingElapsedTime = 0.0f;
+	LOGIN_PAGE m_eLoginPage = LOGIN_PAGE::INPUT;
 	CGameObject m_UiHitObject;
 
 	void RenderUiImage(ID3D12GraphicsCommandList* pd3dCommandList, CCamera* pCamera,
 		UI_IMAGE_RESOURCE& resource, const XMFLOAT4& rectangle, UINT nColor = 0x00FFFFFF);
+	void RenderRotatingUiImage(ID3D12GraphicsCommandList* pd3dCommandList, CCamera* pCamera,
+		UI_IMAGE_RESOURCE& resource, const XMFLOAT4& rectangle, UINT nColor = 0x00FFFFFF);
+	void RenderInputPage(ID3D12GraphicsCommandList* pd3dCommandList, CCamera* pCamera,
+		float fViewportWidth, float fViewportHeight);
+	void RenderLoadingPage(ID3D12GraphicsCommandList* pd3dCommandList, CCamera* pCamera,
+		float fViewportWidth, float fViewportHeight);
 	void RenderTextField(ID3D12GraphicsCommandList* pd3dCommandList, CCamera* pCamera,
 		int nFieldIndex, const XMFLOAT4& rectangle);
 	GLYPH_RESOURCE* FindGlyph(char ch);
@@ -74,4 +91,5 @@ private:
 	void ResetCursorBlink();
 	void MoveCursorFromClick(int nFieldIndex, float x, const XMFLOAT4& rectangle);
 	void SpawnLoginErrorLog(float fViewportWidth, float fViewportHeight);
+	void EnterLoadingPage();
 };
