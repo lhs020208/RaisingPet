@@ -6,6 +6,7 @@
 #include "Timer.h"
 #include "Camera.h"
 #include "SceneManager.h"
+#include "ClientNetworkManager.h"
 
 class CGameFramework
 {
@@ -51,6 +52,7 @@ public:
 	ID3D12Device* GetDevice() const { return m_pd3dDevice; }
 	ID3D12GraphicsCommandList* GetCommandList() const { return m_pd3dCommandList; }
 	void RequestSceneChange(SCENE_TYPE sceneType) { m_SceneManager.RequestSceneChange(sceneType); }
+	CClientNetworkManager& GetNetworkManager() { return m_NetworkManager; }
 private:
 	void ProcessSceneChange();
 	HINSTANCE					m_hInstance;
@@ -93,6 +95,7 @@ private:
 #endif
 
 	CSceneManager				m_SceneManager;
+	CClientNetworkManager		m_NetworkManager;
 	CCamera						*m_pCamera = NULL;
 
 	POINT						m_ptOldCursorPos;

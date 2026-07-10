@@ -86,6 +86,8 @@ private:
 	int m_nActiveTextField = -1;
 	float m_fCursorBlinkElapsed = 0.0f;
 	float m_fLoadingElapsedTime = 0.0f;
+	float m_fLastViewportWidth = FRAME_BUFFER_WIDTH;
+	float m_fLastViewportHeight = FRAME_BUFFER_HEIGHT;
 	bool m_bPasswordVisible = false;
 	LOGIN_PAGE m_eLoginPage = LOGIN_PAGE::INPUT;
 	CGameObject m_UiHitObject;

@@ -794,6 +794,8 @@ void CLoginScene::Render(ID3D12GraphicsCommandList* commandList, CCamera* camera
 	camera->UpdateShaderVariables(commandList);
 	const float width = camera->m_d3dViewport.Width;
 	const float height = camera->m_d3dViewport.Height;
+	m_fLastViewportWidth = width;
+	m_fLastViewportHeight = height;
 	RenderUiImage(commandList, camera, m_ShopBoard, GetBoardRectangle(width, height));
 	if (m_eLoginPage == LOGIN_PAGE::REGISTER)
 		RenderRegisterPage(commandList, camera, width, height);
@@ -820,13 +822,17 @@ void CLoginScene::OnProcessingMouseMessage(HWND hWnd, UINT message, WPARAM, LPAR
 	if (m_eLoginPage == LOGIN_PAGE::LOADING)
 	{
 		if (PointInRectangle(x, y, GetDirectStartButtonRectangle(width, height)))
+		{
+			g_pFramework->GetNetworkManager().Disconnect();
 			g_pFramework->RequestSceneChange(SCENE_TYPE::GAME);
+		}
 		return;
 	}
 	if (m_eLoginPage == LOGIN_PAGE::REGISTER)
 	{
 		if (PointInRectangle(x, y, GetDirectStartButtonRectangle(width, height)))
 		{
+			g_pFramework->GetNetworkManager().Disconnect();
 			m_eLoginPage = LOGIN_PAGE::INPUT;
 			m_fLoadingElapsedTime = 0.0f;
 		}
@@ -849,20 +855,29 @@ void CLoginScene::OnProcessingMouseMessage(HWND hWnd, UINT message, WPARAM, LPAR
 	m_nActiveTextField = -1;
 	if (PointInRectangle(x, y, GetRegisterButtonRectangle(width, height)))
 	{
-		EnterRegisterPage();
-	}
-	else if (PointInRectangle(x, y, GetLoginButtonRectangle(false, width, height)))
-	{
-		if (m_LoginId.empty() || m_LoginPassword.empty())
+		if (m_LoginId.empty() || m_LoginPassword.empty() ||
+			!g_pFramework->GetNetworkManager().StartRegister(m_LoginId, m_LoginPassword))
 		{
 			SpawnLoginErrorLog(width, height);
 			return;
 		}
-		SaveAccountInformation();
+		EnterRegisterPage();
+	}
+	else if (PointInRectangle(x, y, GetLoginButtonRectangle(false, width, height)))
+	{
+		if (m_LoginId.empty() || m_LoginPassword.empty() ||
+			!g_pFramework->GetNetworkManager().StartLogin(m_LoginId, m_LoginPassword))
+		{
+			SpawnLoginErrorLog(width, height);
+			return;
+		}
 		EnterLoadingPage();
 	}
 	else if (PointInRectangle(x, y, GetLoginButtonRectangle(true, width, height)))
+	{
+		g_pFramework->GetNetworkManager().Disconnect();
 		g_pFramework->RequestSceneChange(SCENE_TYPE::GAME);
+	}
 }
 
 void CLoginScene::OnProcessingKeyboardMessage(HWND hWnd, UINT message, WPARAM wParam, LPARAM)
@@ -959,6 +974,34 @@ void CLoginScene::Animate(float elapsedTime)
 {
 	if (m_eLoginPage == LOGIN_PAGE::LOADING || m_eLoginPage == LOGIN_PAGE::REGISTER)
 		m_fLoadingElapsedTime += elapsedTime;
+
+	CLIENT_AUTH_REQUEST request = CLIENT_AUTH_REQUEST::NONE;
+	CLIENT_AUTH_RESULT result = CLIENT_AUTH_RESULT::SERVER_ERROR;
+	if (g_pFramework->GetNetworkManager().ConsumeAuthResult(request, result))
+	{
+		if (request == CLIENT_AUTH_REQUEST::LOGIN)
+		{
+			if (result == CLIENT_AUTH_RESULT::SUCCESS)
+			{
+				SaveAccountInformation();
+				g_pFramework->RequestSceneChange(SCENE_TYPE::GAME);
+			}
+			else
+			{
+				g_pFramework->GetNetworkManager().Disconnect();
+				ReturnToInputPageWithLoginFailure(
+					m_fLastViewportWidth, m_fLastViewportHeight);
+			}
+		}
+		else if (request == CLIENT_AUTH_REQUEST::REGISTER)
+		{
+			g_pFramework->GetNetworkManager().Disconnect();
+			ReturnToInputPageWithRegisterResult(
+				m_fLastViewportWidth, m_fLastViewportHeight,
+				(result == CLIENT_AUTH_RESULT::SUCCESS)
+				? REGISTER_RESULT::SUCCESS : REGISTER_RESULT::FAILURE);
+		}
+	}
 
 	for (LOGIN_ERROR_LOG& log : m_LoginErrorLogs)
 		log.elapsedTime += elapsedTime;

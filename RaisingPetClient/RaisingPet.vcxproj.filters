@@ -46,6 +46,9 @@
     <ClInclude Include="GameFramework.h">
       <Filter>Code\GameFramework</Filter>
     </ClInclude>
+    <ClInclude Include="ClientNetworkManager.h">
+      <Filter>Code\GameFramework</Filter>
+    </ClInclude>
     <ClInclude Include="d3dx12.h">
       <Filter>Code\Texture</Filter>
     </ClInclude>
@@ -97,6 +100,9 @@
       <Filter>Code\Shader</Filter>
     </ClCompile>
     <ClCompile Include="GameFramework.cpp">
+      <Filter>Code\GameFramework</Filter>
+    </ClCompile>
+    <ClCompile Include="ClientNetworkManager.cpp">
       <Filter>Code\GameFramework</Filter>
     </ClCompile>
     <ClCompile Include="DDSTextureLoader12.cpp">

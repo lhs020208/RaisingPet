@@ -361,6 +361,7 @@ LRESULT CALLBACK CGameFramework::OnProcessingWindowMessage(HWND hWnd, UINT nMess
 
 void CGameFramework::OnDestroy()
 {
+	m_NetworkManager.Disconnect();
     ReleaseObjects();
 
 	::CloseHandle(m_hFenceEvent);
