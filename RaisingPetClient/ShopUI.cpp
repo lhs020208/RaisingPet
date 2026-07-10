@@ -253,24 +253,24 @@ void CShopUI::BuildObjects(ID3D12Device* device, ID3D12GraphicsCommandList* comm
 		return(true);
 	};
 
-	loadImage(L"Assets/Image/ShopIcon.dds", m_ShopIconResource);
-	loadImage(L"Assets/Image/ShopBoard.dds", m_ShopBoardResource);
-	loadImage(L"Assets/Image/ShopCloseIcon.dds", m_ShopCloseIconResource);
-	loadImage(L"Assets/Image/ShopBackSpaceIcon.dds", m_ShopBackSpaceIconResource);
-	loadImage(L"Assets/Image/ShopSlot1.dds", m_ShopSlotResources[0]);
-	loadImage(L"Assets/Image/ShopSlot2.dds", m_ShopSlotResources[1]);
-	loadImage(L"Assets/Image/ShopSlot3.dds", m_ShopSlotResources[2]);
-	loadImage(L"Assets/Image/ShopSlot4.dds", m_ShopSlotResources[3]);
-	loadImage(L"Assets/Image/EmptySquare.dds", m_EmptySquareResources[0]);
-	loadImage(L"Assets/Image/EmptySquare.dds", m_EmptySquareResources[1]);
-	loadImage(L"Assets/Image/PetConfirmationButton.dds", m_PetConfirmationButtonResource);
-	loadImage(L"Assets/Image/ScrollBackGround.dds", m_ScrollBackgroundResource);
-	loadImage(L"Assets/Image/Scroll.dds", m_ScrollResource);
-	loadImage(L"Assets/Image/EmptyFrame.dds", m_EmptyFrameResource);
-	loadImage(L"Assets/Image/PetEnhanceButton.dds", m_PetEnhanceButtonResource);
-	loadImage(L"Assets/Image/PetEnhancePriceFrame.dds", m_PetEnhancePriceFrameResource);
-	loadImage(L"Assets/Image/PetEnhanceLog1.dds", m_PetEnhanceLogResources[0]);
-	loadImage(L"Assets/Image/PetEnhanceLog2.dds", m_PetEnhanceLogResources[1]);
+	loadImage(L"Assets/Image/Shop/ShopIcon.dds", m_ShopIconResource);
+	loadImage(L"Assets/Image/Shop/ShopBoard.dds", m_ShopBoardResource);
+	loadImage(L"Assets/Image/Shop/ShopCloseIcon.dds", m_ShopCloseIconResource);
+	loadImage(L"Assets/Image/Shop/ShopBackSpaceIcon.dds", m_ShopBackSpaceIconResource);
+	loadImage(L"Assets/Image/Shop/ShopSlot1.dds", m_ShopSlotResources[0]);
+	loadImage(L"Assets/Image/Shop/ShopSlot2.dds", m_ShopSlotResources[1]);
+	loadImage(L"Assets/Image/Shop/ShopSlot3.dds", m_ShopSlotResources[2]);
+	loadImage(L"Assets/Image/Shop/ShopSlot4.dds", m_ShopSlotResources[3]);
+	loadImage(L"Assets/Image/Common/EmptySquare.dds", m_EmptySquareResources[0]);
+	loadImage(L"Assets/Image/Common/EmptySquare.dds", m_EmptySquareResources[1]);
+	loadImage(L"Assets/Image/Shop/PetConfirmationButton.dds", m_PetConfirmationButtonResource);
+	loadImage(L"Assets/Image/Shop/ScrollBackGround.dds", m_ScrollBackgroundResource);
+	loadImage(L"Assets/Image/Shop/Scroll.dds", m_ScrollResource);
+	loadImage(L"Assets/Image/Common/EmptyFrame.dds", m_EmptyFrameResource);
+	loadImage(L"Assets/Image/Shop/PetEnhanceButton.dds", m_PetEnhanceButtonResource);
+	loadImage(L"Assets/Image/Shop/PetEnhancePriceFrame.dds", m_PetEnhancePriceFrameResource);
+	loadImage(L"Assets/Image/Shop/PetEnhanceLog1.dds", m_PetEnhanceLogResources[0]);
+	loadImage(L"Assets/Image/Shop/PetEnhanceLog2.dds", m_PetEnhanceLogResources[1]);
 }
 
 void CShopUI::ReleaseObjects()

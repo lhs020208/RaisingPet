@@ -351,7 +351,7 @@ void CGameScene::BuildObjects(ID3D12Device* pd3dDevice, ID3D12GraphicsCommandLis
 
 	std::unique_ptr<uint8_t[]> coinDdsData;
 	std::vector<D3D12_SUBRESOURCE_DATA> coinSubresources;
-	hResult = DirectX::LoadDDSTextureFromFile(pd3dDevice, L"Assets/Image/Coin.dds",
+	hResult = DirectX::LoadDDSTextureFromFile(pd3dDevice, L"Assets/Image/Effects/Coin.dds",
 		&m_pd3dCoinTexture, coinDdsData, coinSubresources);
 	if (FAILED(hResult) || coinSubresources.empty()) return;
 

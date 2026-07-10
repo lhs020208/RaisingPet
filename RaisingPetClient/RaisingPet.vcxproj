@@ -135,8 +135,8 @@
       <OptimizeReferences>true</OptimizeReferences>
     </Link>
     <PostBuildEvent>
-      <Command>if not exist "$(ProjectDir)Executable\Assets\Image\" mkdir "$(ProjectDir)Executable\Assets\Image\"
-xcopy "$(ProjectDir)Assets\Image\Test.dds" "$(ProjectDir)Executable\Assets\Image\" /Y</Command>
+      <Command>if not exist "$(ProjectDir)Executable\Assets\Image\Debug\" mkdir "$(ProjectDir)Executable\Assets\Image\Debug\"
+xcopy "$(ProjectDir)Assets\Image\Debug\Test.dds" "$(ProjectDir)Executable\Assets\Image\Debug\" /Y</Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemGroup>
