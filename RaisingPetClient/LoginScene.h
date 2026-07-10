@@ -41,6 +41,7 @@ private:
 	{
 		XMFLOAT4 rectangle = XMFLOAT4(0.0f, 0.0f, 0.0f, 0.0f);
 		float elapsedTime = 0.0f;
+		int type = 0;
 	};
 	enum class LOGIN_PAGE
 	{
@@ -61,6 +62,7 @@ private:
 	UI_IMAGE_RESOURCE m_GuestButton;
 	UI_IMAGE_RESOURCE m_TextCursor;
 	UI_IMAGE_RESOURCE m_LoginErrorLog;
+	UI_IMAGE_RESOURCE m_LoginErrorLog2;
 	UI_IMAGE_RESOURCE m_LoginLoading;
 	UI_IMAGE_RESOURCE m_LoadingTexts[3];
 	UI_IMAGE_RESOURCE m_DirectStartButton;
@@ -93,8 +95,9 @@ private:
 	float MeasureText(const std::string& text, size_t characterCount, float scale) const;
 	void ResetCursorBlink();
 	void MoveCursorFromClick(int nFieldIndex, float x, const XMFLOAT4& rectangle);
-	void SpawnLoginErrorLog(float fViewportWidth, float fViewportHeight);
+	void SpawnLoginErrorLog(float fViewportWidth, float fViewportHeight, int nType = 0);
 	void EnterLoadingPage();
+	void ReturnToInputPageWithLoginFailure(float fViewportWidth, float fViewportHeight);
 	void LoadSavedAccountInformation();
 	void SaveAccountInformation() const;
 };

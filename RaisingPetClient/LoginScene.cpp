@@ -104,14 +104,16 @@ XMFLOAT4 GetLoginButtonRectangle(bool guest, float width, float height)
 	return(XMFLOAT4(left, top, left + buttonWidth, top + buttonHeight));
 }
 
-XMFLOAT4 GetLoginErrorLogRectangle(float width, float height)
+XMFLOAT4 GetLoginErrorLogRectangle(float width, float height, int type)
 {
 	const XMFLOAT4 board = GetBoardRectangle(width, height);
 	const XMFLOAT4 loginButton = GetLoginButtonRectangle(false, width, height);
 	const float boardWidth = board.z - board.x;
 	const float boardHeight = board.w - board.y;
-	const float logWidth = boardWidth * 0.48f;
-	const float logHeight = logWidth * (134.0f / 1473.0f);
+	const float logHeight = (boardWidth * 0.48f) * (134.0f / 1473.0f);
+	const float logWidth = (type == 1)
+		? logHeight * (1756.0f / 133.0f)
+		: logHeight * (1473.0f / 134.0f);
 	const float centerX = (loginButton.x + loginButton.z) * 0.5f;
 	const float top = loginButton.y - logHeight - boardHeight * 0.035f;
 	return(XMFLOAT4(centerX - logWidth * 0.5f, top, centerX + logWidth * 0.5f, top + logHeight));
@@ -354,6 +356,7 @@ void CLoginScene::BuildObjects(ID3D12Device* device, ID3D12GraphicsCommandList* 
 	loadImage(L"Assets/Image/GuestButton.dds", m_GuestButton);
 	loadImage(L"Assets/Image/TextCursor.dds", m_TextCursor);
 	loadImage(L"Assets/Image/LoginErrorLog.dds", m_LoginErrorLog);
+	loadImage(L"Assets/Image/LoginErrorLog2.dds", m_LoginErrorLog2);
 	loadImage(L"Assets/Image/LoginLoading.dds", m_LoginLoading);
 	loadImage(L"Assets/Image/LoadingText1.dds", m_LoadingTexts[0]);
 	loadImage(L"Assets/Image/LoadingText2.dds", m_LoadingTexts[1]);
@@ -402,7 +405,7 @@ void CLoginScene::ReleaseObjects()
 	m_pd3dRotatingUiPipelineState = NULL;
 	UI_IMAGE_RESOURCE* resources[] = { &m_ShopBoard, &m_CloseIcon, &m_LoginFrame,
 		&m_IdLog, &m_PasswordLog, &m_TextFrame, &m_LoginButton, &m_GuestButton,
-		&m_TextCursor, &m_LoginErrorLog, &m_LoginLoading, &m_LoadingTexts[0],
+		&m_TextCursor, &m_LoginErrorLog, &m_LoginErrorLog2, &m_LoginLoading, &m_LoadingTexts[0],
 		&m_LoadingTexts[1], &m_LoadingTexts[2], &m_DirectStartButton,
 		&m_PasswordHideIcon, &m_PasswordHideCheckBox };
 	for (UI_IMAGE_RESOURCE* resource : resources)
@@ -427,7 +430,7 @@ void CLoginScene::ReleaseUploadBuffers()
 {
 	UI_IMAGE_RESOURCE* resources[] = { &m_ShopBoard, &m_CloseIcon, &m_LoginFrame,
 		&m_IdLog, &m_PasswordLog, &m_TextFrame, &m_LoginButton, &m_GuestButton,
-		&m_TextCursor, &m_LoginErrorLog, &m_LoginLoading, &m_LoadingTexts[0],
+		&m_TextCursor, &m_LoginErrorLog, &m_LoginErrorLog2, &m_LoginLoading, &m_LoadingTexts[0],
 		&m_LoadingTexts[1], &m_LoadingTexts[2], &m_DirectStartButton,
 		&m_PasswordHideIcon, &m_PasswordHideCheckBox };
 	for (UI_IMAGE_RESOURCE* resource : resources)
@@ -597,11 +600,12 @@ void CLoginScene::MoveCursorFromClick(int fieldIndex, float x, const XMFLOAT4& r
 	m_CursorIndices[fieldIndex] = nearestIndex;
 }
 
-void CLoginScene::SpawnLoginErrorLog(float viewportWidth, float viewportHeight)
+void CLoginScene::SpawnLoginErrorLog(float viewportWidth, float viewportHeight, int type)
 {
 	LOGIN_ERROR_LOG log;
-	log.rectangle = GetLoginErrorLogRectangle(viewportWidth, viewportHeight);
+	log.rectangle = GetLoginErrorLogRectangle(viewportWidth, viewportHeight, type);
 	log.elapsedTime = 0.0f;
+	log.type = type;
 	m_LoginErrorLogs.push_back(log);
 }
 
@@ -611,6 +615,15 @@ void CLoginScene::EnterLoadingPage()
 	m_nActiveTextField = -1;
 	m_LoginErrorLogs.clear();
 	m_fLoadingElapsedTime = 0.0f;
+}
+
+void CLoginScene::ReturnToInputPageWithLoginFailure(float viewportWidth, float viewportHeight)
+{
+	m_eLoginPage = LOGIN_PAGE::INPUT;
+	m_nActiveTextField = -1;
+	m_fLoadingElapsedTime = 0.0f;
+	m_LoginErrorLogs.clear();
+	SpawnLoginErrorLog(viewportWidth, viewportHeight, 1);
 }
 
 void CLoginScene::LoadSavedAccountInformation()
@@ -700,7 +713,8 @@ void CLoginScene::RenderInputPage(ID3D12GraphicsCommandList* commandList, CCamer
 		const float alphaRatio = max(0.0f, 1.0f - log.elapsedTime);
 		const UINT alpha = max(1u, static_cast<UINT>(alphaRatio * 255.0f + 0.5f));
 		const float moveY = -20.0f * log.elapsedTime;
-		RenderUiImage(commandList, camera, m_LoginErrorLog,
+		UI_IMAGE_RESOURCE& errorResource = (log.type == 1) ? m_LoginErrorLog2 : m_LoginErrorLog;
+		RenderUiImage(commandList, camera, errorResource,
 			XMFLOAT4(log.rectangle.x, log.rectangle.y + moveY,
 				log.rectangle.z, log.rectangle.w + moveY),
 			(alpha << 24) | 0x00FFFFFF);
@@ -782,6 +796,17 @@ void CLoginScene::OnProcessingMouseMessage(HWND hWnd, UINT message, WPARAM, LPAR
 
 void CLoginScene::OnProcessingKeyboardMessage(HWND hWnd, UINT message, WPARAM wParam, LPARAM)
 {
+	if (m_eLoginPage == LOGIN_PAGE::LOADING)
+	{
+		if (message == WM_KEYDOWN && wParam == VK_F9)
+		{
+			RECT client;
+			GetClientRect(hWnd, &client);
+			ReturnToInputPageWithLoginFailure(static_cast<float>(client.right),
+				static_cast<float>(client.bottom));
+		}
+		return;
+	}
 	if (m_eLoginPage != LOGIN_PAGE::INPUT) return;
 	if (m_nActiveTextField < 0) return;
 	std::string& text = (m_nActiveTextField == 0) ? m_LoginId : m_LoginPassword;
