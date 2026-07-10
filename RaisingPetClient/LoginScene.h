@@ -95,4 +95,6 @@ private:
 	void MoveCursorFromClick(int nFieldIndex, float x, const XMFLOAT4& rectangle);
 	void SpawnLoginErrorLog(float fViewportWidth, float fViewportHeight);
 	void EnterLoadingPage();
+	void LoadSavedAccountInformation();
+	void SaveAccountInformation() const;
 };

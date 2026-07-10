@@ -19,6 +19,43 @@ bool IsLoginInputCharacter(char ch)
 		(ch >= '0' && ch <= '9'));
 }
 
+const char* GetAccountInformationFilePath()
+{
+	return("Network\\AccountInformation.rpacct");
+}
+
+UINT CalculateAccountChecksum(const std::vector<unsigned char>& data)
+{
+	UINT checksum = 2166136261u;
+	for (unsigned char byte : data)
+	{
+		checksum ^= byte;
+		checksum *= 16777619u;
+	}
+	return(checksum);
+}
+
+void TransformAccountPayload(std::vector<unsigned char>& data)
+{
+	const unsigned char key[] = { 0x52, 0x61, 0x69, 0x73, 0x69, 0x6E, 0x67, 0x50, 0x65, 0x74 };
+	unsigned char rolling = 0xA7;
+	for (size_t i = 0; i < data.size(); ++i)
+	{
+		const unsigned char mixedKey = static_cast<unsigned char>(key[i % _countof(key)]
+			+ static_cast<unsigned char>(i * 31) + rolling);
+		data[i] ^= mixedKey;
+		rolling = static_cast<unsigned char>(rolling * 33u + 17u);
+	}
+}
+
+bool IsAccountTextValid(const std::string& text)
+{
+	if (text.empty() || text.size() > 256) return(false);
+	for (char ch : text)
+		if (!IsLoginInputCharacter(ch)) return(false);
+	return(true);
+}
+
 XMFLOAT4 GetBoardRectangle(float width, float height)
 {
 	float boardWidth = min(width * 0.82f, 900.0f);
@@ -352,6 +389,7 @@ void CLoginScene::BuildObjects(ID3D12Device* device, ID3D12GraphicsCommandList* 
 		}
 		loadImage(fileName.c_str(), glyph.image);
 	}
+	LoadSavedAccountInformation();
 }
 
 void CLoginScene::ReleaseObjects()
@@ -575,6 +613,71 @@ void CLoginScene::EnterLoadingPage()
 	m_fLoadingElapsedTime = 0.0f;
 }
 
+void CLoginScene::LoadSavedAccountInformation()
+{
+	std::ifstream input(GetAccountInformationFilePath(), std::ios::binary);
+	if (!input) return;
+
+	char magic[8] = {};
+	UINT version = 0;
+	UINT idLength = 0;
+	UINT passwordLength = 0;
+	UINT checksum = 0;
+	input.read(magic, sizeof(magic));
+	input.read(reinterpret_cast<char*>(&version), sizeof(version));
+	input.read(reinterpret_cast<char*>(&idLength), sizeof(idLength));
+	input.read(reinterpret_cast<char*>(&passwordLength), sizeof(passwordLength));
+	input.read(reinterpret_cast<char*>(&checksum), sizeof(checksum));
+	const char expectedMagic[8] = { 'R', 'P', 'A', 'C', 'C', 'T', '0', '1' };
+	if (!input || memcmp(magic, expectedMagic, sizeof(expectedMagic)) != 0 || version != 1
+		|| idLength == 0 || passwordLength == 0 || idLength > 256 || passwordLength > 256)
+		return;
+
+	const UINT payloadSize = idLength + passwordLength;
+	std::vector<unsigned char> payload(payloadSize);
+	input.read(reinterpret_cast<char*>(payload.data()), payload.size());
+	if (!input || input.peek() != EOF) return;
+
+	TransformAccountPayload(payload);
+	if (CalculateAccountChecksum(payload) != checksum) return;
+
+	std::string loadedId(reinterpret_cast<char*>(payload.data()), idLength);
+	std::string loadedPassword(reinterpret_cast<char*>(payload.data() + idLength), passwordLength);
+	if (!IsAccountTextValid(loadedId) || !IsAccountTextValid(loadedPassword)) return;
+
+	m_LoginId = loadedId;
+	m_LoginPassword = loadedPassword;
+	m_CursorIndices[0] = m_LoginId.size();
+	m_CursorIndices[1] = m_LoginPassword.size();
+}
+
+void CLoginScene::SaveAccountInformation() const
+{
+	if (!IsAccountTextValid(m_LoginId) || !IsAccountTextValid(m_LoginPassword)) return;
+	CreateDirectoryA("Network", NULL);
+
+	std::vector<unsigned char> payload;
+	payload.reserve(m_LoginId.size() + m_LoginPassword.size());
+	payload.insert(payload.end(), m_LoginId.begin(), m_LoginId.end());
+	payload.insert(payload.end(), m_LoginPassword.begin(), m_LoginPassword.end());
+	const UINT checksum = CalculateAccountChecksum(payload);
+	TransformAccountPayload(payload);
+
+	std::ofstream output(GetAccountInformationFilePath(), std::ios::binary | std::ios::trunc);
+	if (!output) return;
+
+	const char magic[8] = { 'R', 'P', 'A', 'C', 'C', 'T', '0', '1' };
+	const UINT version = 1;
+	const UINT idLength = static_cast<UINT>(m_LoginId.size());
+	const UINT passwordLength = static_cast<UINT>(m_LoginPassword.size());
+	output.write(magic, sizeof(magic));
+	output.write(reinterpret_cast<const char*>(&version), sizeof(version));
+	output.write(reinterpret_cast<const char*>(&idLength), sizeof(idLength));
+	output.write(reinterpret_cast<const char*>(&passwordLength), sizeof(passwordLength));
+	output.write(reinterpret_cast<const char*>(&checksum), sizeof(checksum));
+	output.write(reinterpret_cast<const char*>(payload.data()), payload.size());
+}
+
 void CLoginScene::RenderInputPage(ID3D12GraphicsCommandList* commandList, CCamera* camera,
 	float width, float height)
 {
@@ -670,6 +773,7 @@ void CLoginScene::OnProcessingMouseMessage(HWND hWnd, UINT message, WPARAM, LPAR
 			SpawnLoginErrorLog(width, height);
 			return;
 		}
+		SaveAccountInformation();
 		EnterLoadingPage();
 	}
 	else if (PointInRectangle(x, y, GetLoginButtonRectangle(true, width, height)))
