@@ -48,9 +48,9 @@ XMFLOAT4 GetLoginFrameRectangle(float width, float height)
 	const XMFLOAT4 board = GetBoardRectangle(width, height);
 	const float boardWidth = board.z - board.x;
 	const float boardHeight = board.w - board.y;
-	const float left = board.x + boardWidth * 0.055f;
+	const float left = board.x + boardWidth * 0.035f;
 	const float top = board.y + boardHeight * 0.21f;
-	const float frameWidth = boardWidth * 0.66f;
+	const float frameWidth = boardWidth * 0.69f;
 	return(XMFLOAT4(left, top, left + frameWidth,
 		top + frameWidth * (1208.0f / 1906.0f)));
 }
@@ -125,7 +125,7 @@ XMFLOAT4 GetLabelRectangle(bool password, float width, float height)
 	const float frameHeight = frame.w - frame.y;
 	const float labelWidth = frameWidth * 0.16f;
 	const float labelHeight = labelWidth * ((password ? 274.0f : 237.0f) / (password ? 313.0f : 314.0f));
-	const float left = frame.x + frameWidth * 0.065f;
+	const float left = frame.x + frameWidth * 0.055f;
 	const float centerY = frame.y + frameHeight * (password ? 0.70f : 0.32f);
 	return(XMFLOAT4(left, centerY - labelHeight * 0.5f,
 		left + labelWidth, centerY + labelHeight * 0.5f));
@@ -136,12 +136,34 @@ XMFLOAT4 GetTextFrameRectangle(bool password, float width, float height)
 	const XMFLOAT4 frame = GetLoginFrameRectangle(width, height);
 	const XMFLOAT4 label = GetLabelRectangle(password, width, height);
 	const float frameWidth = frame.z - frame.x;
-	const float textWidth = frameWidth * 0.66f;
+	const float textWidth = frameWidth * 0.64f;
 	const float textHeight = textWidth * (156.0f / 1254.0f);
-	const float left = frame.x + frameWidth * 0.27f;
+	const float left = frame.x + frameWidth * 0.245f;
 	const float centerY = (label.y + label.w) * 0.5f;
 	return(XMFLOAT4(left, centerY - textHeight * 0.5f,
 		left + textWidth, centerY + textHeight * 0.5f));
+}
+
+XMFLOAT4 GetPasswordHideIconRectangle(float width, float height)
+{
+	const XMFLOAT4 textFrame = GetTextFrameRectangle(true, width, height);
+	const float frameHeight = textFrame.w - textFrame.y;
+	const float iconWidth = frameHeight * 0.75f;
+	const float iconHeight = iconWidth * (70.0f / 118.0f);
+	const float left = textFrame.z + frameHeight * 0.18f;
+	const float top = textFrame.y - iconHeight - frameHeight * 0.10f;
+	return(XMFLOAT4(left, top, left + iconWidth, top + iconHeight));
+}
+
+XMFLOAT4 GetPasswordHideCheckBoxRectangle(float width, float height)
+{
+	const XMFLOAT4 textFrame = GetTextFrameRectangle(true, width, height);
+	const float frameHeight = textFrame.w - textFrame.y;
+	const float boxHeight = frameHeight * 0.82f;
+	const float boxWidth = boxHeight * (105.0f / 107.0f);
+	const float left = textFrame.z + frameHeight * 0.18f;
+	const float top = textFrame.y + (frameHeight - boxHeight) * 0.5f;
+	return(XMFLOAT4(left, top, left + boxWidth, top + boxHeight));
 }
 
 struct GLYPH_METRIC
@@ -163,6 +185,7 @@ const GLYPH_METRIC gGlyphMetrics[] =
 	{ '8',441,161,136,283,322 }, { '9',441,159,136,282,322 },
 	{ '.',363,161,283,203,322 }, { ',',363,154,287,199,350 },
 	{ '/',407,144,139,261,348 }, { '$',441,165,116,280,345 },
+	{ '*',410,157,139,253,232 },
 	{ 'a',433,157,187,269,322 }, { 'A',472,150,139,321,318 },
 	{ 'b',453,166,129,295,322 }, { 'B',455,170,139,297,318 },
 	{ 'c',419,159,187,261,322 }, { 'C',456,158,136,296,322 },
@@ -299,6 +322,8 @@ void CLoginScene::BuildObjects(ID3D12Device* device, ID3D12GraphicsCommandList* 
 	loadImage(L"Assets/Image/LoadingText2.dds", m_LoadingTexts[1]);
 	loadImage(L"Assets/Image/LoadingText3.dds", m_LoadingTexts[2]);
 	loadImage(L"Assets/Image/DirectStartButton.dds", m_DirectStartButton);
+	loadImage(L"Assets/Image/PasswordHideIcon.dds", m_PasswordHideIcon);
+	loadImage(L"Assets/Image/PasswordHideCheckBox.dds", m_PasswordHideCheckBox);
 	for (const GLYPH_METRIC& metric : gGlyphMetrics)
 	{
 		m_Glyphs.emplace_back();
@@ -318,6 +343,7 @@ void CLoginScene::BuildObjects(ID3D12Device* device, ID3D12GraphicsCommandList* 
 		else if (metric.ch == ',') fileName = L"Assets/Image/Numbers/Comma.dds";
 		else if (metric.ch == '/') fileName = L"Assets/Image/Numbers/Slash.dds";
 		else if (metric.ch == '$') fileName = L"Assets/Image/Numbers/Dollar.dds";
+		else if (metric.ch == '*') fileName = L"Assets/Image/Numbers/Star.dds";
 		else
 		{
 			const wchar_t lower = static_cast<wchar_t>(tolower(static_cast<unsigned char>(metric.ch)));
@@ -339,7 +365,8 @@ void CLoginScene::ReleaseObjects()
 	UI_IMAGE_RESOURCE* resources[] = { &m_ShopBoard, &m_CloseIcon, &m_LoginFrame,
 		&m_IdLog, &m_PasswordLog, &m_TextFrame, &m_LoginButton, &m_GuestButton,
 		&m_TextCursor, &m_LoginErrorLog, &m_LoginLoading, &m_LoadingTexts[0],
-		&m_LoadingTexts[1], &m_LoadingTexts[2], &m_DirectStartButton };
+		&m_LoadingTexts[1], &m_LoadingTexts[2], &m_DirectStartButton,
+		&m_PasswordHideIcon, &m_PasswordHideCheckBox };
 	for (UI_IMAGE_RESOURCE* resource : resources)
 	{
 		if (resource->pd3dTexture) resource->pd3dTexture->Release();
@@ -363,7 +390,8 @@ void CLoginScene::ReleaseUploadBuffers()
 	UI_IMAGE_RESOURCE* resources[] = { &m_ShopBoard, &m_CloseIcon, &m_LoginFrame,
 		&m_IdLog, &m_PasswordLog, &m_TextFrame, &m_LoginButton, &m_GuestButton,
 		&m_TextCursor, &m_LoginErrorLog, &m_LoginLoading, &m_LoadingTexts[0],
-		&m_LoadingTexts[1], &m_LoadingTexts[2], &m_DirectStartButton };
+		&m_LoadingTexts[1], &m_LoadingTexts[2], &m_DirectStartButton,
+		&m_PasswordHideIcon, &m_PasswordHideCheckBox };
 	for (UI_IMAGE_RESOURCE* resource : resources)
 	{
 		if (!resource->pd3dTextureUploadBuffer) continue;
@@ -444,7 +472,9 @@ void CLoginScene::RenderTextField(ID3D12GraphicsCommandList* commandList, CCamer
 	int fieldIndex, const XMFLOAT4& rectangle)
 {
 	if (!m_pd3dTextPipelineState || !camera) return;
-	const std::string& text = (fieldIndex == 0) ? m_LoginId : m_LoginPassword;
+	const std::string& actualText = (fieldIndex == 0) ? m_LoginId : m_LoginPassword;
+	const std::string hiddenPasswordText(actualText.size(), '*');
+	const std::string& text = (fieldIndex == 1 && !m_bPasswordVisible) ? hiddenPasswordText : actualText;
 	const float frameHeight = rectangle.w - rectangle.y;
 	const float scale = frameHeight / 330.0f;
 	const float left = rectangle.x + frameHeight * 0.30f;
@@ -496,7 +526,9 @@ void CLoginScene::ResetCursorBlink()
 
 void CLoginScene::MoveCursorFromClick(int fieldIndex, float x, const XMFLOAT4& rectangle)
 {
-	const std::string& text = (fieldIndex == 0) ? m_LoginId : m_LoginPassword;
+	const std::string& actualText = (fieldIndex == 0) ? m_LoginId : m_LoginPassword;
+	const std::string hiddenPasswordText(actualText.size(), '*');
+	const std::string& text = (fieldIndex == 1 && !m_bPasswordVisible) ? hiddenPasswordText : actualText;
 	const float frameHeight = rectangle.w - rectangle.y;
 	const float scale = frameHeight / 330.0f;
 	const float textLeft = rectangle.x + frameHeight * 0.30f;
@@ -553,6 +585,10 @@ void CLoginScene::RenderInputPage(ID3D12GraphicsCommandList* commandList, CCamer
 	RenderUiImage(commandList, camera, m_TextFrame, GetTextFrameRectangle(true, width, height));
 	RenderTextField(commandList, camera, 0, GetTextFrameRectangle(false, width, height));
 	RenderTextField(commandList, camera, 1, GetTextFrameRectangle(true, width, height));
+	RenderUiImage(commandList, camera, m_PasswordHideIcon, GetPasswordHideIconRectangle(width, height));
+	RenderUiImage(commandList, camera, m_PasswordHideCheckBox,
+		GetPasswordHideCheckBoxRectangle(width, height),
+		m_bPasswordVisible ? 0x00BFBFBF : 0x00FFFFFF);
 	RenderUiImage(commandList, camera, m_LoginButton, GetLoginButtonRectangle(false, width, height));
 	RenderUiImage(commandList, camera, m_GuestButton, GetLoginButtonRectangle(true, width, height));
 	RenderUiImage(commandList, camera, m_CloseIcon, GetCloseRectangle(width, height));
@@ -612,6 +648,11 @@ void CLoginScene::OnProcessingMouseMessage(HWND hWnd, UINT message, WPARAM, LPAR
 			g_pFramework->RequestSceneChange(SCENE_TYPE::GAME);
 		return;
 	}
+	if (PointInRectangle(x, y, GetPasswordHideCheckBoxRectangle(width, height)))
+	{
+		m_bPasswordVisible = !m_bPasswordVisible;
+		return;
+	}
 	for (int fieldIndex = 0; fieldIndex < 2; ++fieldIndex)
 	{
 		const XMFLOAT4 textFrame = GetTextFrameRectangle(fieldIndex == 1, width, height);
@@ -663,7 +704,9 @@ void CLoginScene::OnProcessingKeyboardMessage(HWND hWnd, UINT message, WPARAM wP
 		std::string candidate = text;
 		candidate.insert(candidate.begin() + cursorIndex, ch);
 		const float availableWidth = (frame.z - frame.x) - (frame.w - frame.y) * 0.60f;
-		if (MeasureText(candidate, candidate.size(), scale) > availableWidth) return;
+		const std::string displayCandidate = (m_nActiveTextField == 1 && !m_bPasswordVisible)
+			? std::string(candidate.size(), '*') : candidate;
+		if (MeasureText(displayCandidate, displayCandidate.size(), scale) > availableWidth) return;
 		text.swap(candidate);
 		++cursorIndex;
 		ResetCursorBlink();

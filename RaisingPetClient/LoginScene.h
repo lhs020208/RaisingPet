@@ -64,6 +64,8 @@ private:
 	UI_IMAGE_RESOURCE m_LoginLoading;
 	UI_IMAGE_RESOURCE m_LoadingTexts[3];
 	UI_IMAGE_RESOURCE m_DirectStartButton;
+	UI_IMAGE_RESOURCE m_PasswordHideIcon;
+	UI_IMAGE_RESOURCE m_PasswordHideCheckBox;
 	std::vector<GLYPH_RESOURCE> m_Glyphs;
 	std::vector<LOGIN_ERROR_LOG> m_LoginErrorLogs;
 	std::string m_LoginId;
@@ -72,6 +74,7 @@ private:
 	int m_nActiveTextField = -1;
 	float m_fCursorBlinkElapsed = 0.0f;
 	float m_fLoadingElapsedTime = 0.0f;
+	bool m_bPasswordVisible = false;
 	LOGIN_PAGE m_eLoginPage = LOGIN_PAGE::INPUT;
 	CGameObject m_UiHitObject;
 
