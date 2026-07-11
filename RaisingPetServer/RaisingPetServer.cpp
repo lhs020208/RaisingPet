@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <array>
+#include <chrono>
 #include <cstdint>
 #include <iostream>
 #include <mutex>
@@ -34,6 +35,12 @@ enum class PacketType : std::uint16_t {
 	LoginResponse = 4,
 	MoneyUpdate = 5,
 	MoneyChanged = 6,
+	SavingsJoinRequest = 7,
+	SavingsJoinResponse = 8,
+	LoanApplyRequest = 9,
+	LoanApplyResponse = 10,
+	FinancialProductCompleted = 11,
+	FinancialProductActive = 12,
 	AdminLoginRequest = 100,
 	AdminLoginResponse = 101,
 };
@@ -46,6 +53,44 @@ enum class AuthResult : std::uint8_t {
 	WrongPassword = 4,
 	DatabaseError = 5,
 	ServerError = 6,
+};
+
+enum class FinancialResult : std::uint8_t {
+	Success = 0,
+	InvalidRequest = 1,
+	NotAuthenticated = 2,
+	AlreadyActive = 3,
+	ProductNotFound = 4,
+	NotEnoughMoney = 5,
+	DatabaseError = 6,
+	MoneyLimitExceeded = 7,
+};
+
+enum class FinancialCategory : std::uint8_t {
+	Savings = 0,
+	Loan = 1,
+};
+
+struct FinancialApplicationResult {
+	FinancialResult result = FinancialResult::DatabaseError;
+	std::uint32_t productId = 0;
+	std::uint32_t durationSeconds = 0;
+	std::int64_t moneyDelta = 0;
+	std::uint64_t finalMoney = 0;
+};
+
+struct FinancialMoneyChange {
+	FinancialCategory category = FinancialCategory::Savings;
+	std::uint32_t productId = 0;
+	std::int64_t moneyDelta = 0;
+	std::uint64_t finalMoney = 0;
+	bool completed = false;
+};
+
+struct FinancialActiveStatus {
+	FinancialCategory category = FinancialCategory::Savings;
+	std::uint32_t productId = 0;
+	std::uint32_t remainingSeconds = 0;
 };
 
 struct PacketHeader {
@@ -266,13 +311,422 @@ public:
 		return true;
 	}
 
+	FinancialApplicationResult JoinSavings(const std::string& id, std::uint32_t savingsId) {
+		FinancialApplicationResult application;
+		application.productId = savingsId;
+		if (!IsAccountTextValid(id, 32) || savingsId == 0)
+			return WithResult(application, FinancialResult::InvalidRequest);
+
+		const std::string escapedId = Escape(id);
+		if (mysql_query(connection_, "START TRANSACTION") != 0)
+			return WithDatabaseError(application, "JoinSavings start transaction");
+
+		if (HasActiveRow("PlayerSavings", escapedId)) {
+			mysql_query(connection_, "ROLLBACK");
+			return WithResult(application, FinancialResult::AlreadyActive);
+		}
+
+		std::uint64_t depositMoney = 0;
+		std::uint64_t returnMoney = 0;
+		std::uint32_t duration = 0;
+		if (!LoadSavingsProduct(savingsId, depositMoney, returnMoney, duration)) {
+			mysql_query(connection_, "ROLLBACK");
+			return WithResult(application, FinancialResult::ProductNotFound);
+		}
+
+		std::uint64_t currentMoney = 0;
+		bool isOnline = false;
+		if (!LoadPlayerMoneyForUpdate(escapedId, currentMoney, isOnline)) {
+			mysql_query(connection_, "ROLLBACK");
+			return WithDatabaseError(application, "JoinSavings select player");
+		}
+		if (!isOnline) {
+			mysql_query(connection_, "ROLLBACK");
+			return WithResult(application, FinancialResult::NotAuthenticated);
+		}
+		if (currentMoney < depositMoney) {
+			mysql_query(connection_, "ROLLBACK");
+			return WithResult(application, FinancialResult::NotEnoughMoney);
+		}
+
+		const std::uint64_t finalMoney = currentMoney - depositMoney;
+		const std::string updateMoney =
+			"UPDATE `Player` SET `Money` = " + std::to_string(finalMoney) +
+			" WHERE `PlayerID` = '" + escapedId + "'";
+		if (mysql_query(connection_, updateMoney.c_str()) != 0) {
+			mysql_query(connection_, "ROLLBACK");
+			return WithDatabaseError(application, "JoinSavings update money");
+		}
+
+		const std::string insertSavings =
+			"INSERT INTO `PlayerSavings` (`PlayerID`, `SavingsID`, `StartTime`, `EndTime`) "
+			"VALUES ('" + escapedId + "', " + std::to_string(savingsId) +
+			", NOW(), DATE_ADD(NOW(), INTERVAL " + std::to_string(duration) + " SECOND))";
+		if (mysql_query(connection_, insertSavings.c_str()) != 0) {
+			mysql_query(connection_, "ROLLBACK");
+			if (mysql_errno(connection_) == ER_DUP_ENTRY)
+				return WithResult(application, FinancialResult::AlreadyActive);
+			return WithDatabaseError(application, "JoinSavings insert");
+		}
+
+		if (mysql_query(connection_, "COMMIT") != 0) {
+			mysql_query(connection_, "ROLLBACK");
+			return WithDatabaseError(application, "JoinSavings commit");
+		}
+
+		application.result = FinancialResult::Success;
+		application.durationSeconds = duration;
+		application.moneyDelta = -static_cast<std::int64_t>(depositMoney);
+		application.finalMoney = finalMoney;
+		return application;
+	}
+
+	FinancialApplicationResult ApplyLoan(const std::string& id, std::uint32_t loanId) {
+		FinancialApplicationResult application;
+		application.productId = loanId;
+		if (!IsAccountTextValid(id, 32) || loanId == 0)
+			return WithResult(application, FinancialResult::InvalidRequest);
+
+		const std::string escapedId = Escape(id);
+		if (mysql_query(connection_, "START TRANSACTION") != 0)
+			return WithDatabaseError(application, "ApplyLoan start transaction");
+
+		if (HasActiveRow("PlayerLoan", escapedId)) {
+			mysql_query(connection_, "ROLLBACK");
+			return WithResult(application, FinancialResult::AlreadyActive);
+		}
+
+		std::uint64_t borrowMoney = 0;
+		std::uint64_t repaymentMoney = 0;
+		std::uint32_t duration = 0;
+		if (!LoadLoanProduct(loanId, borrowMoney, repaymentMoney, duration)) {
+			mysql_query(connection_, "ROLLBACK");
+			return WithResult(application, FinancialResult::ProductNotFound);
+		}
+
+		std::uint64_t currentMoney = 0;
+		bool isOnline = false;
+		if (!LoadPlayerMoneyForUpdate(escapedId, currentMoney, isOnline)) {
+			mysql_query(connection_, "ROLLBACK");
+			return WithDatabaseError(application, "ApplyLoan select player");
+		}
+		if (!isOnline) {
+			mysql_query(connection_, "ROLLBACK");
+			return WithResult(application, FinancialResult::NotAuthenticated);
+		}
+		if (currentMoney > UINT_MAX - borrowMoney) {
+			mysql_query(connection_, "ROLLBACK");
+			return WithResult(application, FinancialResult::MoneyLimitExceeded);
+		}
+
+		const std::uint64_t finalMoney = currentMoney + borrowMoney;
+		const std::string updateMoney =
+			"UPDATE `Player` SET `Money` = " + std::to_string(finalMoney) +
+			" WHERE `PlayerID` = '" + escapedId + "'";
+		if (mysql_query(connection_, updateMoney.c_str()) != 0) {
+			mysql_query(connection_, "ROLLBACK");
+			return WithDatabaseError(application, "ApplyLoan update money");
+		}
+
+		const std::string insertLoan =
+			"INSERT INTO `PlayerLoan` (`PlayerID`, `LoanID`, `StartTime`, `RepaymentTime`, `IsWaitingForCollection`) "
+			"VALUES ('" + escapedId + "', " + std::to_string(loanId) +
+			", NOW(), DATE_ADD(NOW(), INTERVAL " + std::to_string(duration) + " SECOND), FALSE)";
+		if (mysql_query(connection_, insertLoan.c_str()) != 0) {
+			mysql_query(connection_, "ROLLBACK");
+			if (mysql_errno(connection_) == ER_DUP_ENTRY)
+				return WithResult(application, FinancialResult::AlreadyActive);
+			return WithDatabaseError(application, "ApplyLoan insert");
+		}
+
+		if (mysql_query(connection_, "COMMIT") != 0) {
+			mysql_query(connection_, "ROLLBACK");
+			return WithDatabaseError(application, "ApplyLoan commit");
+		}
+
+		application.result = FinancialResult::Success;
+		application.durationSeconds = duration;
+		application.moneyDelta = static_cast<std::int64_t>(borrowMoney);
+		application.finalMoney = finalMoney;
+		return application;
+	}
+
+	bool ProcessDueFinancialProducts(const std::string& id,
+		std::vector<FinancialMoneyChange>& changes) {
+		if (!IsAccountTextValid(id, 32)) return false;
+		const std::string escapedId = Escape(id);
+
+		if (mysql_query(connection_, "START TRANSACTION") != 0) {
+			std::cerr << "ProcessDueFinancialProducts start failed: " << mysql_error(connection_) << '\n';
+			return false;
+		}
+
+		std::uint64_t currentMoney = 0;
+		bool isOnline = false;
+		if (!LoadPlayerMoneyForUpdate(escapedId, currentMoney, isOnline)) {
+			mysql_query(connection_, "ROLLBACK");
+			return false;
+		}
+		if (!isOnline) {
+			mysql_query(connection_, "ROLLBACK");
+			return true;
+		}
+
+		std::uint32_t savingsId = 0;
+		std::uint64_t returnMoney = 0;
+		if (LoadDueSavings(escapedId, savingsId, returnMoney)) {
+			if (currentMoney <= UINT_MAX - returnMoney) {
+				currentMoney += returnMoney;
+				const std::string updateMoney =
+					"UPDATE `Player` SET `Money` = " + std::to_string(currentMoney) +
+					" WHERE `PlayerID` = '" + escapedId + "'";
+				if (mysql_query(connection_, updateMoney.c_str()) != 0) {
+					mysql_query(connection_, "ROLLBACK");
+					return false;
+				}
+				const std::string deleteSavings =
+					"DELETE FROM `PlayerSavings` WHERE `PlayerID` = '" + escapedId + "'";
+				if (mysql_query(connection_, deleteSavings.c_str()) != 0) {
+					mysql_query(connection_, "ROLLBACK");
+					return false;
+				}
+				changes.push_back({ FinancialCategory::Savings, savingsId,
+					static_cast<std::int64_t>(returnMoney), currentMoney, true });
+			}
+		}
+
+		std::uint32_t loanId = 0;
+		std::uint64_t repaymentMoney = 0;
+		bool waitingForCollection = false;
+		if (LoadDueOrWaitingLoan(escapedId, loanId, repaymentMoney, waitingForCollection)) {
+			if (currentMoney >= repaymentMoney) {
+				currentMoney -= repaymentMoney;
+				const std::string updateMoney =
+					"UPDATE `Player` SET `Money` = " + std::to_string(currentMoney) +
+					" WHERE `PlayerID` = '" + escapedId + "'";
+				if (mysql_query(connection_, updateMoney.c_str()) != 0) {
+					mysql_query(connection_, "ROLLBACK");
+					return false;
+				}
+				const std::string deleteLoan =
+					"DELETE FROM `PlayerLoan` WHERE `PlayerID` = '" + escapedId + "'";
+				if (mysql_query(connection_, deleteLoan.c_str()) != 0) {
+					mysql_query(connection_, "ROLLBACK");
+					return false;
+				}
+				changes.push_back({ FinancialCategory::Loan, loanId,
+					-static_cast<std::int64_t>(repaymentMoney), currentMoney, true });
+			}
+			else if (!waitingForCollection) {
+				const std::string markWaiting =
+					"UPDATE `PlayerLoan` SET `IsWaitingForCollection` = TRUE "
+					"WHERE `PlayerID` = '" + escapedId + "'";
+				if (mysql_query(connection_, markWaiting.c_str()) != 0) {
+					mysql_query(connection_, "ROLLBACK");
+					return false;
+				}
+			}
+		}
+
+		if (mysql_query(connection_, "COMMIT") != 0) {
+			mysql_query(connection_, "ROLLBACK");
+			return false;
+		}
+		return true;
+	}
+
+	bool LoadActiveFinancialStatuses(const std::string& id,
+		std::vector<FinancialActiveStatus>& statuses) {
+		if (!IsAccountTextValid(id, 32)) return false;
+		const std::string escapedId = Escape(id);
+		if (!LoadActiveSavingsStatus(escapedId, statuses)) return false;
+		if (!LoadActiveLoanStatus(escapedId, statuses)) return false;
+		return true;
+	}
+
 private:
+	static FinancialApplicationResult WithResult(FinancialApplicationResult result,
+		FinancialResult financialResult) {
+		result.result = financialResult;
+		return result;
+	}
+
+	FinancialApplicationResult WithDatabaseError(FinancialApplicationResult result,
+		const char* context) {
+		std::cerr << context << " failed: " << mysql_error(connection_) << '\n';
+		result.result = FinancialResult::DatabaseError;
+		return result;
+	}
+
 	static bool IsAccountTextValid(const std::string& text, std::size_t maxLength) {
 		if (text.empty() || text.size() > maxLength) return false;
 		for (const char ch : text) {
 			if (!((ch >= 'A' && ch <= 'Z') || (ch >= 'a' && ch <= 'z') ||
 				(ch >= '0' && ch <= '9'))) return false;
 		}
+		return true;
+	}
+
+	bool HasActiveRow(const char* tableName, const std::string& escapedId) {
+		const std::string query =
+			std::string("SELECT 1 FROM `") + tableName + "` WHERE `PlayerID` = '" +
+			escapedId + "' LIMIT 1 FOR UPDATE";
+		if (mysql_query(connection_, query.c_str()) != 0) {
+			std::cerr << "HasActiveRow failed: " << mysql_error(connection_) << '\n';
+			return true;
+		}
+		MYSQL_RES* result = mysql_store_result(connection_);
+		if (!result) return true;
+		const bool exists = mysql_fetch_row(result) != nullptr;
+		mysql_free_result(result);
+		return exists;
+	}
+
+	bool LoadPlayerMoneyForUpdate(const std::string& escapedId,
+		std::uint64_t& money, bool& isOnline) {
+		const std::string query =
+			"SELECT `Money`, `IsOnline` FROM `Player` WHERE `PlayerID` = '" +
+			escapedId + "' LIMIT 1 FOR UPDATE";
+		if (mysql_query(connection_, query.c_str()) != 0) {
+			std::cerr << "LoadPlayerMoneyForUpdate failed: " << mysql_error(connection_) << '\n';
+			return false;
+		}
+		MYSQL_RES* result = mysql_store_result(connection_);
+		if (!result) return false;
+		MYSQL_ROW row = mysql_fetch_row(result);
+		if (!row) {
+			mysql_free_result(result);
+			return false;
+		}
+		money = row[0] ? std::stoull(row[0]) : 0;
+		isOnline = row[1] && std::string(row[1]) != "0";
+		mysql_free_result(result);
+		return true;
+	}
+
+	bool LoadSavingsProduct(std::uint32_t savingsId, std::uint64_t& depositMoney,
+		std::uint64_t& returnMoney, std::uint32_t& duration) {
+		const std::string query =
+			"SELECT `DepositMoney`, `ReturnMoney`, `Duration` FROM `InstallmentSavings` "
+			"WHERE `SavingsID` = " + std::to_string(savingsId) + " LIMIT 1";
+		if (mysql_query(connection_, query.c_str()) != 0) return false;
+		MYSQL_RES* result = mysql_store_result(connection_);
+		if (!result) return false;
+		MYSQL_ROW row = mysql_fetch_row(result);
+		if (!row) {
+			mysql_free_result(result);
+			return false;
+		}
+		depositMoney = row[0] ? std::stoull(row[0]) : 0;
+		returnMoney = row[1] ? std::stoull(row[1]) : 0;
+		duration = row[2] ? static_cast<std::uint32_t>(std::stoul(row[2])) : 0;
+		mysql_free_result(result);
+		return true;
+	}
+
+	bool LoadLoanProduct(std::uint32_t loanId, std::uint64_t& borrowMoney,
+		std::uint64_t& repaymentMoney, std::uint32_t& duration) {
+		const std::string query =
+			"SELECT `BorrowMoney`, `RepaymentMoney`, `Duration` FROM `Loan` "
+			"WHERE `LoanID` = " + std::to_string(loanId) + " LIMIT 1";
+		if (mysql_query(connection_, query.c_str()) != 0) return false;
+		MYSQL_RES* result = mysql_store_result(connection_);
+		if (!result) return false;
+		MYSQL_ROW row = mysql_fetch_row(result);
+		if (!row) {
+			mysql_free_result(result);
+			return false;
+		}
+		borrowMoney = row[0] ? std::stoull(row[0]) : 0;
+		repaymentMoney = row[1] ? std::stoull(row[1]) : 0;
+		duration = row[2] ? static_cast<std::uint32_t>(std::stoul(row[2])) : 0;
+		mysql_free_result(result);
+		return true;
+	}
+
+	bool LoadDueSavings(const std::string& escapedId, std::uint32_t& savingsId,
+		std::uint64_t& returnMoney) {
+		const std::string query =
+			"SELECT ps.`SavingsID`, s.`ReturnMoney` FROM `PlayerSavings` ps "
+			"JOIN `InstallmentSavings` s ON s.`SavingsID` = ps.`SavingsID` "
+			"WHERE ps.`PlayerID` = '" + escapedId + "' AND ps.`EndTime` <= NOW() "
+			"LIMIT 1 FOR UPDATE";
+		if (mysql_query(connection_, query.c_str()) != 0) return false;
+		MYSQL_RES* result = mysql_store_result(connection_);
+		if (!result) return false;
+		MYSQL_ROW row = mysql_fetch_row(result);
+		if (!row) {
+			mysql_free_result(result);
+			return false;
+		}
+		savingsId = row[0] ? static_cast<std::uint32_t>(std::stoul(row[0])) : 0;
+		returnMoney = row[1] ? std::stoull(row[1]) : 0;
+		mysql_free_result(result);
+		return true;
+	}
+
+	bool LoadDueOrWaitingLoan(const std::string& escapedId, std::uint32_t& loanId,
+		std::uint64_t& repaymentMoney, bool& waitingForCollection) {
+		const std::string query =
+			"SELECT pl.`LoanID`, l.`RepaymentMoney`, pl.`IsWaitingForCollection` "
+			"FROM `PlayerLoan` pl JOIN `Loan` l ON l.`LoanID` = pl.`LoanID` "
+			"WHERE pl.`PlayerID` = '" + escapedId + "' "
+			"AND (pl.`RepaymentTime` <= NOW() OR pl.`IsWaitingForCollection` = TRUE) "
+			"LIMIT 1 FOR UPDATE";
+		if (mysql_query(connection_, query.c_str()) != 0) return false;
+		MYSQL_RES* result = mysql_store_result(connection_);
+		if (!result) return false;
+		MYSQL_ROW row = mysql_fetch_row(result);
+		if (!row) {
+			mysql_free_result(result);
+			return false;
+		}
+		loanId = row[0] ? static_cast<std::uint32_t>(std::stoul(row[0])) : 0;
+		repaymentMoney = row[1] ? std::stoull(row[1]) : 0;
+		waitingForCollection = row[2] && std::string(row[2]) != "0";
+		mysql_free_result(result);
+		return true;
+	}
+
+	bool LoadActiveSavingsStatus(const std::string& escapedId,
+		std::vector<FinancialActiveStatus>& statuses) {
+		const std::string query =
+			"SELECT `SavingsID`, GREATEST(TIMESTAMPDIFF(SECOND, NOW(), `EndTime`), 0) "
+			"FROM `PlayerSavings` WHERE `PlayerID` = '" + escapedId + "' LIMIT 1";
+		if (mysql_query(connection_, query.c_str()) != 0) {
+			std::cerr << "LoadActiveSavingsStatus failed: " << mysql_error(connection_) << '\n';
+			return false;
+		}
+		MYSQL_RES* result = mysql_store_result(connection_);
+		if (!result) return false;
+		MYSQL_ROW row = mysql_fetch_row(result);
+		if (row) {
+			statuses.push_back({ FinancialCategory::Savings,
+				row[0] ? static_cast<std::uint32_t>(std::stoul(row[0])) : 0,
+				row[1] ? static_cast<std::uint32_t>(std::stoul(row[1])) : 0 });
+		}
+		mysql_free_result(result);
+		return true;
+	}
+
+	bool LoadActiveLoanStatus(const std::string& escapedId,
+		std::vector<FinancialActiveStatus>& statuses) {
+		const std::string query =
+			"SELECT `LoanID`, GREATEST(TIMESTAMPDIFF(SECOND, NOW(), `RepaymentTime`), 0) "
+			"FROM `PlayerLoan` WHERE `PlayerID` = '" + escapedId + "' LIMIT 1";
+		if (mysql_query(connection_, query.c_str()) != 0) {
+			std::cerr << "LoadActiveLoanStatus failed: " << mysql_error(connection_) << '\n';
+			return false;
+		}
+		MYSQL_RES* result = mysql_store_result(connection_);
+		if (!result) return false;
+		MYSQL_ROW row = mysql_fetch_row(result);
+		if (row) {
+			statuses.push_back({ FinancialCategory::Loan,
+				row[0] ? static_cast<std::uint32_t>(std::stoul(row[0])) : 0,
+				row[1] ? static_cast<std::uint32_t>(std::stoul(row[1])) : 0 });
+		}
+		mysql_free_result(result);
 		return true;
 	}
 
@@ -316,7 +770,18 @@ std::uint64_t ReadUInt64(const char* data) {
 	return value;
 }
 
+std::uint32_t ReadUInt32(const char* data) {
+	std::uint32_t value = 0;
+	std::memcpy(&value, data, sizeof(value));
+	return value;
+}
+
 void WriteUInt16(std::vector<char>& buffer, std::uint16_t value) {
+	const char* bytes = reinterpret_cast<const char*>(&value);
+	buffer.insert(buffer.end(), bytes, bytes + sizeof(value));
+}
+
+void WriteUInt32(std::vector<char>& buffer, std::uint32_t value) {
 	const char* bytes = reinterpret_cast<const char*>(&value);
 	buffer.insert(buffer.end(), bytes, bytes + sizeof(value));
 }
@@ -370,6 +835,49 @@ std::vector<char> MakeMoneyChangedPacket(std::int64_t delta, std::uint64_t final
 	return packet;
 }
 
+std::vector<char> MakeFinancialApplicationResponse(PacketType type,
+	const FinancialApplicationResult& result) {
+	std::vector<char> packet;
+	const std::uint16_t packetSize = static_cast<std::uint16_t>(
+		sizeof(PacketHeader) + 1 + sizeof(std::uint32_t) + sizeof(std::uint32_t) +
+		sizeof(std::int64_t) + sizeof(std::uint64_t));
+	packet.reserve(packetSize);
+	WriteUInt16(packet, packetSize);
+	WriteUInt16(packet, static_cast<std::uint16_t>(type));
+	packet.push_back(static_cast<char>(result.result));
+	WriteUInt32(packet, result.productId);
+	WriteUInt32(packet, result.durationSeconds);
+	WriteInt64(packet, result.moneyDelta);
+	WriteUInt64(packet, result.finalMoney);
+	return packet;
+}
+
+std::vector<char> MakeFinancialProductCompletedPacket(FinancialCategory category,
+	std::uint32_t productId) {
+	std::vector<char> packet;
+	const std::uint16_t packetSize = static_cast<std::uint16_t>(
+		sizeof(PacketHeader) + 1 + sizeof(std::uint32_t));
+	packet.reserve(packetSize);
+	WriteUInt16(packet, packetSize);
+	WriteUInt16(packet, static_cast<std::uint16_t>(PacketType::FinancialProductCompleted));
+	packet.push_back(static_cast<char>(category));
+	WriteUInt32(packet, productId);
+	return packet;
+}
+
+std::vector<char> MakeFinancialProductActivePacket(const FinancialActiveStatus& status) {
+	std::vector<char> packet;
+	const std::uint16_t packetSize = static_cast<std::uint16_t>(
+		sizeof(PacketHeader) + 1 + sizeof(std::uint32_t) + sizeof(std::uint32_t));
+	packet.reserve(packetSize);
+	WriteUInt16(packet, packetSize);
+	WriteUInt16(packet, static_cast<std::uint16_t>(PacketType::FinancialProductActive));
+	packet.push_back(static_cast<char>(status.category));
+	WriteUInt32(packet, status.productId);
+	WriteUInt32(packet, status.remainingSeconds);
+	return packet;
+}
+
 bool SendAll(SOCKET socket, const std::vector<char>& packet) {
 	int sentBytes = 0;
 	while (sentBytes < static_cast<int>(packet.size())) {
@@ -420,6 +928,21 @@ bool QueueMoneyChangedForOnlineSession(std::vector<ClientSession>& sessions,
 		return true;
 	}
 	return false;
+}
+
+void QueueFinancialChanges(ClientSession& session,
+	const std::vector<FinancialMoneyChange>& changes) {
+	for (const FinancialMoneyChange& change : changes) {
+		QueuePacket(session, MakeMoneyChangedPacket(change.moneyDelta, change.finalMoney));
+		if (change.completed)
+			QueuePacket(session, MakeFinancialProductCompletedPacket(change.category, change.productId));
+	}
+}
+
+void QueueFinancialActiveStatuses(ClientSession& session,
+	const std::vector<FinancialActiveStatus>& statuses) {
+	for (const FinancialActiveStatus& status : statuses)
+		QueuePacket(session, MakeFinancialProductActivePacket(status));
 }
 
 std::string ExecuteAdminCommand(const std::string& command, Database& database,
@@ -596,6 +1119,44 @@ void ProcessPacket(Database& database, ClientSession& session,
 		if (!session.authenticated || payload.size() != sizeof(std::uint64_t)) return;
 		const std::uint64_t money = ReadUInt64(payload.data());
 		database.UpdatePlayerMoney(session.playerId, money);
+		std::vector<FinancialMoneyChange> changes;
+		if (database.ProcessDueFinancialProducts(session.playerId, changes))
+			QueueFinancialChanges(session, changes);
+		return;
+	}
+
+	if (packetType == PacketType::SavingsJoinRequest ||
+		packetType == PacketType::LoanApplyRequest) {
+		if (!session.authenticated) {
+			FinancialApplicationResult result;
+			result.result = FinancialResult::NotAuthenticated;
+			QueuePacket(session, MakeFinancialApplicationResponse(
+				packetType == PacketType::SavingsJoinRequest
+				? PacketType::SavingsJoinResponse : PacketType::LoanApplyResponse,
+				result));
+			return;
+		}
+		if (payload.size() != sizeof(std::uint32_t)) {
+			FinancialApplicationResult result;
+			result.result = FinancialResult::InvalidRequest;
+			QueuePacket(session, MakeFinancialApplicationResponse(
+				packetType == PacketType::SavingsJoinRequest
+				? PacketType::SavingsJoinResponse : PacketType::LoanApplyResponse,
+				result));
+			return;
+		}
+		const std::uint32_t productId = ReadUInt32(payload.data());
+		const FinancialApplicationResult result =
+			(packetType == PacketType::SavingsJoinRequest)
+			? database.JoinSavings(session.playerId, productId)
+			: database.ApplyLoan(session.playerId, productId);
+		QueuePacket(session, MakeFinancialApplicationResponse(
+			packetType == PacketType::SavingsJoinRequest
+			? PacketType::SavingsJoinResponse : PacketType::LoanApplyResponse,
+			result));
+		std::cout << "[Financial] " << session.playerId
+			<< ((packetType == PacketType::SavingsJoinRequest) ? " savings=" : " loan=")
+			<< productId << " result=" << static_cast<int>(result.result) << '\n';
 		return;
 	}
 
@@ -621,6 +1182,14 @@ void ProcessPacket(Database& database, ClientSession& session,
 			session.playerId = request.id;
 		}
 		QueuePacket(session, MakeAuthResponse(PacketType::LoginResponse, result));
+		if (result == AuthResult::Success) {
+			std::vector<FinancialMoneyChange> changes;
+			if (database.ProcessDueFinancialProducts(session.playerId, changes))
+				QueueFinancialChanges(session, changes);
+			std::vector<FinancialActiveStatus> statuses;
+			if (database.LoadActiveFinancialStatuses(session.playerId, statuses))
+				QueueFinancialActiveStatuses(session, statuses);
+		}
 		std::cout << "[Login] " << request.id << " result=" << static_cast<int>(result) << '\n';
 		return;
 	}
@@ -640,7 +1209,9 @@ bool ProcessReceiveBuffer(Database& database, ClientSession& session) {
 
 		const PacketType packetType = static_cast<PacketType>(packetTypeValue);
 		if (packetType != PacketType::RegisterRequest && packetType != PacketType::LoginRequest &&
-			packetType != PacketType::MoneyUpdate)
+			packetType != PacketType::MoneyUpdate &&
+			packetType != PacketType::SavingsJoinRequest &&
+			packetType != PacketType::LoanApplyRequest)
 			return false;
 		ProcessPacket(database, session, packetType, payload);
 	}
@@ -703,6 +1274,7 @@ int main(int argc, char* argv[]) {
 	std::vector<ClientSession> sessions;
 	std::mutex sessionsMutex;
 	std::array<char, 4096> buffer{};
+	auto lastFinancialCheckTime = std::chrono::steady_clock::now();
 
 	std::cout << "RaisingPet TCP server is listening on 0.0.0.0:" << port << '\n';
 	std::thread(RunAdminServer, adminPort, std::ref(sessions), std::ref(sessionsMutex)).detach();
@@ -765,8 +1337,19 @@ int main(int argc, char* argv[]) {
 
 		{
 			std::lock_guard<std::mutex> sessionsLock(sessionsMutex);
+			const auto now = std::chrono::steady_clock::now();
+			const bool shouldCheckFinancialProducts =
+				(now - lastFinancialCheckTime) >= std::chrono::seconds(1);
+			if (shouldCheckFinancialProducts) lastFinancialCheckTime = now;
+
 			for (ClientSession& session : sessions) {
 				if (session.socket == INVALID_SOCKET) continue;
+
+				if (shouldCheckFinancialProducts && session.authenticated) {
+					std::vector<FinancialMoneyChange> changes;
+					if (database.ProcessDueFinancialProducts(session.playerId, changes))
+						QueueFinancialChanges(session, changes);
+				}
 
 				if (FD_ISSET(session.socket, &readSet)) {
 					while (true) {

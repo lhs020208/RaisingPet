@@ -48,6 +48,9 @@ public:
 		const SHOP_TEXT_RENDER_CONTEXT& textContext);
 	bool ConsumePetConfirmationRequest(size_t& nSelectedPetIndex);
 	bool ConsumePetEnhancementRequest(int& nEnhancementType);
+	bool ConsumeFinancialProductRequest(int& nCategory, int& nProductIndex);
+	void SetFinancialProductActive(int nCategory, int nProductIndex, UINT nDurationSeconds);
+	void ClearFinancialProductActive(int nCategory, int nProductIndex);
 
 private:
 	struct UI_IMAGE_RESOURCE
@@ -111,6 +114,12 @@ private:
 	int m_nPendingEnhancementType = -1;
 	int m_nFinancialCategory = 0;
 	int m_nFinancialProductIndices[2] = { 0, 0 };
+	int m_nPendingFinancialCategory = -1;
+	int m_nPendingFinancialProductIndex = -1;
+	bool m_bFinancialProductActive[2] = { false, false };
+	int m_nActiveFinancialProductIndex[2] = { -1, -1 };
+	UINT m_nActiveFinancialDurationSeconds[2] = { 0, 0 };
+	float m_fActiveFinancialElapsedSeconds[2] = { 0.0f, 0.0f };
 
 	void RenderUiImage(ID3D12GraphicsCommandList* pd3dCommandList, CCamera* pCamera,
 		UI_IMAGE_RESOURCE& imageResource, const XMFLOAT4& rectangle, UINT nTintColor = 0x00FFFFFF);

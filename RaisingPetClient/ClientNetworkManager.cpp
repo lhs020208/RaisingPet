@@ -20,6 +20,12 @@ enum class PacketType : std::uint16_t
 	LoginResponse = 4,
 	MoneyUpdate = 5,
 	MoneyChanged = 6,
+	SavingsJoinRequest = 7,
+	SavingsJoinResponse = 8,
+	LoanApplyRequest = 9,
+	LoanApplyResponse = 10,
+	FinancialProductCompleted = 11,
+	FinancialProductActive = 12,
 };
 
 std::uint16_t ReadUInt16(const char* data)
@@ -43,7 +49,20 @@ std::uint64_t ReadUInt64(const char* data)
 	return(value);
 }
 
+std::uint32_t ReadUInt32(const char* data)
+{
+	std::uint32_t value = 0;
+	std::memcpy(&value, data, sizeof(value));
+	return(value);
+}
+
 void WriteUInt16(std::vector<char>& buffer, std::uint16_t value)
+{
+	const char* bytes = reinterpret_cast<const char*>(&value);
+	buffer.insert(buffer.end(), bytes, bytes + sizeof(value));
+}
+
+void WriteUInt32(std::vector<char>& buffer, std::uint32_t value)
 {
 	const char* bytes = reinterpret_cast<const char*>(&value);
 	buffer.insert(buffer.end(), bytes, bytes + sizeof(value));
@@ -53,6 +72,18 @@ void WriteUInt64(std::vector<char>& buffer, std::uint64_t value)
 {
 	const char* bytes = reinterpret_cast<const char*>(&value);
 	buffer.insert(buffer.end(), bytes, bytes + sizeof(value));
+}
+
+std::vector<char> MakeFinancialProductRequestPacket(PacketType packetType,
+	unsigned int productId)
+{
+	std::vector<char> packet;
+	const std::uint16_t packetSize = static_cast<std::uint16_t>(4 + sizeof(std::uint32_t));
+	packet.reserve(packetSize);
+	WriteUInt16(packet, packetSize);
+	WriteUInt16(packet, static_cast<std::uint16_t>(packetType));
+	WriteUInt32(packet, static_cast<std::uint32_t>(productId));
+	return(packet);
 }
 
 bool IsAccountTextValid(const std::string& text, std::size_t maxLength)
@@ -122,7 +153,10 @@ bool ReceiveAll(SOCKET socket, char* buffer, int size)
 }
 
 bool ProcessPersistentPacketBuffer(std::vector<char>& receiveBuffer,
-	std::int64_t& deltaMoney, unsigned int& finalMoney, bool& hasMoneyChanged)
+	std::vector<std::pair<std::int64_t, unsigned int>>& moneyChanges,
+	std::vector<CLIENT_FINANCIAL_APPLICATION_RESULT>& financialResults,
+	std::vector<CLIENT_FINANCIAL_COMPLETION>& financialCompletions,
+	std::vector<CLIENT_FINANCIAL_ACTIVE_STATUS>& financialActiveStatuses)
 {
 	while (receiveBuffer.size() >= 4)
 	{
@@ -139,9 +173,54 @@ bool ProcessPersistentPacketBuffer(std::vector<char>& receiveBuffer,
 			const std::int64_t delta = ReadInt64(payload);
 			const std::uint64_t finalValue = ReadUInt64(payload + sizeof(std::int64_t));
 			if (finalValue > UINT_MAX) return(false);
-			deltaMoney = delta;
-			finalMoney = static_cast<unsigned int>(finalValue);
-			hasMoneyChanged = true;
+			moneyChanges.push_back({ delta, static_cast<unsigned int>(finalValue) });
+		}
+		else if (packetType == static_cast<std::uint16_t>(PacketType::SavingsJoinResponse) ||
+			packetType == static_cast<std::uint16_t>(PacketType::LoanApplyResponse))
+		{
+			constexpr std::uint16_t expectedSize = 1 + sizeof(std::uint32_t) +
+				sizeof(std::uint32_t) + sizeof(std::int64_t) + sizeof(std::uint64_t);
+			if (payloadSize != expectedSize) return(false);
+			const std::uint64_t finalValue = ReadUInt64(payload + 1 + sizeof(std::uint32_t) +
+				sizeof(std::uint32_t) + sizeof(std::int64_t));
+			if (finalValue > UINT_MAX) return(false);
+			CLIENT_FINANCIAL_APPLICATION_RESULT financialResult;
+			financialResult.eCategory =
+				(packetType == static_cast<std::uint16_t>(PacketType::SavingsJoinResponse))
+				? CLIENT_FINANCIAL_CATEGORY::SAVINGS : CLIENT_FINANCIAL_CATEGORY::LOAN;
+			financialResult.eResult = static_cast<CLIENT_FINANCIAL_RESULT>(
+				static_cast<unsigned char>(payload[0]));
+			financialResult.nProductId = static_cast<unsigned int>(ReadUInt32(payload + 1));
+			financialResult.nDurationSeconds = static_cast<unsigned int>(
+				ReadUInt32(payload + 1 + sizeof(std::uint32_t)));
+			financialResult.nMoneyDelta = ReadInt64(payload + 1 + sizeof(std::uint32_t) +
+				sizeof(std::uint32_t));
+			financialResult.nFinalMoney = static_cast<unsigned int>(finalValue);
+			financialResults.push_back(financialResult);
+		}
+		else if (packetType == static_cast<std::uint16_t>(PacketType::FinancialProductCompleted))
+		{
+			if (payloadSize != 1 + sizeof(std::uint32_t)) return(false);
+			const unsigned char category = static_cast<unsigned char>(payload[0]);
+			if (category > 1) return(false);
+			CLIENT_FINANCIAL_COMPLETION financialCompletion;
+			financialCompletion.eCategory = (category == 0)
+				? CLIENT_FINANCIAL_CATEGORY::SAVINGS : CLIENT_FINANCIAL_CATEGORY::LOAN;
+			financialCompletion.nProductId = static_cast<unsigned int>(ReadUInt32(payload + 1));
+			financialCompletions.push_back(financialCompletion);
+		}
+		else if (packetType == static_cast<std::uint16_t>(PacketType::FinancialProductActive))
+		{
+			if (payloadSize != 1 + sizeof(std::uint32_t) + sizeof(std::uint32_t)) return(false);
+			const unsigned char category = static_cast<unsigned char>(payload[0]);
+			if (category > 1) return(false);
+			CLIENT_FINANCIAL_ACTIVE_STATUS status;
+			status.eCategory = (category == 0)
+				? CLIENT_FINANCIAL_CATEGORY::SAVINGS : CLIENT_FINANCIAL_CATEGORY::LOAN;
+			status.nProductId = static_cast<unsigned int>(ReadUInt32(payload + 1));
+			status.nRemainingSeconds = static_cast<unsigned int>(
+				ReadUInt32(payload + 1 + sizeof(std::uint32_t)));
+			financialActiveStatuses.push_back(status);
 		}
 
 		receiveBuffer.erase(receiveBuffer.begin(), receiveBuffer.begin() + packetSize);
@@ -182,6 +261,28 @@ bool CClientNetworkManager::SendMoneyUpdate(unsigned int money)
 	return(SendAll(m_Socket, packet));
 }
 
+bool CClientNetworkManager::SendSavingsJoinRequest(unsigned int nProductId)
+{
+	if (!m_bConnected.load() || nProductId < 1 || nProductId > 10) return(false);
+	const std::vector<char> packet = MakeFinancialProductRequestPacket(
+		PacketType::SavingsJoinRequest, nProductId);
+
+	std::lock_guard<std::mutex> lock(m_Mutex);
+	if (m_Socket == INVALID_SOCKET) return(false);
+	return(SendAll(m_Socket, packet));
+}
+
+bool CClientNetworkManager::SendLoanApplyRequest(unsigned int nProductId)
+{
+	if (!m_bConnected.load() || nProductId < 1 || nProductId > 10) return(false);
+	const std::vector<char> packet = MakeFinancialProductRequestPacket(
+		PacketType::LoanApplyRequest, nProductId);
+
+	std::lock_guard<std::mutex> lock(m_Mutex);
+	if (m_Socket == INVALID_SOCKET) return(false);
+	return(SendAll(m_Socket, packet));
+}
+
 bool CClientNetworkManager::StartAuthRequest(CLIENT_AUTH_REQUEST request,
 	const std::string& id, const std::string& password)
 {
@@ -192,6 +293,10 @@ bool CClientNetworkManager::StartAuthRequest(CLIENT_AUTH_REQUEST request,
 		std::lock_guard<std::mutex> lock(m_Mutex);
 		m_bHasCompletedResult = false;
 		m_CompletedRequest = CLIENT_AUTH_REQUEST::NONE;
+		m_ServerMoneyChanges.clear();
+		m_FinancialApplicationResults.clear();
+		m_FinancialCompletions.clear();
+		m_FinancialActiveStatuses.clear();
 	}
 
 	m_bStopRequested.store(false);
@@ -224,10 +329,40 @@ bool CClientNetworkManager::ConsumeServerMoneyChange(std::int64_t& deltaMoney,
 	unsigned int& finalMoney)
 {
 	std::lock_guard<std::mutex> lock(m_Mutex);
-	if (!m_bHasServerMoneyChange) return(false);
-	deltaMoney = m_ServerMoneyDelta;
-	finalMoney = m_ServerFinalMoney;
-	m_bHasServerMoneyChange = false;
+	if (m_ServerMoneyChanges.empty()) return(false);
+	deltaMoney = m_ServerMoneyChanges.front().first;
+	finalMoney = m_ServerMoneyChanges.front().second;
+	m_ServerMoneyChanges.erase(m_ServerMoneyChanges.begin());
+	return(true);
+}
+
+bool CClientNetworkManager::ConsumeFinancialApplicationResult(
+	CLIENT_FINANCIAL_APPLICATION_RESULT& result)
+{
+	std::lock_guard<std::mutex> lock(m_Mutex);
+	if (m_FinancialApplicationResults.empty()) return(false);
+	result = m_FinancialApplicationResults.front();
+	m_FinancialApplicationResults.erase(m_FinancialApplicationResults.begin());
+	return(true);
+}
+
+bool CClientNetworkManager::ConsumeFinancialCompletion(
+	CLIENT_FINANCIAL_COMPLETION& completion)
+{
+	std::lock_guard<std::mutex> lock(m_Mutex);
+	if (m_FinancialCompletions.empty()) return(false);
+	completion = m_FinancialCompletions.front();
+	m_FinancialCompletions.erase(m_FinancialCompletions.begin());
+	return(true);
+}
+
+bool CClientNetworkManager::ConsumeFinancialActiveStatus(
+	CLIENT_FINANCIAL_ACTIVE_STATUS& status)
+{
+	std::lock_guard<std::mutex> lock(m_Mutex);
+	if (m_FinancialActiveStatuses.empty()) return(false);
+	status = m_FinancialActiveStatuses.front();
+	m_FinancialActiveStatuses.erase(m_FinancialActiveStatuses.begin());
 	return(true);
 }
 
@@ -395,17 +530,24 @@ void CClientNetworkManager::AuthThread(CLIENT_AUTH_REQUEST request,
 			persistentReceiveBuffer.insert(persistentReceiveBuffer.end(),
 				discardBuffer.data(), discardBuffer.data() + received);
 
-			std::int64_t deltaMoney = 0;
-			unsigned int finalMoney = 0;
-			bool hasMoneyChanged = false;
+			std::vector<std::pair<std::int64_t, unsigned int>> moneyChanges;
+			std::vector<CLIENT_FINANCIAL_APPLICATION_RESULT> financialResults;
+			std::vector<CLIENT_FINANCIAL_COMPLETION> financialCompletions;
+			std::vector<CLIENT_FINANCIAL_ACTIVE_STATUS> financialActiveStatuses;
 			if (!ProcessPersistentPacketBuffer(persistentReceiveBuffer,
-				deltaMoney, finalMoney, hasMoneyChanged)) break;
-			if (hasMoneyChanged)
+				moneyChanges, financialResults, financialCompletions, financialActiveStatuses)) break;
+			if (!moneyChanges.empty() || !financialResults.empty() ||
+				!financialCompletions.empty() || !financialActiveStatuses.empty())
 			{
 				std::lock_guard<std::mutex> lock(m_Mutex);
-				m_ServerMoneyDelta = deltaMoney;
-				m_ServerFinalMoney = finalMoney;
-				m_bHasServerMoneyChange = true;
+				m_ServerMoneyChanges.insert(m_ServerMoneyChanges.end(),
+					moneyChanges.begin(), moneyChanges.end());
+				m_FinancialApplicationResults.insert(m_FinancialApplicationResults.end(),
+					financialResults.begin(), financialResults.end());
+				m_FinancialCompletions.insert(m_FinancialCompletions.end(),
+					financialCompletions.begin(), financialCompletions.end());
+				m_FinancialActiveStatuses.insert(m_FinancialActiveStatuses.end(),
+					financialActiveStatuses.begin(), financialActiveStatuses.end());
 			}
 		}
 	}

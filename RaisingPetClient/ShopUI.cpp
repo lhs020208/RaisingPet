@@ -454,6 +454,15 @@ void CShopUI::Animate(float elapsedTime)
 {
 	if (m_bShopActive && m_eShopPage == SHOP_PAGE::SLOT_CONTENT_1 && m_pPreviewPet)
 		m_pPreviewPet->AnimateWithoutMovement(elapsedTime);
+	for (int category = 0; category < 2; ++category)
+	{
+		if (!m_bFinancialProductActive[category]) continue;
+		m_fActiveFinancialElapsedSeconds[category] += elapsedTime;
+		if (m_fActiveFinancialElapsedSeconds[category] >
+			static_cast<float>(m_nActiveFinancialDurationSeconds[category]))
+			m_fActiveFinancialElapsedSeconds[category] =
+			static_cast<float>(m_nActiveFinancialDurationSeconds[category]);
+	}
 }
 
 void CShopUI::ReleaseUploadBuffers()
@@ -893,14 +902,17 @@ void CShopUI::RenderFinancialPage(ID3D12GraphicsCommandList* commandList, CCamer
 	}
 
 	const int productIndex = m_nFinancialProductIndices[m_nFinancialCategory];
-	const UINT arrowTint = (productIndex == 0) ? 0x00BFBFBF : 0x00FFFFFF;
-	const UINT rightArrowTint = (productIndex == 9) ? 0x00BFBFBF : 0x00FFFFFF;
+	const bool categoryLocked = m_bFinancialProductActive[m_nFinancialCategory];
+	const UINT arrowTint = (categoryLocked || productIndex == 0) ? 0x00BFBFBF : 0x00FFFFFF;
+	const UINT rightArrowTint = (categoryLocked || productIndex == 9) ? 0x00BFBFBF : 0x00FFFFFF;
 	RenderUiImage(commandList, camera, m_FinancialLeftButtonResource,
 		GetFinancialLeftButtonRectangle(width, height), arrowTint);
 	RenderUiImage(commandList, camera, m_FinancialRightButtonResource,
 		GetFinancialRightButtonRectangle(width, height), rightArrowTint);
 	RenderUiImage(commandList, camera, m_FinancialProductNameResources[m_nFinancialCategory][productIndex],
-		GetFinancialProductNameRectangle(width, height, m_xmf2ShopBoardOffset.x, m_xmf2ShopBoardOffset.y));
+		GetFinancialProductNameRectangle(width, height, m_xmf2ShopBoardOffset.x, m_xmf2ShopBoardOffset.y),
+		(categoryLocked && m_nActiveFinancialProductIndex[m_nFinancialCategory] == productIndex)
+		? 0x00BFBFBF : 0x00FFFFFF);
 
 	const XMFLOAT4 timerFrame = GetFinancialTimerFrameRectangle(width, height,
 		m_xmf2ShopBoardOffset.x, m_xmf2ShopBoardOffset.y);
@@ -918,7 +930,14 @@ void CShopUI::RenderFinancialPage(ID3D12GraphicsCommandList* commandList, CCamer
 		RenderTextLine(commandList, camera, text, textLeft, textTop, scale, color, context);
 	};
 
-	renderCenteredText(FormatFinancialDuration(product.nDurationSeconds), timerFrame, 0.105f, 0x00000000);
+	UINT displaySeconds = product.nDurationSeconds;
+	if (categoryLocked)
+	{
+		const UINT elapsedSeconds = static_cast<UINT>(m_fActiveFinancialElapsedSeconds[m_nFinancialCategory]);
+		const UINT durationSeconds = m_nActiveFinancialDurationSeconds[m_nFinancialCategory];
+		displaySeconds = (elapsedSeconds >= durationSeconds) ? 0 : (durationSeconds - elapsedSeconds);
+	}
+	renderCenteredText(FormatFinancialDuration(displaySeconds), timerFrame, 0.105f, 0x00000000);
 
 	const XMFLOAT4 moneyFrames[2] =
 	{
@@ -1066,6 +1085,36 @@ bool CShopUI::ConsumePetEnhancementRequest(int& enhancementType)
 	return(true);
 }
 
+bool CShopUI::ConsumeFinancialProductRequest(int& category, int& productIndex)
+{
+	if (m_nPendingFinancialCategory < 0 || m_nPendingFinancialProductIndex < 0) return(false);
+	category = m_nPendingFinancialCategory;
+	productIndex = m_nPendingFinancialProductIndex;
+	m_nPendingFinancialCategory = -1;
+	m_nPendingFinancialProductIndex = -1;
+	return(true);
+}
+
+void CShopUI::SetFinancialProductActive(int category, int productIndex, UINT durationSeconds)
+{
+	if (category < 0 || category >= 2 || productIndex < 0 || productIndex >= 10) return;
+	m_bFinancialProductActive[category] = true;
+	m_nActiveFinancialProductIndex[category] = productIndex;
+	m_nFinancialProductIndices[category] = productIndex;
+	m_nActiveFinancialDurationSeconds[category] = durationSeconds;
+	m_fActiveFinancialElapsedSeconds[category] = 0.0f;
+}
+
+void CShopUI::ClearFinancialProductActive(int category, int productIndex)
+{
+	if (category < 0 || category >= 2) return;
+	if (productIndex >= 0 && m_nActiveFinancialProductIndex[category] != productIndex) return;
+	m_bFinancialProductActive[category] = false;
+	m_nActiveFinancialProductIndex[category] = -1;
+	m_nActiveFinancialDurationSeconds[category] = 0;
+	m_fActiveFinancialElapsedSeconds[category] = 0.0f;
+}
+
 bool CShopUI::IsPointOver(float x, float y, float width, float height) const
 {
 	if (IsPointInRectangle(x, y, GetShopIconRectangle(width, height))) return(true);
@@ -1100,14 +1149,26 @@ bool CShopUI::ProcessFinancialClick(float x, float y, float width, float height)
 
 	if (IsPointInRectangle(x, y, GetFinancialLeftButtonRectangle(width, height)))
 	{
+		if (m_bFinancialProductActive[m_nFinancialCategory]) return(true);
 		int& index = m_nFinancialProductIndices[m_nFinancialCategory];
 		if (index > 0) --index;
 		return(true);
 	}
 	if (IsPointInRectangle(x, y, GetFinancialRightButtonRectangle(width, height)))
 	{
+		if (m_bFinancialProductActive[m_nFinancialCategory]) return(true);
 		int& index = m_nFinancialProductIndices[m_nFinancialCategory];
 		if (index < 9) ++index;
+		return(true);
+	}
+	if (IsPointInRectangle(x, y, GetFinancialProductNameRectangle(width, height,
+		m_xmf2ShopBoardOffset.x, m_xmf2ShopBoardOffset.y)))
+	{
+		if (!m_bFinancialProductActive[m_nFinancialCategory])
+		{
+			m_nPendingFinancialCategory = m_nFinancialCategory;
+			m_nPendingFinancialProductIndex = m_nFinancialProductIndices[m_nFinancialCategory];
+		}
 		return(true);
 	}
 

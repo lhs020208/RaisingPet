@@ -7,6 +7,8 @@
 #include <mutex>
 #include <string>
 #include <thread>
+#include <utility>
+#include <vector>
 
 enum class CLIENT_AUTH_REQUEST
 {
@@ -27,6 +29,47 @@ enum class CLIENT_AUTH_RESULT
 	NETWORK_ERROR = 7
 };
 
+enum class CLIENT_FINANCIAL_CATEGORY
+{
+	SAVINGS = 0,
+	LOAN = 1
+};
+
+enum class CLIENT_FINANCIAL_RESULT
+{
+	SUCCESS = 0,
+	INVALID_REQUEST = 1,
+	NOT_AUTHENTICATED = 2,
+	ALREADY_ACTIVE = 3,
+	PRODUCT_NOT_FOUND = 4,
+	NOT_ENOUGH_MONEY = 5,
+	DATABASE_ERROR = 6,
+	MONEY_LIMIT_EXCEEDED = 7
+};
+
+struct CLIENT_FINANCIAL_APPLICATION_RESULT
+{
+	CLIENT_FINANCIAL_CATEGORY eCategory = CLIENT_FINANCIAL_CATEGORY::SAVINGS;
+	CLIENT_FINANCIAL_RESULT eResult = CLIENT_FINANCIAL_RESULT::DATABASE_ERROR;
+	unsigned int nProductId = 0;
+	unsigned int nDurationSeconds = 0;
+	std::int64_t nMoneyDelta = 0;
+	unsigned int nFinalMoney = 0;
+};
+
+struct CLIENT_FINANCIAL_COMPLETION
+{
+	CLIENT_FINANCIAL_CATEGORY eCategory = CLIENT_FINANCIAL_CATEGORY::SAVINGS;
+	unsigned int nProductId = 0;
+};
+
+struct CLIENT_FINANCIAL_ACTIVE_STATUS
+{
+	CLIENT_FINANCIAL_CATEGORY eCategory = CLIENT_FINANCIAL_CATEGORY::SAVINGS;
+	unsigned int nProductId = 0;
+	unsigned int nRemainingSeconds = 0;
+};
+
 class CClientNetworkManager
 {
 public:
@@ -36,10 +79,15 @@ public:
 	bool StartRegister(const std::string& id, const std::string& password);
 	bool StartLogin(const std::string& id, const std::string& password);
 	bool SendMoneyUpdate(unsigned int money);
+	bool SendSavingsJoinRequest(unsigned int nProductId);
+	bool SendLoanApplyRequest(unsigned int nProductId);
 	void Disconnect();
 
 	bool ConsumeAuthResult(CLIENT_AUTH_REQUEST& request, CLIENT_AUTH_RESULT& result);
 	bool ConsumeServerMoneyChange(std::int64_t& deltaMoney, unsigned int& finalMoney);
+	bool ConsumeFinancialApplicationResult(CLIENT_FINANCIAL_APPLICATION_RESULT& result);
+	bool ConsumeFinancialCompletion(CLIENT_FINANCIAL_COMPLETION& completion);
+	bool ConsumeFinancialActiveStatus(CLIENT_FINANCIAL_ACTIVE_STATUS& status);
 	bool IsBusy() const { return m_bBusy.load(); }
 	bool IsConnected() const;
 
@@ -63,9 +111,10 @@ private:
 	CLIENT_AUTH_REQUEST m_CompletedRequest = CLIENT_AUTH_REQUEST::NONE;
 	CLIENT_AUTH_RESULT m_CompletedResult = CLIENT_AUTH_RESULT::SERVER_ERROR;
 	bool m_bHasCompletedResult = false;
-	std::int64_t m_ServerMoneyDelta = 0;
-	unsigned int m_ServerFinalMoney = 0;
-	bool m_bHasServerMoneyChange = false;
+	std::vector<std::pair<std::int64_t, unsigned int>> m_ServerMoneyChanges;
+	std::vector<CLIENT_FINANCIAL_APPLICATION_RESULT> m_FinancialApplicationResults;
+	std::vector<CLIENT_FINANCIAL_COMPLETION> m_FinancialCompletions;
+	std::vector<CLIENT_FINANCIAL_ACTIVE_STATUS> m_FinancialActiveStatuses;
 	std::atomic_bool m_bStopRequested = false;
 	std::atomic_bool m_bBusy = false;
 	std::atomic_bool m_bConnected = false;

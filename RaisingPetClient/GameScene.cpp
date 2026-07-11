@@ -897,6 +897,16 @@ void CGameScene::OnProcessingMouseMessage(HWND hWnd, UINT nMessageID, WPARAM wPa
 	int nEnhancementType = -1;
 	if (m_ShopUI.ConsumePetEnhancementRequest(nEnhancementType))
 		EnhanceActivePet(nEnhancementType);
+	int nFinancialCategory = -1;
+	int nFinancialProductIndex = -1;
+	if (m_ShopUI.ConsumeFinancialProductRequest(nFinancialCategory, nFinancialProductIndex))
+	{
+		const unsigned int nProductId = static_cast<unsigned int>(nFinancialProductIndex + 1);
+		if (nFinancialCategory == 0)
+			g_pFramework->GetNetworkManager().SendSavingsJoinRequest(nProductId);
+		else if (nFinancialCategory == 1)
+			g_pFramework->GetNetworkManager().SendLoanApplyRequest(nProductId);
+	}
 	if (bShopMessageProcessed)
 		return;
 
@@ -960,6 +970,37 @@ void CGameScene::EnhanceActivePet(int enhancementType)
 }
 void CGameScene::Animate(float fElapsedTime)
 {
+	CLIENT_FINANCIAL_APPLICATION_RESULT financialResult;
+	while (g_pFramework->GetNetworkManager().ConsumeFinancialApplicationResult(financialResult))
+	{
+		if (financialResult.eResult != CLIENT_FINANCIAL_RESULT::SUCCESS) continue;
+		ApplyServerMoneyChange(financialResult.nFinalMoney);
+		const int nCategory = (financialResult.eCategory == CLIENT_FINANCIAL_CATEGORY::SAVINGS) ? 0 : 1;
+		if (financialResult.nProductId >= 1 && financialResult.nProductId <= 10)
+			m_ShopUI.SetFinancialProductActive(nCategory,
+				static_cast<int>(financialResult.nProductId - 1),
+				financialResult.nDurationSeconds);
+	}
+
+	CLIENT_FINANCIAL_ACTIVE_STATUS financialActiveStatus;
+	while (g_pFramework->GetNetworkManager().ConsumeFinancialActiveStatus(financialActiveStatus))
+	{
+		const int nCategory = (financialActiveStatus.eCategory == CLIENT_FINANCIAL_CATEGORY::SAVINGS) ? 0 : 1;
+		if (financialActiveStatus.nProductId >= 1 && financialActiveStatus.nProductId <= 10)
+			m_ShopUI.SetFinancialProductActive(nCategory,
+				static_cast<int>(financialActiveStatus.nProductId - 1),
+				financialActiveStatus.nRemainingSeconds);
+	}
+
+	CLIENT_FINANCIAL_COMPLETION financialCompletion;
+	while (g_pFramework->GetNetworkManager().ConsumeFinancialCompletion(financialCompletion))
+	{
+		const int nCategory = (financialCompletion.eCategory == CLIENT_FINANCIAL_CATEGORY::SAVINGS) ? 0 : 1;
+		if (financialCompletion.nProductId >= 1 && financialCompletion.nProductId <= 10)
+			m_ShopUI.ClearFinancialProductActive(nCategory,
+				static_cast<int>(financialCompletion.nProductId - 1));
+	}
+
 	std::int64_t nServerMoneyDelta = 0;
 	UINT nServerFinalMoney = 0;
 	while (g_pFramework->GetNetworkManager().ConsumeServerMoneyChange(
