@@ -19,11 +19,26 @@ enum class PacketType : std::uint16_t
 	LoginRequest = 3,
 	LoginResponse = 4,
 	MoneyUpdate = 5,
+	MoneyChanged = 6,
 };
 
 std::uint16_t ReadUInt16(const char* data)
 {
 	std::uint16_t value = 0;
+	std::memcpy(&value, data, sizeof(value));
+	return(value);
+}
+
+std::int64_t ReadInt64(const char* data)
+{
+	std::int64_t value = 0;
+	std::memcpy(&value, data, sizeof(value));
+	return(value);
+}
+
+std::uint64_t ReadUInt64(const char* data)
+{
+	std::uint64_t value = 0;
 	std::memcpy(&value, data, sizeof(value));
 	return(value);
 }
@@ -105,6 +120,34 @@ bool ReceiveAll(SOCKET socket, char* buffer, int size)
 	}
 	return(true);
 }
+
+bool ProcessPersistentPacketBuffer(std::vector<char>& receiveBuffer,
+	std::int64_t& deltaMoney, unsigned int& finalMoney, bool& hasMoneyChanged)
+{
+	while (receiveBuffer.size() >= 4)
+	{
+		const std::uint16_t packetSize = ReadUInt16(receiveBuffer.data());
+		const std::uint16_t packetType = ReadUInt16(receiveBuffer.data() + 2);
+		if (packetSize < 4 || packetSize > kMaxPacketSize) return(false);
+		if (receiveBuffer.size() < packetSize) return(true);
+
+		const char* payload = receiveBuffer.data() + 4;
+		const std::uint16_t payloadSize = static_cast<std::uint16_t>(packetSize - 4);
+		if (packetType == static_cast<std::uint16_t>(PacketType::MoneyChanged))
+		{
+			if (payloadSize != sizeof(std::int64_t) + sizeof(std::uint64_t)) return(false);
+			const std::int64_t delta = ReadInt64(payload);
+			const std::uint64_t finalValue = ReadUInt64(payload + sizeof(std::int64_t));
+			if (finalValue > UINT_MAX) return(false);
+			deltaMoney = delta;
+			finalMoney = static_cast<unsigned int>(finalValue);
+			hasMoneyChanged = true;
+		}
+
+		receiveBuffer.erase(receiveBuffer.begin(), receiveBuffer.begin() + packetSize);
+	}
+	return(true);
+}
 }
 
 CClientNetworkManager::CClientNetworkManager()
@@ -174,6 +217,17 @@ bool CClientNetworkManager::ConsumeAuthResult(CLIENT_AUTH_REQUEST& request,
 	request = m_CompletedRequest;
 	result = m_CompletedResult;
 	m_bHasCompletedResult = false;
+	return(true);
+}
+
+bool CClientNetworkManager::ConsumeServerMoneyChange(std::int64_t& deltaMoney,
+	unsigned int& finalMoney)
+{
+	std::lock_guard<std::mutex> lock(m_Mutex);
+	if (!m_bHasServerMoneyChange) return(false);
+	deltaMoney = m_ServerMoneyDelta;
+	finalMoney = m_ServerFinalMoney;
+	m_bHasServerMoneyChange = false;
 	return(true);
 }
 
@@ -321,6 +375,7 @@ void CClientNetworkManager::AuthThread(CLIENT_AUTH_REQUEST request,
 	}
 
 	m_bBusy.store(false);
+	std::vector<char> persistentReceiveBuffer;
 	while (!m_bStopRequested.load())
 	{
 		fd_set readSet;
@@ -337,6 +392,21 @@ void CClientNetworkManager::AuthThread(CLIENT_AUTH_REQUEST request,
 			const int received = recv(connectedSocket, discardBuffer.data(),
 				static_cast<int>(discardBuffer.size()), 0);
 			if (received <= 0) break;
+			persistentReceiveBuffer.insert(persistentReceiveBuffer.end(),
+				discardBuffer.data(), discardBuffer.data() + received);
+
+			std::int64_t deltaMoney = 0;
+			unsigned int finalMoney = 0;
+			bool hasMoneyChanged = false;
+			if (!ProcessPersistentPacketBuffer(persistentReceiveBuffer,
+				deltaMoney, finalMoney, hasMoneyChanged)) break;
+			if (hasMoneyChanged)
+			{
+				std::lock_guard<std::mutex> lock(m_Mutex);
+				m_ServerMoneyDelta = deltaMoney;
+				m_ServerFinalMoney = finalMoney;
+				m_bHasServerMoneyChange = true;
+			}
 		}
 	}
 

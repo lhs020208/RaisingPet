@@ -105,6 +105,17 @@ bool ReceiveAll(SOCKET socket, char* buffer, int size) {
 	}
 	return true;
 }
+
+bool ReceiveLine(SOCKET socket, std::string& line) {
+	line.clear();
+	while (true) {
+		char ch = 0;
+		const int received = recv(socket, &ch, 1, 0);
+		if (received == SOCKET_ERROR || received == 0) return false;
+		if (ch == '\n') return true;
+		if (ch != '\r') line.push_back(ch);
+	}
+}
 } // namespace
 
 int main(int argc, char* argv[]) {
@@ -185,8 +196,9 @@ int main(int argc, char* argv[]) {
 		return 1;
 	}
 
-	std::cout << "Admin connected. Command handling is not implemented yet.\n";
-	std::cout << "Type commands to send raw text to the server, or type quit/exit.\n";
+	std::cout << "Admin connected.\n";
+	std::cout << "Available command: addmoney {playerId} {amount}\n";
+	std::cout << "Type quit/exit to close.\n";
 
 	std::string line;
 	while (true) {
@@ -201,7 +213,12 @@ int main(int argc, char* argv[]) {
 			std::cerr << "Failed to send command text. Connection closed.\n";
 			break;
 		}
-		std::cout << "Command text sent. Server-side command execution is not implemented yet.\n";
+		std::string response;
+		if (!ReceiveLine(socketHandle, response)) {
+			std::cerr << "Failed to receive server response. Connection closed.\n";
+			break;
+		}
+		std::cout << response << '\n';
 	}
 
 	shutdown(socketHandle, SD_BOTH);

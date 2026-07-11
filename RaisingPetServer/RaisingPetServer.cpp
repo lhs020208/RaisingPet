@@ -8,6 +8,8 @@
 #include <array>
 #include <cstdint>
 #include <iostream>
+#include <mutex>
+#include <sstream>
 #include <string>
 #include <thread>
 #include <vector>
@@ -31,6 +33,7 @@ enum class PacketType : std::uint16_t {
 	LoginRequest = 3,
 	LoginResponse = 4,
 	MoneyUpdate = 5,
+	MoneyChanged = 6,
 	AdminLoginRequest = 100,
 	AdminLoginResponse = 101,
 };
@@ -187,6 +190,82 @@ public:
 			std::cerr << "UpdatePlayerMoney failed: " << mysql_error(connection_) << '\n';
 	}
 
+	bool TryAddMoneyToOnlinePlayer(const std::string& id, std::int64_t delta,
+		std::uint64_t& finalMoney, std::string& failureReason) {
+		if (!IsAccountTextValid(id, 32)) {
+			failureReason = "invalid player id";
+			return false;
+		}
+
+		const std::string escapedId = Escape(id);
+		if (mysql_query(connection_, "START TRANSACTION") != 0) {
+			failureReason = std::string("failed to start transaction: ") + mysql_error(connection_);
+			return false;
+		}
+
+		const std::string select =
+			"SELECT `Money`, `IsOnline` FROM `Player` WHERE `PlayerID` = '" +
+			escapedId + "' LIMIT 1 FOR UPDATE";
+		if (mysql_query(connection_, select.c_str()) != 0) {
+			failureReason = std::string("failed to select player: ") + mysql_error(connection_);
+			mysql_query(connection_, "ROLLBACK");
+			return false;
+		}
+
+		MYSQL_RES* result = mysql_store_result(connection_);
+		if (!result) {
+			failureReason = std::string("failed to read player: ") + mysql_error(connection_);
+			mysql_query(connection_, "ROLLBACK");
+			return false;
+		}
+
+		MYSQL_ROW row = mysql_fetch_row(result);
+		if (!row) {
+			mysql_free_result(result);
+			failureReason = "player not found";
+			mysql_query(connection_, "ROLLBACK");
+			return false;
+		}
+
+		const std::uint64_t currentMoney = row[0] ? std::stoull(row[0]) : 0;
+		const bool isOnline = row[1] && std::string(row[1]) != "0";
+		mysql_free_result(result);
+
+		if (!isOnline) {
+			failureReason = "player is offline";
+			mysql_query(connection_, "ROLLBACK");
+			return false;
+		}
+		if (delta < 0 && currentMoney < static_cast<std::uint64_t>(-delta)) {
+			failureReason = "not enough money";
+			mysql_query(connection_, "ROLLBACK");
+			return false;
+		}
+		if (delta > 0 && currentMoney > UINT_MAX - static_cast<std::uint64_t>(delta)) {
+			failureReason = "money would exceed client limit";
+			mysql_query(connection_, "ROLLBACK");
+			return false;
+		}
+
+		finalMoney = (delta >= 0)
+			? currentMoney + static_cast<std::uint64_t>(delta)
+			: currentMoney - static_cast<std::uint64_t>(-delta);
+		const std::string update =
+			"UPDATE `Player` SET `Money` = " + std::to_string(finalMoney) +
+			" WHERE `PlayerID` = '" + escapedId + "'";
+		if (mysql_query(connection_, update.c_str()) != 0) {
+			failureReason = std::string("failed to update money: ") + mysql_error(connection_);
+			mysql_query(connection_, "ROLLBACK");
+			return false;
+		}
+		if (mysql_query(connection_, "COMMIT") != 0) {
+			failureReason = std::string("failed to commit: ") + mysql_error(connection_);
+			mysql_query(connection_, "ROLLBACK");
+			return false;
+		}
+		return true;
+	}
+
 private:
 	static bool IsAccountTextValid(const std::string& text, std::size_t maxLength) {
 		if (text.empty() || text.size() > maxLength) return false;
@@ -242,6 +321,16 @@ void WriteUInt16(std::vector<char>& buffer, std::uint16_t value) {
 	buffer.insert(buffer.end(), bytes, bytes + sizeof(value));
 }
 
+void WriteInt64(std::vector<char>& buffer, std::int64_t value) {
+	const char* bytes = reinterpret_cast<const char*>(&value);
+	buffer.insert(buffer.end(), bytes, bytes + sizeof(value));
+}
+
+void WriteUInt64(std::vector<char>& buffer, std::uint64_t value) {
+	const char* bytes = reinterpret_cast<const char*>(&value);
+	buffer.insert(buffer.end(), bytes, bytes + sizeof(value));
+}
+
 bool ParseAuthRequest(const std::vector<char>& payload, AuthRequest& request) {
 	if (payload.size() < 4) return false;
 	const std::uint16_t idLength = ReadUInt16(payload.data());
@@ -269,11 +358,36 @@ std::vector<char> MakeAuthResponse(PacketType type, AuthResult result) {
 	return MakePacketWithResult(type, result);
 }
 
+std::vector<char> MakeMoneyChangedPacket(std::int64_t delta, std::uint64_t finalMoney) {
+	std::vector<char> packet;
+	const std::uint16_t packetSize = static_cast<std::uint16_t>(
+		sizeof(PacketHeader) + sizeof(std::int64_t) + sizeof(std::uint64_t));
+	packet.reserve(packetSize);
+	WriteUInt16(packet, packetSize);
+	WriteUInt16(packet, static_cast<std::uint16_t>(PacketType::MoneyChanged));
+	WriteInt64(packet, delta);
+	WriteUInt64(packet, finalMoney);
+	return packet;
+}
+
 bool SendAll(SOCKET socket, const std::vector<char>& packet) {
 	int sentBytes = 0;
 	while (sentBytes < static_cast<int>(packet.size())) {
 		const int sent = send(socket, packet.data() + sentBytes,
 			static_cast<int>(packet.size()) - sentBytes, 0);
+		if (sent == SOCKET_ERROR || sent == 0) return false;
+		sentBytes += sent;
+	}
+	return true;
+}
+
+bool SendTextLine(SOCKET socket, const std::string& text) {
+	std::string line = text;
+	line.push_back('\n');
+	int sentBytes = 0;
+	while (sentBytes < static_cast<int>(line.size())) {
+		const int sent = send(socket, line.data() + sentBytes,
+			static_cast<int>(line.size()) - sentBytes, 0);
 		if (sent == SOCKET_ERROR || sent == 0) return false;
 		sentBytes += sent;
 	}
@@ -290,7 +404,73 @@ bool ReceiveAll(SOCKET socket, char* buffer, int size) {
 	return true;
 }
 
-void HandleAdminClient(SOCKET adminSocket, const std::string& addressText) {
+void QueuePacket(ClientSession& session, const std::vector<char>& packet) {
+	session.sendBuffer.insert(session.sendBuffer.end(), packet.begin(), packet.end());
+}
+
+bool QueueMoneyChangedForOnlineSession(std::vector<ClientSession>& sessions,
+	std::mutex& sessionsMutex, const std::string& playerId, std::int64_t delta,
+	std::uint64_t finalMoney) {
+	const std::vector<char> packet = MakeMoneyChangedPacket(delta, finalMoney);
+	std::lock_guard<std::mutex> lock(sessionsMutex);
+	for (ClientSession& session : sessions) {
+		if (!session.authenticated || session.playerId != playerId ||
+			session.socket == INVALID_SOCKET) continue;
+		QueuePacket(session, packet);
+		return true;
+	}
+	return false;
+}
+
+std::string ExecuteAdminCommand(const std::string& command, Database& database,
+	std::vector<ClientSession>& sessions, std::mutex& sessionsMutex) {
+	std::istringstream input(command);
+	std::string commandName;
+	input >> commandName;
+	if (commandName == "addmoney") {
+		std::string playerId;
+		std::string deltaText;
+		std::string extra;
+		input >> playerId >> deltaText >> extra;
+		if (playerId.empty() || deltaText.empty() || !extra.empty())
+			return "FAIL usage: addmoney {playerId} {amount}";
+
+		std::int64_t delta = 0;
+		try {
+			size_t parsed = 0;
+			delta = std::stoll(deltaText, &parsed);
+			if (parsed != deltaText.size()) return "FAIL invalid amount";
+		}
+		catch (...) {
+			return "FAIL invalid amount";
+		}
+
+		std::lock_guard<std::mutex> lock(sessionsMutex);
+		ClientSession* targetSession = nullptr;
+		for (ClientSession& session : sessions) {
+			if (!session.authenticated || session.playerId != playerId ||
+				session.socket == INVALID_SOCKET) continue;
+			targetSession = &session;
+			break;
+		}
+		if (!targetSession) return "FAIL player is offline";
+
+		std::uint64_t finalMoney = 0;
+		std::string reason;
+		if (!database.TryAddMoneyToOnlinePlayer(playerId, delta, finalMoney, reason))
+			return "FAIL " + reason;
+
+		QueuePacket(*targetSession, MakeMoneyChangedPacket(delta, finalMoney));
+
+		return "OK " + playerId + " delta=" + std::to_string(delta) +
+			" money=" + std::to_string(finalMoney);
+	}
+	if (commandName.empty()) return "FAIL empty command";
+	return "FAIL unknown command";
+}
+
+void HandleAdminClient(SOCKET adminSocket, const std::string& addressText,
+	std::vector<ClientSession>& sessions, std::mutex& sessionsMutex) {
 	char header[sizeof(PacketHeader)]{};
 	if (!ReceiveAll(adminSocket, header, sizeof(header))) {
 		closesocket(adminSocket);
@@ -326,12 +506,29 @@ void HandleAdminClient(SOCKET adminSocket, const std::string& addressText) {
 	}
 
 	std::cout << "[Admin Connected] " << addressText << '\n';
+	Database adminDatabase;
+	if (!adminDatabase.Connect()) {
+		SendTextLine(adminSocket, "FAIL admin database connection failed");
+		closesocket(adminSocket);
+		return;
+	}
+
 	std::array<char, 1024> buffer{};
+	std::string commandBuffer;
 	while (true) {
 		const int received = recv(adminSocket, buffer.data(), static_cast<int>(buffer.size()), 0);
 		if (received <= 0) break;
-		std::cout << "[Admin Command Pending] " << received
-			<< " byte(s) received. Command handling is not implemented yet.\n";
+		commandBuffer.append(buffer.data(), buffer.data() + received);
+		size_t newlinePosition = std::string::npos;
+		while ((newlinePosition = commandBuffer.find('\n')) != std::string::npos) {
+			std::string command = commandBuffer.substr(0, newlinePosition);
+			if (!command.empty() && command.back() == '\r') command.pop_back();
+			commandBuffer.erase(0, newlinePosition + 1);
+			const std::string response = ExecuteAdminCommand(
+				command, adminDatabase, sessions, sessionsMutex);
+			std::cout << "[Admin Command] " << command << " -> " << response << '\n';
+			if (!SendTextLine(adminSocket, response)) break;
+		}
 	}
 
 	shutdown(adminSocket, SD_BOTH);
@@ -339,7 +536,8 @@ void HandleAdminClient(SOCKET adminSocket, const std::string& addressText) {
 	std::cout << "[Admin Disconnected] " << addressText << '\n';
 }
 
-void RunAdminServer(unsigned short adminPort) {
+void RunAdminServer(unsigned short adminPort, std::vector<ClientSession>& sessions,
+	std::mutex& sessionsMutex) {
 	const SOCKET listenSocket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
 	if (listenSocket == INVALID_SOCKET) {
 		std::cerr << "admin socket failed: " << WSAGetLastError() << '\n';
@@ -379,12 +577,9 @@ void RunAdminServer(unsigned short adminPort) {
 		inet_ntop(AF_INET, &clientAddress.sin_addr, addressBuffer, sizeof(addressBuffer));
 		const unsigned short clientPort = ntohs(clientAddress.sin_port);
 		const std::string addressText = std::string(addressBuffer) + ':' + std::to_string(clientPort);
-		std::thread(HandleAdminClient, adminSocket, addressText).detach();
+		std::thread(HandleAdminClient, adminSocket, addressText,
+			std::ref(sessions), std::ref(sessionsMutex)).detach();
 	}
-}
-
-void QueuePacket(ClientSession& session, const std::vector<char>& packet) {
-	session.sendBuffer.insert(session.sendBuffer.end(), packet.begin(), packet.end());
 }
 
 void CloseSession(Database& database, ClientSession& session) {
@@ -505,12 +700,13 @@ int main(int argc, char* argv[]) {
 		return 1;
 	}
 
-	std::cout << "RaisingPet TCP server is listening on 0.0.0.0:" << port << '\n';
-	std::thread(RunAdminServer, adminPort).detach();
-	std::cout << "Press Ctrl+C to stop.\n";
-
 	std::vector<ClientSession> sessions;
+	std::mutex sessionsMutex;
 	std::array<char, 4096> buffer{};
+
+	std::cout << "RaisingPet TCP server is listening on 0.0.0.0:" << port << '\n';
+	std::thread(RunAdminServer, adminPort, std::ref(sessions), std::ref(sessionsMutex)).detach();
+	std::cout << "Press Ctrl+C to stop.\n";
 
 	while (true) {
 		fd_set readSet;
@@ -519,10 +715,13 @@ int main(int argc, char* argv[]) {
 		FD_ZERO(&writeSet);
 		FD_SET(listenSocket, &readSet);
 
-		for (const ClientSession& session : sessions) {
-			if (session.socket == INVALID_SOCKET) continue;
-			FD_SET(session.socket, &readSet);
-			if (!session.sendBuffer.empty()) FD_SET(session.socket, &writeSet);
+		{
+			std::lock_guard<std::mutex> sessionsLock(sessionsMutex);
+			for (const ClientSession& session : sessions) {
+				if (session.socket == INVALID_SOCKET) continue;
+				FD_SET(session.socket, &readSet);
+				if (!session.sendBuffer.empty()) FD_SET(session.socket, &writeSet);
+			}
 		}
 
 		timeval timeout{};
@@ -546,11 +745,6 @@ int main(int argc, char* argv[]) {
 					break;
 				}
 
-				if (sessions.size() >= 30) {
-					closesocket(clientSocket);
-					continue;
-				}
-
 				SetNonBlocking(clientSocket);
 				char addressBuffer[INET_ADDRSTRLEN]{};
 				inet_ntop(AF_INET, &clientAddress.sin_addr, addressBuffer, sizeof(addressBuffer));
@@ -560,53 +754,61 @@ int main(int argc, char* argv[]) {
 				session.socket = clientSocket;
 				session.addressText = std::string(addressBuffer) + ':' + std::to_string(clientPort);
 				std::cout << "[Connected] " << session.addressText << '\n';
+				std::lock_guard<std::mutex> sessionsLock(sessionsMutex);
+				if (sessions.size() >= 30) {
+					closesocket(clientSocket);
+					continue;
+				}
 				sessions.push_back(std::move(session));
 			}
 		}
 
-		for (ClientSession& session : sessions) {
-			if (session.socket == INVALID_SOCKET) continue;
+		{
+			std::lock_guard<std::mutex> sessionsLock(sessionsMutex);
+			for (ClientSession& session : sessions) {
+				if (session.socket == INVALID_SOCKET) continue;
 
-			if (FD_ISSET(session.socket, &readSet)) {
-				while (true) {
-					const int received = recv(session.socket, buffer.data(),
-						static_cast<int>(buffer.size()), 0);
-					if (received > 0) {
-						session.receiveBuffer.insert(session.receiveBuffer.end(),
-							buffer.data(), buffer.data() + received);
-						if (!ProcessReceiveBuffer(database, session)) {
+				if (FD_ISSET(session.socket, &readSet)) {
+					while (true) {
+						const int received = recv(session.socket, buffer.data(),
+							static_cast<int>(buffer.size()), 0);
+						if (received > 0) {
+							session.receiveBuffer.insert(session.receiveBuffer.end(),
+								buffer.data(), buffer.data() + received);
+							if (!ProcessReceiveBuffer(database, session)) {
+								CloseSession(database, session);
+								break;
+							}
+						}
+						else if (received == 0) {
 							CloseSession(database, session);
 							break;
 						}
+						else {
+							const int error = WSAGetLastError();
+							if (error != WSAEWOULDBLOCK) CloseSession(database, session);
+							break;
+						}
 					}
-					else if (received == 0) {
+				}
+
+				if (session.socket != INVALID_SOCKET && FD_ISSET(session.socket, &writeSet) &&
+					!session.sendBuffer.empty()) {
+					const int sent = send(session.socket, session.sendBuffer.data(),
+						static_cast<int>(session.sendBuffer.size()), 0);
+					if (sent > 0) {
+						session.sendBuffer.erase(session.sendBuffer.begin(),
+							session.sendBuffer.begin() + sent);
+					}
+					else if (sent == SOCKET_ERROR && WSAGetLastError() != WSAEWOULDBLOCK) {
 						CloseSession(database, session);
-						break;
-					}
-					else {
-						const int error = WSAGetLastError();
-						if (error != WSAEWOULDBLOCK) CloseSession(database, session);
-						break;
 					}
 				}
 			}
 
-			if (session.socket != INVALID_SOCKET && FD_ISSET(session.socket, &writeSet) &&
-				!session.sendBuffer.empty()) {
-				const int sent = send(session.socket, session.sendBuffer.data(),
-					static_cast<int>(session.sendBuffer.size()), 0);
-				if (sent > 0) {
-					session.sendBuffer.erase(session.sendBuffer.begin(),
-						session.sendBuffer.begin() + sent);
-				}
-				else if (sent == SOCKET_ERROR && WSAGetLastError() != WSAEWOULDBLOCK) {
-					CloseSession(database, session);
-				}
-			}
+			sessions.erase(std::remove_if(sessions.begin(), sessions.end(),
+				[](const ClientSession& session) { return session.socket == INVALID_SOCKET; }),
+				sessions.end());
 		}
-
-		sessions.erase(std::remove_if(sessions.begin(), sessions.end(),
-			[](const ClientSession& session) { return session.socket == INVALID_SOCKET; }),
-			sessions.end());
 	}
 }

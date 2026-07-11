@@ -960,6 +960,14 @@ void CGameScene::EnhanceActivePet(int enhancementType)
 }
 void CGameScene::Animate(float fElapsedTime)
 {
+	std::int64_t nServerMoneyDelta = 0;
+	UINT nServerFinalMoney = 0;
+	while (g_pFramework->GetNetworkManager().ConsumeServerMoneyChange(
+		nServerMoneyDelta, nServerFinalMoney))
+	{
+		ApplyServerMoneyChange(nServerFinalMoney);
+	}
+
 	if (m_nActivePetIndex < m_vPetResources.size())
 	{
 		CPet* pActivePet = m_vPetResources[m_nActivePetIndex].pPet;
@@ -1001,4 +1009,10 @@ void CGameScene::AddMoney(UINT p)
 void CGameScene::SyncMoneyToServer() const
 {
 	g_pFramework->GetNetworkManager().SendMoneyUpdate(m_nMoney);
+}
+
+void CGameScene::ApplyServerMoneyChange(UINT nMoney)
+{
+	m_nMoney = nMoney;
+	SaveLocalPlayerStatus();
 }

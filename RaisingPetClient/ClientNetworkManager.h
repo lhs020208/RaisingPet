@@ -3,6 +3,7 @@
 #include <WinSock2.h>
 
 #include <atomic>
+#include <cstdint>
 #include <mutex>
 #include <string>
 #include <thread>
@@ -38,6 +39,7 @@ public:
 	void Disconnect();
 
 	bool ConsumeAuthResult(CLIENT_AUTH_REQUEST& request, CLIENT_AUTH_RESULT& result);
+	bool ConsumeServerMoneyChange(std::int64_t& deltaMoney, unsigned int& finalMoney);
 	bool IsBusy() const { return m_bBusy.load(); }
 	bool IsConnected() const;
 
@@ -61,6 +63,9 @@ private:
 	CLIENT_AUTH_REQUEST m_CompletedRequest = CLIENT_AUTH_REQUEST::NONE;
 	CLIENT_AUTH_RESULT m_CompletedResult = CLIENT_AUTH_RESULT::SERVER_ERROR;
 	bool m_bHasCompletedResult = false;
+	std::int64_t m_ServerMoneyDelta = 0;
+	unsigned int m_ServerFinalMoney = 0;
+	bool m_bHasServerMoneyChange = false;
 	std::atomic_bool m_bStopRequested = false;
 	std::atomic_bool m_bBusy = false;
 	std::atomic_bool m_bConnected = false;
