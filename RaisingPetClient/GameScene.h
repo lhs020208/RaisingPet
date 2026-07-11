@@ -63,11 +63,14 @@ private:
 	void ChangeActivePet(size_t nPetIndex);
 	void EnhanceActivePet(int nEnhancementType);
 	SHOP_TEXT_RENDER_CONTEXT GetShopTextRenderContext();
+	void LoadOrCreateLocalPlayerStatus();
+	bool LoadLocalPlayerStatus();
+	void SaveLocalPlayerStatus() const;
 
 public:
 	UINT GetMoney() { return m_nMoney; }
-	void SetMoney(UINT p) { m_nMoney = p; }
-	void AddMoney(UINT p) { m_nMoney += p; }
+	void SetMoney(UINT p);
+	void AddMoney(UINT p);
 	bool DiscountMoney(UINT p);
 
 private:

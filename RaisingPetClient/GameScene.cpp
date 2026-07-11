@@ -10,6 +10,55 @@
 #include "d3dx12.h"
 extern CGameFramework* g_pFramework;
 
+namespace
+{
+const char* GetLocalPlayerStatusFilePath()
+{
+	return("Network\\LocalPlayerStatus.rplps");
+}
+
+UINT CalculateLocalPlayerStatusChecksum(const std::vector<unsigned char>& data)
+{
+	UINT checksum = 2166136261u;
+	for (unsigned char byte : data)
+	{
+		checksum ^= byte;
+		checksum *= 16777619u;
+	}
+	return(checksum);
+}
+
+void TransformLocalPlayerStatusPayload(std::vector<unsigned char>& data)
+{
+	const unsigned char key[] = { 0x52, 0x50, 0x4C, 0x6F, 0x63, 0x61, 0x6C, 0x53, 0x74, 0x61, 0x74 };
+	unsigned char rolling = 0xC3;
+	for (size_t i = 0; i < data.size(); ++i)
+	{
+		const unsigned char mixedKey = static_cast<unsigned char>(key[i % _countof(key)]
+			+ static_cast<unsigned char>(i * 29) + rolling);
+		data[i] ^= mixedKey;
+		rolling = static_cast<unsigned char>(rolling * 37u + 23u);
+	}
+}
+
+void AppendUInt(std::vector<unsigned char>& data, UINT value)
+{
+	for (int i = 0; i < 4; ++i)
+		data.push_back(static_cast<unsigned char>((value >> (i * 8)) & 0xFF));
+}
+
+bool ReadUInt(const std::vector<unsigned char>& data, size_t& offset, UINT& value)
+{
+	if (offset + 4 > data.size()) return(false);
+	value = static_cast<UINT>(data[offset])
+		| (static_cast<UINT>(data[offset + 1]) << 8)
+		| (static_cast<UINT>(data[offset + 2]) << 16)
+		| (static_cast<UINT>(data[offset + 3]) << 24);
+	offset += 4;
+	return(true);
+}
+}
+
 static std::string FormatPossession(UINT nValue)
 {
 	if (nValue < 1000) return(std::to_string(nValue));
@@ -108,6 +157,8 @@ void CGameScene::BuildObjects(ID3D12Device* pd3dDevice, ID3D12GraphicsCommandLis
 			}
 		}
 	}
+
+	LoadOrCreateLocalPlayerStatus();
 
 	ID3DBlob* pd3dVertexShaderBlob = NULL;
 	ID3DBlob* pd3dPixelShaderBlob = NULL;
@@ -676,6 +727,95 @@ void CGameScene::CollectPetPossession(CPet* pPet)
 	strDebugMessage = "[After Collection] Money: " + std::to_string(m_nMoney)
 		+ ", Pet Possession: " + std::to_string(pPet->GetNowPossession()) + "\n";
 	OutputDebugStringA(strDebugMessage.c_str());
+	SaveLocalPlayerStatus();
+}
+
+void CGameScene::LoadOrCreateLocalPlayerStatus()
+{
+	if (!LoadLocalPlayerStatus())
+		SaveLocalPlayerStatus();
+}
+
+bool CGameScene::LoadLocalPlayerStatus()
+{
+	if (m_nActivePetIndex >= m_vPetResources.size()) return(false);
+	CPet* activePet = m_vPetResources[m_nActivePetIndex].pPet;
+	if (!activePet) return(false);
+
+	std::ifstream input(GetLocalPlayerStatusFilePath(), std::ios::binary);
+	if (!input) return(false);
+
+	char magic[8] = {};
+	UINT version = 0;
+	UINT payloadSize = 0;
+	UINT checksum = 0;
+	input.read(magic, sizeof(magic));
+	input.read(reinterpret_cast<char*>(&version), sizeof(version));
+	input.read(reinterpret_cast<char*>(&payloadSize), sizeof(payloadSize));
+	input.read(reinterpret_cast<char*>(&checksum), sizeof(checksum));
+	if (!input || memcmp(magic, "RPLPST01", sizeof(magic)) != 0 || version != 1 || payloadSize != 12)
+		return(false);
+
+	std::vector<unsigned char> payload(payloadSize);
+	input.read(reinterpret_cast<char*>(payload.data()), payload.size());
+	if (!input || input.peek() != EOF) return(false);
+
+	TransformLocalPlayerStatusPayload(payload);
+	if (CalculateLocalPlayerStatusChecksum(payload) != checksum) return(false);
+
+	size_t offset = 0;
+	UINT money = 0;
+	UINT pay = 0;
+	UINT maxPossession = 0;
+	if (!ReadUInt(payload, offset, money) || !ReadUInt(payload, offset, pay)
+		|| !ReadUInt(payload, offset, maxPossession))
+		return(false);
+	if (pay == 0) pay = 1;
+	if (maxPossession == 0) maxPossession = 1;
+
+	m_nMoney = money;
+	activePet->SetPay(pay);
+	activePet->GetMaxPossession(maxPossession);
+	if (activePet->GetNowPossession() > activePet->GetMaxPossession())
+		activePet->GetNowPossession(activePet->GetMaxPossession());
+
+	OutputDebugStringA("[LocalPlayerStatus] Loaded local player status.\n");
+	return(true);
+}
+
+void CGameScene::SaveLocalPlayerStatus() const
+{
+	if (m_nActivePetIndex >= m_vPetResources.size()) return;
+	CPet* activePet = m_vPetResources[m_nActivePetIndex].pPet;
+	if (!activePet) return;
+
+	CreateDirectoryA("Network", NULL);
+
+	std::vector<unsigned char> payload;
+	payload.reserve(12);
+	AppendUInt(payload, m_nMoney);
+	AppendUInt(payload, activePet->GetPay());
+	AppendUInt(payload, activePet->GetMaxPossession());
+	const UINT checksum = CalculateLocalPlayerStatusChecksum(payload);
+	TransformLocalPlayerStatusPayload(payload);
+
+	const char* path = GetLocalPlayerStatusFilePath();
+	const char* tempPath = "Network\\LocalPlayerStatus.rplps.tmp";
+	std::ofstream output(tempPath, std::ios::binary | std::ios::trunc);
+	if (!output) return;
+
+	const char magic[8] = { 'R', 'P', 'L', 'P', 'S', 'T', '0', '1' };
+	const UINT version = 1;
+	const UINT payloadSize = static_cast<UINT>(payload.size());
+	output.write(magic, sizeof(magic));
+	output.write(reinterpret_cast<const char*>(&version), sizeof(version));
+	output.write(reinterpret_cast<const char*>(&payloadSize), sizeof(payloadSize));
+	output.write(reinterpret_cast<const char*>(&checksum), sizeof(checksum));
+	output.write(reinterpret_cast<const char*>(payload.data()), payload.size());
+	output.close();
+	if (!output) return;
+
+	MoveFileExA(tempPath, path, MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH);
 }
 
 void CGameScene::AnimateCoinEffects(float fElapsedTime)
@@ -814,6 +954,7 @@ void CGameScene::EnhanceActivePet(int enhancementType)
 		activePet->SetPay(nextValue);
 	else if (enhancementType == 1)
 		activePet->GetMaxPossession(nextValue);
+	SaveLocalPlayerStatus();
 }
 void CGameScene::Animate(float fElapsedTime)
 {
@@ -836,5 +977,18 @@ bool CGameScene::DiscountMoney(UINT p)
 	if (p > m_nMoney) return false;
 
 	m_nMoney -= p;
+	SaveLocalPlayerStatus();
 	return true;
+}
+
+void CGameScene::SetMoney(UINT p)
+{
+	m_nMoney = p;
+	SaveLocalPlayerStatus();
+}
+
+void CGameScene::AddMoney(UINT p)
+{
+	m_nMoney += p;
+	SaveLocalPlayerStatus();
 }

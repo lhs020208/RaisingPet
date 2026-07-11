@@ -482,3 +482,5 @@ FodyWeavers.xsd
 
 # RaisingPet local account cache
 RaisingPetClient/Network/AccountInformation.rpacct
+RaisingPetClient/Network/LocalPlayerStatus.rplps
+RaisingPetClient/Network/LocalPlayerStatus.rplps.tmp
