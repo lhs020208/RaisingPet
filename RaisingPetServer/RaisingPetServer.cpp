@@ -9,6 +9,7 @@
 #include <cstdint>
 #include <iostream>
 #include <string>
+#include <thread>
 #include <vector>
 
 #pragma comment(lib, "Ws2_32.lib")
@@ -30,6 +31,8 @@ enum class PacketType : std::uint16_t {
 	LoginRequest = 3,
 	LoginResponse = 4,
 	MoneyUpdate = 5,
+	AdminLoginRequest = 100,
+	AdminLoginResponse = 101,
 };
 
 enum class AuthResult : std::uint8_t {
@@ -253,13 +256,131 @@ bool ParseAuthRequest(const std::vector<char>& payload, AuthRequest& request) {
 	return true;
 }
 
-std::vector<char> MakeAuthResponse(PacketType type, AuthResult result) {
+std::vector<char> MakePacketWithResult(PacketType type, AuthResult result) {
 	std::vector<char> packet;
 	packet.reserve(sizeof(PacketHeader) + 1);
 	WriteUInt16(packet, static_cast<std::uint16_t>(sizeof(PacketHeader) + 1));
 	WriteUInt16(packet, static_cast<std::uint16_t>(type));
 	packet.push_back(static_cast<char>(result));
 	return packet;
+}
+
+std::vector<char> MakeAuthResponse(PacketType type, AuthResult result) {
+	return MakePacketWithResult(type, result);
+}
+
+bool SendAll(SOCKET socket, const std::vector<char>& packet) {
+	int sentBytes = 0;
+	while (sentBytes < static_cast<int>(packet.size())) {
+		const int sent = send(socket, packet.data() + sentBytes,
+			static_cast<int>(packet.size()) - sentBytes, 0);
+		if (sent == SOCKET_ERROR || sent == 0) return false;
+		sentBytes += sent;
+	}
+	return true;
+}
+
+bool ReceiveAll(SOCKET socket, char* buffer, int size) {
+	int receivedBytes = 0;
+	while (receivedBytes < size) {
+		const int received = recv(socket, buffer + receivedBytes, size - receivedBytes, 0);
+		if (received == SOCKET_ERROR || received == 0) return false;
+		receivedBytes += received;
+	}
+	return true;
+}
+
+void HandleAdminClient(SOCKET adminSocket, const std::string& addressText) {
+	char header[sizeof(PacketHeader)]{};
+	if (!ReceiveAll(adminSocket, header, sizeof(header))) {
+		closesocket(adminSocket);
+		return;
+	}
+
+	const std::uint16_t packetSize = ReadUInt16(header);
+	const std::uint16_t packetType = ReadUInt16(header + 2);
+	if (packetSize < sizeof(PacketHeader) || packetSize > kMaxPacketSize ||
+		packetType != static_cast<std::uint16_t>(PacketType::AdminLoginRequest)) {
+		closesocket(adminSocket);
+		return;
+	}
+
+	std::vector<char> payload(packetSize - sizeof(PacketHeader));
+	if (!ReceiveAll(adminSocket, payload.data(), static_cast<int>(payload.size()))) {
+		closesocket(adminSocket);
+		return;
+	}
+
+	AuthRequest request;
+	AuthResult result = AuthResult::InvalidFormat;
+	if (ParseAuthRequest(payload, request)) {
+		result = (request.id == "admin" && request.password == "12345678")
+			? AuthResult::Success : AuthResult::WrongPassword;
+	}
+
+	SendAll(adminSocket, MakePacketWithResult(PacketType::AdminLoginResponse, result));
+	if (result != AuthResult::Success) {
+		std::cout << "[Admin Login Failed] " << addressText << '\n';
+		closesocket(adminSocket);
+		return;
+	}
+
+	std::cout << "[Admin Connected] " << addressText << '\n';
+	std::array<char, 1024> buffer{};
+	while (true) {
+		const int received = recv(adminSocket, buffer.data(), static_cast<int>(buffer.size()), 0);
+		if (received <= 0) break;
+		std::cout << "[Admin Command Pending] " << received
+			<< " byte(s) received. Command handling is not implemented yet.\n";
+	}
+
+	shutdown(adminSocket, SD_BOTH);
+	closesocket(adminSocket);
+	std::cout << "[Admin Disconnected] " << addressText << '\n';
+}
+
+void RunAdminServer(unsigned short adminPort) {
+	const SOCKET listenSocket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+	if (listenSocket == INVALID_SOCKET) {
+		std::cerr << "admin socket failed: " << WSAGetLastError() << '\n';
+		return;
+	}
+
+	sockaddr_in serverAddress{};
+	serverAddress.sin_family = AF_INET;
+	serverAddress.sin_addr.s_addr = htonl(INADDR_ANY);
+	serverAddress.sin_port = htons(adminPort);
+
+	if (bind(listenSocket, reinterpret_cast<sockaddr*>(&serverAddress),
+		sizeof(serverAddress)) == SOCKET_ERROR) {
+		std::cerr << "admin bind failed: " << WSAGetLastError() << '\n';
+		closesocket(listenSocket);
+		return;
+	}
+
+	if (listen(listenSocket, kListenBacklog) == SOCKET_ERROR) {
+		std::cerr << "admin listen failed: " << WSAGetLastError() << '\n';
+		closesocket(listenSocket);
+		return;
+	}
+
+	std::cout << "RaisingPet admin server is listening on 0.0.0.0:" << adminPort << '\n';
+	while (true) {
+		sockaddr_in clientAddress{};
+		int clientAddressLength = sizeof(clientAddress);
+		const SOCKET adminSocket = accept(listenSocket,
+			reinterpret_cast<sockaddr*>(&clientAddress), &clientAddressLength);
+		if (adminSocket == INVALID_SOCKET) {
+			std::cerr << "admin accept failed: " << WSAGetLastError() << '\n';
+			continue;
+		}
+
+		char addressBuffer[INET_ADDRSTRLEN]{};
+		inet_ntop(AF_INET, &clientAddress.sin_addr, addressBuffer, sizeof(addressBuffer));
+		const unsigned short clientPort = ntohs(clientAddress.sin_port);
+		const std::string addressText = std::string(addressBuffer) + ':' + std::to_string(clientPort);
+		std::thread(HandleAdminClient, adminSocket, addressText).detach();
+	}
 }
 
 void QueuePacket(ClientSession& session, const std::vector<char>& packet) {
@@ -338,6 +459,11 @@ int main(int argc, char* argv[]) {
 		std::cerr << "Usage: RaisingPetServer.exe [port]\n";
 		return 1;
 	}
+	if (port == 65535) {
+		std::cerr << "Port 65535 cannot be used because admin port uses [port + 1].\n";
+		return 1;
+	}
+	const unsigned short adminPort = static_cast<unsigned short>(port + 1);
 
 	WinsockSession winsock;
 	if (!winsock.IsInitialized()) {
@@ -380,6 +506,7 @@ int main(int argc, char* argv[]) {
 	}
 
 	std::cout << "RaisingPet TCP server is listening on 0.0.0.0:" << port << '\n';
+	std::thread(RunAdminServer, adminPort).detach();
 	std::cout << "Press Ctrl+C to stop.\n";
 
 	std::vector<ClientSession> sessions;
