@@ -80,6 +80,14 @@ private:
 	UI_IMAGE_RESOURCE m_PetEnhanceButtonResource;
 	UI_IMAGE_RESOURCE m_PetEnhancePriceFrameResource;
 	UI_IMAGE_RESOURCE m_PetEnhanceLogResources[2];
+	UI_IMAGE_RESOURCE m_BankFrameResource;
+	UI_IMAGE_RESOURCE m_FinancialCategoryButtonResources[2];
+	UI_IMAGE_RESOURCE m_FinancialProductNameResources[2][10];
+	UI_IMAGE_RESOURCE m_FinancialLeftButtonResource;
+	UI_IMAGE_RESOURCE m_FinancialRightButtonResource;
+	UI_IMAGE_RESOURCE m_FinancialTimerFrameResource;
+	UI_IMAGE_RESOURCE m_FinancialMoneyFrameResource;
+	UI_IMAGE_RESOURCE m_FinancialRightPointResource;
 
 	bool m_bShopActive = false;
 	SHOP_PAGE m_eShopPage = SHOP_PAGE::SLOT_MENU;
@@ -101,6 +109,8 @@ private:
 	CCamera m_PreviewPetCamera;
 	int m_nPressedEnhanceButton = -1;
 	int m_nPendingEnhancementType = -1;
+	int m_nFinancialCategory = 0;
+	int m_nFinancialProductIndices[2] = { 0, 0 };
 
 	void RenderUiImage(ID3D12GraphicsCommandList* pd3dCommandList, CCamera* pCamera,
 		UI_IMAGE_RESOURCE& imageResource, const XMFLOAT4& rectangle, UINT nTintColor = 0x00FFFFFF);
@@ -130,4 +140,10 @@ private:
 		CPet* pActivePet, UINT nMoney, const SHOP_TEXT_RENDER_CONTEXT& textContext);
 	XMFLOAT4 GetEnhanceButtonRectangle(int nType, float fViewportWidth, float fViewportHeight) const;
 	XMFLOAT4 GetEnhancePriceRectangle(int nType, float fViewportWidth, float fViewportHeight) const;
+	void RenderFinancialPage(ID3D12GraphicsCommandList* pd3dCommandList, CCamera* pCamera,
+		const SHOP_TEXT_RENDER_CONTEXT& textContext);
+	bool ProcessFinancialClick(float x, float y, float fViewportWidth, float fViewportHeight);
+	XMFLOAT4 GetFinancialCategoryButtonRectangle(int nCategory, float fViewportWidth, float fViewportHeight) const;
+	XMFLOAT4 GetFinancialLeftButtonRectangle(float fViewportWidth, float fViewportHeight) const;
+	XMFLOAT4 GetFinancialRightButtonRectangle(float fViewportWidth, float fViewportHeight) const;
 };

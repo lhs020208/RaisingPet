@@ -213,6 +213,7 @@ void CGameScene::BuildObjects(ID3D12Device* pd3dDevice, ID3D12GraphicsCommandLis
 		{ '/', L"Assets/Image/Numbers/Slash.dds", 407, 521, 144, 139, 261, 348 },
 		{ '$', L"Assets/Image/Numbers/Dollar.dds", 441, 521, 165, 116, 280, 345 },
 		{ '-', L"Assets/Image/Numbers/Hyphen.dds", 400, 521, 166, 237, 235, 262 },
+		{ '+', L"Assets/Image/Numbers/Plus.dds", 476, 521, 177, 184, 298, 305 },
 		{ 'k', L"Assets/Image/Spellings/k.dds", 435, 521, 166, 129, 288, 318 },
 		{ 'm', L"Assets/Image/Spellings/m.dds", 527, 521, 167, 187, 363, 319 },
 		{ 'b', L"Assets/Image/Spellings/b.dds", 453, 521, 166, 129, 295, 322 },

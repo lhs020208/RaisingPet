@@ -50,8 +50,29 @@ struct SHOP_UI_LAYOUT
 	float fScrollVerticalPadding = 20.0f;
 };
 
+struct FINANCIAL_PRODUCT_DATA
+{
+	UINT nFirstMoney = 0;
+	UINT nSecondMoney = 0;
+	UINT nDurationSeconds = 0;
+};
+
 const MONEY_UI_LAYOUT gMoneyUiLayout;
 const SHOP_UI_LAYOUT gShopUiLayout;
+const FINANCIAL_PRODUCT_DATA gInstallmentSavingsProducts[10] =
+{
+	{ 150, 240, 600 }, { 500, 850, 1800 }, { 1500, 2700, 3600 },
+	{ 5000, 9500, 7200 }, { 15000, 30000, 14400 }, { 50000, 105000, 21600 },
+	{ 150000, 330000, 28800 }, { 500000, 1150000, 43200 },
+	{ 2000000, 4800000, 64800 }, { 10000000, 25000000, 86400 }
+};
+const FINANCIAL_PRODUCT_DATA gLoanProducts[10] =
+{
+	{ 200, 210, 600 }, { 700, 740, 1800 }, { 2000, 2120, 3600 },
+	{ 7000, 7450, 7200 }, { 20000, 21400, 14400 }, { 70000, 75000, 21600 },
+	{ 200000, 216000, 28800 }, { 700000, 760000, 43200 },
+	{ 2500000, 2750000, 64800 }, { 12000000, 13500000, 86400 }
+};
 
 std::string FormatPossession(UINT nValue)
 {
@@ -83,6 +104,44 @@ std::string FormatPossessionTwoDecimals(UINT nValue)
 	const UINT64 fraction = hundredths % 100;
 	return(std::to_string(hundredths / 100) + "."
 		+ ((fraction < 10) ? "0" : "") + std::to_string(fraction) + suffixes[suffixIndex]);
+}
+
+std::string FormatFinancialMoney(UINT value, bool income)
+{
+	return(std::string(income ? "+" : "-") + FormatPossessionTwoDecimals(value) + "$");
+}
+
+std::string FormatFinancialDuration(UINT seconds)
+{
+	const UINT hours = seconds / 3600;
+	seconds %= 3600;
+	const UINT minutes = seconds / 60;
+	seconds %= 60;
+	auto twoDigits = [](UINT value) -> std::string
+	{
+		return((value < 10) ? "0" : "") + std::to_string(value);
+	};
+	return(twoDigits(hours) + "H " + twoDigits(minutes) + "M " + twoDigits(seconds) + "S");
+}
+
+float MeasureShopTextWidth(const std::string& text, float scale, const SHOP_TEXT_RENDER_CONTEXT& context)
+{
+	if (!context.pGlyphResources) return(0.0f);
+	const float gap = (scale * 8.0f > 1.0f) ? scale * 8.0f : 1.0f;
+	const float space = scale * 70.0f;
+	float result = 0.0f;
+	for (char ch : text)
+	{
+		if (ch == ' ') { result += space; continue; }
+		for (const TEXT_GLYPH_RESOURCE& glyph : *context.pGlyphResources)
+		{
+			if (glyph.ch != ch) continue;
+			result += glyph.fPixelWidth * scale + gap;
+			break;
+		}
+	}
+	if (!text.empty() && result >= gap) result -= gap;
+	return(result);
 }
 
 bool IsPointInRectangle(float x, float y, const XMFLOAT4& rectangle)
@@ -170,6 +229,70 @@ XMFLOAT4 GetPetScrollTrackRectangle(float width, float height, float offsetX = 0
 	return(XMFLOAT4(right - gShopUiLayout.fScrollWidth,
 		panel.y + gShopUiLayout.fScrollVerticalPadding, right,
 		panel.w - gShopUiLayout.fScrollVerticalPadding));
+}
+
+XMFLOAT4 GetFinancialBankFrameRectangle(float width, float height, float offsetX = 0.0f, float offsetY = 0.0f)
+{
+	const XMFLOAT4 board = GetShopBoardRectangle(width, height, offsetX, offsetY);
+	const float boardWidth = board.z - board.x;
+	const float boardHeight = board.w - board.y;
+	float bankWidth = boardWidth * 0.885f;
+	float bankHeight = bankWidth * (1321.0f / 2602.0f);
+	const float maximumHeight = boardHeight * 0.68f;
+	if (bankHeight > maximumHeight)
+	{
+		bankHeight = maximumHeight;
+		bankWidth = bankHeight * (2602.0f / 1321.0f);
+	}
+	const float left = (board.x + board.z - bankWidth) * 0.5f;
+	const float top = board.y + boardHeight * 0.18f;
+	return(XMFLOAT4(left, top, left + bankWidth, top + bankHeight));
+}
+
+XMFLOAT4 GetFinancialProductNameRectangle(float width, float height, float offsetX = 0.0f, float offsetY = 0.0f)
+{
+	const XMFLOAT4 bank = GetFinancialBankFrameRectangle(width, height, offsetX, offsetY);
+	const float bankWidth = bank.z - bank.x;
+	const float productWidth = bankWidth * 0.695f;
+	const float productHeight = productWidth * (198.0f / 1812.0f);
+	const float left = (bank.x + bank.z - productWidth) * 0.5f;
+	const float top = bank.y + (bank.w - bank.y) * 0.28f;
+	return(XMFLOAT4(left, top, left + productWidth, top + productHeight));
+}
+
+XMFLOAT4 GetFinancialTimerFrameRectangle(float width, float height, float offsetX = 0.0f, float offsetY = 0.0f)
+{
+	const XMFLOAT4 product = GetFinancialProductNameRectangle(width, height, offsetX, offsetY);
+	const XMFLOAT4 bank = GetFinancialBankFrameRectangle(width, height, offsetX, offsetY);
+	const float top = bank.y + (bank.w - bank.y) * 0.51f;
+	const float timerHeight = (product.z - product.x) * (197.0f / 1812.0f);
+	return(XMFLOAT4(product.x, top, product.z, top + timerHeight));
+}
+
+XMFLOAT4 GetFinancialMoneyFrameRectangle(int index, float width, float height,
+	float offsetX = 0.0f, float offsetY = 0.0f)
+{
+	const XMFLOAT4 bank = GetFinancialBankFrameRectangle(width, height, offsetX, offsetY);
+	const float bankWidth = bank.z - bank.x;
+	const float moneyWidth = bankWidth * 0.35f;
+	const float moneyHeight = moneyWidth * (197.0f / 910.0f);
+	const float centerX = (bank.x + bank.z) * 0.5f;
+	const float gap = bankWidth * 0.105f;
+	const float top = bank.y + (bank.w - bank.y) * 0.765f;
+	const float left = (index == 0) ? centerX - gap * 0.5f - moneyWidth : centerX + gap * 0.5f;
+	return(XMFLOAT4(left, top, left + moneyWidth, top + moneyHeight));
+}
+
+XMFLOAT4 GetFinancialRightPointRectangle(float width, float height, float offsetX = 0.0f, float offsetY = 0.0f)
+{
+	const XMFLOAT4 leftMoney = GetFinancialMoneyFrameRectangle(0, width, height, offsetX, offsetY);
+	const XMFLOAT4 rightMoney = GetFinancialMoneyFrameRectangle(1, width, height, offsetX, offsetY);
+	const float pointWidth = (rightMoney.x - leftMoney.z) * 0.55f;
+	const float pointHeight = pointWidth * (94.0f / 163.0f);
+	const float centerX = (leftMoney.z + rightMoney.x) * 0.5f;
+	const float centerY = (leftMoney.y + leftMoney.w) * 0.5f;
+	return(XMFLOAT4(centerX - pointWidth * 0.5f, centerY - pointHeight * 0.5f,
+		centerX + pointWidth * 0.5f, centerY + pointHeight * 0.5f));
 }
 }
 
@@ -271,6 +394,22 @@ void CShopUI::BuildObjects(ID3D12Device* device, ID3D12GraphicsCommandList* comm
 	loadImage(L"Assets/Image/Shop/PetEnhancePriceFrame.dds", m_PetEnhancePriceFrameResource);
 	loadImage(L"Assets/Image/Shop/PetEnhanceLog1.dds", m_PetEnhanceLogResources[0]);
 	loadImage(L"Assets/Image/Shop/PetEnhanceLog2.dds", m_PetEnhanceLogResources[1]);
+	loadImage(L"Assets/Image/Shop/Financial/BankFrame.dds", m_BankFrameResource);
+	loadImage(L"Assets/Image/Shop/Financial/InstallmentSavingsButton.dds", m_FinancialCategoryButtonResources[0]);
+	loadImage(L"Assets/Image/Shop/Financial/LoansButton.dds", m_FinancialCategoryButtonResources[1]);
+	for (int i = 0; i < 10; ++i)
+	{
+		const std::wstring number = std::to_wstring(i + 1);
+		loadImage((L"Assets/Image/Shop/Financial/IS" + number + L".dds").c_str(),
+			m_FinancialProductNameResources[0][i]);
+		loadImage((L"Assets/Image/Shop/Financial/Loans" + number + L".dds").c_str(),
+			m_FinancialProductNameResources[1][i]);
+	}
+	loadImage(L"Assets/Image/Shop/Financial/LeftButton.dds", m_FinancialLeftButtonResource);
+	loadImage(L"Assets/Image/Shop/Financial/RightButton.dds", m_FinancialRightButtonResource);
+	loadImage(L"Assets/Image/Shop/Financial/TimerFrame.dds", m_FinancialTimerFrameResource);
+	loadImage(L"Assets/Image/Shop/Financial/MoneyFrame.dds", m_FinancialMoneyFrameResource);
+	loadImage(L"Assets/Image/Shop/Financial/RightPoint.dds", m_FinancialRightPointResource);
 }
 
 void CShopUI::ReleaseObjects()
@@ -288,12 +427,26 @@ void CShopUI::ReleaseObjects()
 		&m_EmptySquareResources[0], &m_EmptySquareResources[1], &m_PetConfirmationButtonResource,
 		&m_ScrollBackgroundResource, &m_ScrollResource, &m_EmptyFrameResource,
 		&m_PetEnhanceButtonResource, &m_PetEnhancePriceFrameResource,
-		&m_PetEnhanceLogResources[0], &m_PetEnhanceLogResources[1] };
+		&m_PetEnhanceLogResources[0], &m_PetEnhanceLogResources[1], &m_BankFrameResource,
+		&m_FinancialCategoryButtonResources[0], &m_FinancialCategoryButtonResources[1],
+		&m_FinancialLeftButtonResource, &m_FinancialRightButtonResource,
+		&m_FinancialTimerFrameResource, &m_FinancialMoneyFrameResource,
+		&m_FinancialRightPointResource };
 	for (UI_IMAGE_RESOURCE* image : images)
 	{
 		if (image->pd3dTexture) image->pd3dTexture->Release();
 		if (image->pd3dTextureUploadBuffer) image->pd3dTextureUploadBuffer->Release();
 		if (image->pd3dSrvDescriptorHeap) image->pd3dSrvDescriptorHeap->Release();
+	}
+	for (int category = 0; category < 2; ++category)
+	{
+		for (int index = 0; index < 10; ++index)
+		{
+			UI_IMAGE_RESOURCE& image = m_FinancialProductNameResources[category][index];
+			if (image.pd3dTexture) image.pd3dTexture->Release();
+			if (image.pd3dTextureUploadBuffer) image.pd3dTextureUploadBuffer->Release();
+			if (image.pd3dSrvDescriptorHeap) image.pd3dSrvDescriptorHeap->Release();
+		}
 	}
 }
 
@@ -311,13 +464,29 @@ void CShopUI::ReleaseUploadBuffers()
 		&m_EmptySquareResources[0], &m_EmptySquareResources[1], &m_PetConfirmationButtonResource,
 		&m_ScrollBackgroundResource, &m_ScrollResource, &m_EmptyFrameResource,
 		&m_PetEnhanceButtonResource, &m_PetEnhancePriceFrameResource,
-		&m_PetEnhanceLogResources[0], &m_PetEnhanceLogResources[1] };
+		&m_PetEnhanceLogResources[0], &m_PetEnhanceLogResources[1], &m_BankFrameResource,
+		&m_FinancialCategoryButtonResources[0], &m_FinancialCategoryButtonResources[1],
+		&m_FinancialLeftButtonResource, &m_FinancialRightButtonResource,
+		&m_FinancialTimerFrameResource, &m_FinancialMoneyFrameResource,
+		&m_FinancialRightPointResource };
 	for (UI_IMAGE_RESOURCE* image : images)
 	{
 		if (image->pd3dTextureUploadBuffer)
 		{
 			image->pd3dTextureUploadBuffer->Release();
 			image->pd3dTextureUploadBuffer = NULL;
+		}
+	}
+	for (int category = 0; category < 2; ++category)
+	{
+		for (int index = 0; index < 10; ++index)
+		{
+			UI_IMAGE_RESOURCE& image = m_FinancialProductNameResources[category][index];
+			if (image.pd3dTextureUploadBuffer)
+			{
+				image.pd3dTextureUploadBuffer->Release();
+				image.pd3dTextureUploadBuffer = NULL;
+			}
 		}
 	}
 }
@@ -567,6 +736,44 @@ XMFLOAT4 CShopUI::GetEnhancePriceRectangle(int type, float width, float height) 
 	return(XMFLOAT4(button.z + gap, top, button.z + gap + priceWidth, top + priceHeight));
 }
 
+XMFLOAT4 CShopUI::GetFinancialCategoryButtonRectangle(int category, float width, float height) const
+{
+	const XMFLOAT4 bank = GetFinancialBankFrameRectangle(width, height,
+		m_xmf2ShopBoardOffset.x, m_xmf2ShopBoardOffset.y);
+	const float bankWidth = bank.z - bank.x;
+	const float buttonWidth = bankWidth * 0.168f;
+	const float buttonHeight = buttonWidth * (197.0f / 439.0f);
+	const float gap = 0.0f;
+	const float totalWidth = buttonWidth * 2.0f + gap;
+	const float left = (bank.x + bank.z - totalWidth) * 0.5f + category * (buttonWidth + gap);
+	const float top = bank.y + (bank.w - bank.y) * 0.05f;
+	return(XMFLOAT4(left, top, left + buttonWidth, top + buttonHeight));
+}
+
+XMFLOAT4 CShopUI::GetFinancialLeftButtonRectangle(float width, float height) const
+{
+	const XMFLOAT4 bank = GetFinancialBankFrameRectangle(width, height,
+		m_xmf2ShopBoardOffset.x, m_xmf2ShopBoardOffset.y);
+	const XMFLOAT4 product = GetFinancialProductNameRectangle(width, height,
+		m_xmf2ShopBoardOffset.x, m_xmf2ShopBoardOffset.y);
+	const float buttonHeight = (product.w - product.y) * 1.35f;
+	const float buttonWidth = buttonHeight * (201.0f / 234.0f);
+	const float left = bank.x + (bank.z - bank.x) * 0.035f;
+	const float centerY = (product.y + product.w) * 0.5f;
+	return(XMFLOAT4(left, centerY - buttonHeight * 0.5f, left + buttonWidth,
+		centerY + buttonHeight * 0.5f));
+}
+
+XMFLOAT4 CShopUI::GetFinancialRightButtonRectangle(float width, float height) const
+{
+	const XMFLOAT4 bank = GetFinancialBankFrameRectangle(width, height,
+		m_xmf2ShopBoardOffset.x, m_xmf2ShopBoardOffset.y);
+	const XMFLOAT4 leftButton = GetFinancialLeftButtonRectangle(width, height);
+	const float buttonWidth = leftButton.z - leftButton.x;
+	const float right = bank.z - (bank.z - bank.x) * 0.035f;
+	return(XMFLOAT4(right - buttonWidth, leftButton.y, right, leftButton.w));
+}
+
 void CShopUI::RenderEnhancementPage(ID3D12GraphicsCommandList* commandList, CCamera* camera,
 	CPet* activePet, UINT money, const SHOP_TEXT_RENDER_CONTEXT& context)
 {
@@ -669,6 +876,68 @@ void CShopUI::RenderEnhancementPage(ID3D12GraphicsCommandList* commandList, CCam
 	}
 }
 
+void CShopUI::RenderFinancialPage(ID3D12GraphicsCommandList* commandList, CCamera* camera,
+	const SHOP_TEXT_RENDER_CONTEXT& context)
+{
+	const float width = camera->m_d3dViewport.Width;
+	const float height = camera->m_d3dViewport.Height;
+	const XMFLOAT4 bank = GetFinancialBankFrameRectangle(width, height,
+		m_xmf2ShopBoardOffset.x, m_xmf2ShopBoardOffset.y);
+	RenderUiImage(commandList, camera, m_BankFrameResource, bank);
+
+	for (int category = 0; category < 2; ++category)
+	{
+		RenderUiImage(commandList, camera, m_FinancialCategoryButtonResources[category],
+			GetFinancialCategoryButtonRectangle(category, width, height),
+			(category == m_nFinancialCategory) ? 0x00BFBFBF : 0x00FFFFFF);
+	}
+
+	const int productIndex = m_nFinancialProductIndices[m_nFinancialCategory];
+	const UINT arrowTint = (productIndex == 0) ? 0x00BFBFBF : 0x00FFFFFF;
+	const UINT rightArrowTint = (productIndex == 9) ? 0x00BFBFBF : 0x00FFFFFF;
+	RenderUiImage(commandList, camera, m_FinancialLeftButtonResource,
+		GetFinancialLeftButtonRectangle(width, height), arrowTint);
+	RenderUiImage(commandList, camera, m_FinancialRightButtonResource,
+		GetFinancialRightButtonRectangle(width, height), rightArrowTint);
+	RenderUiImage(commandList, camera, m_FinancialProductNameResources[m_nFinancialCategory][productIndex],
+		GetFinancialProductNameRectangle(width, height, m_xmf2ShopBoardOffset.x, m_xmf2ShopBoardOffset.y));
+
+	const XMFLOAT4 timerFrame = GetFinancialTimerFrameRectangle(width, height,
+		m_xmf2ShopBoardOffset.x, m_xmf2ShopBoardOffset.y);
+	RenderUiImage(commandList, camera, m_FinancialTimerFrameResource, timerFrame);
+
+	const FINANCIAL_PRODUCT_DATA& product = (m_nFinancialCategory == 0)
+		? gInstallmentSavingsProducts[productIndex] : gLoanProducts[productIndex];
+	auto renderCenteredText = [this, commandList, camera, &context]
+		(const std::string& text, const XMFLOAT4& rect, float scale, UINT color)
+	{
+		const float textLeft = (rect.x + rect.z - MeasureShopTextWidth(text, scale, context)) * 0.5f;
+		const float visibleHeight = 190.0f * scale;
+		const float textTop = rect.y + ((rect.w - rect.y - visibleHeight) * 0.5f)
+			+ 129.0f * scale - (rect.w - rect.y) * 0.32f;
+		RenderTextLine(commandList, camera, text, textLeft, textTop, scale, color, context);
+	};
+
+	renderCenteredText(FormatFinancialDuration(product.nDurationSeconds), timerFrame, 0.105f, 0x00000000);
+
+	const XMFLOAT4 moneyFrames[2] =
+	{
+		GetFinancialMoneyFrameRectangle(0, width, height, m_xmf2ShopBoardOffset.x, m_xmf2ShopBoardOffset.y),
+		GetFinancialMoneyFrameRectangle(1, width, height, m_xmf2ShopBoardOffset.x, m_xmf2ShopBoardOffset.y)
+	};
+	RenderUiImage(commandList, camera, m_FinancialMoneyFrameResource, moneyFrames[0]);
+	RenderUiImage(commandList, camera, m_FinancialMoneyFrameResource, moneyFrames[1]);
+	RenderUiImage(commandList, camera, m_FinancialRightPointResource,
+		GetFinancialRightPointRectangle(width, height, m_xmf2ShopBoardOffset.x, m_xmf2ShopBoardOffset.y));
+
+	const bool firstIncome = (m_nFinancialCategory == 1);
+	const bool secondIncome = (m_nFinancialCategory == 0);
+	renderCenteredText(FormatFinancialMoney(product.nFirstMoney, firstIncome), moneyFrames[0],
+		0.115f, firstIncome ? 0x0000B050 : 0x00FF0000);
+	renderCenteredText(FormatFinancialMoney(product.nSecondMoney, secondIncome), moneyFrames[1],
+		0.115f, secondIncome ? 0x0000B050 : 0x00FF0000);
+}
+
 void CShopUI::Render(ID3D12GraphicsCommandList* commandList, CCamera* camera, UINT money,
 	size_t activePetIndex, const std::vector<SHOP_PET_RENDER_RESOURCE>& pets,
 	const SHOP_TEXT_RENDER_CONTEXT& context)
@@ -724,6 +993,10 @@ void CShopUI::Render(ID3D12GraphicsCommandList* commandList, CCamera* camera, UI
 		{
 			CPet* activePet = (activePetIndex < pets.size()) ? pets[activePetIndex].pPet : NULL;
 			RenderEnhancementPage(commandList, camera, activePet, money, context);
+		}
+		else if (m_eShopPage == SHOP_PAGE::SLOT_CONTENT_3)
+		{
+			RenderFinancialPage(commandList, camera, context);
 		}
 		RenderMoneyUI(commandList, camera, money, context);
 		RenderUiImage(commandList, camera, m_ShopBackSpaceIconResource,
@@ -816,6 +1089,32 @@ void CShopUI::DeactivateShop(float width, float height, size_t activePetIndex)
 	ResetSelectedPet(activePetIndex, m_nCachedPetCount);
 }
 
+bool CShopUI::ProcessFinancialClick(float x, float y, float width, float height)
+{
+	for (int category = 0; category < 2; ++category)
+	{
+		if (!IsPointInRectangle(x, y, GetFinancialCategoryButtonRectangle(category, width, height))) continue;
+		m_nFinancialCategory = category;
+		return(true);
+	}
+
+	if (IsPointInRectangle(x, y, GetFinancialLeftButtonRectangle(width, height)))
+	{
+		int& index = m_nFinancialProductIndices[m_nFinancialCategory];
+		if (index > 0) --index;
+		return(true);
+	}
+	if (IsPointInRectangle(x, y, GetFinancialRightButtonRectangle(width, height)))
+	{
+		int& index = m_nFinancialProductIndices[m_nFinancialCategory];
+		if (index < 9) ++index;
+		return(true);
+	}
+
+	return(IsPointInRectangle(x, y, GetFinancialBankFrameRectangle(width, height,
+		m_xmf2ShopBoardOffset.x, m_xmf2ShopBoardOffset.y)));
+}
+
 bool CShopUI::ProcessShopUIClick(float x, float y, float width, float height, UINT money,
 	size_t petCount, size_t activePetIndex, const SHOP_TEXT_RENDER_CONTEXT& context)
 {
@@ -897,6 +1196,10 @@ bool CShopUI::ProcessShopUIClick(float x, float y, float width, float height, UI
 		const XMFLOAT4 right = GetPetContentPanelRectangle(true, width, height,
 			m_xmf2ShopBoardOffset.x, m_xmf2ShopBoardOffset.y);
 		if (IsPointInRectangle(x, y, left) || IsPointInRectangle(x, y, right)) return(true);
+	}
+	else if (m_eShopPage == SHOP_PAGE::SLOT_CONTENT_3)
+	{
+		if (ProcessFinancialClick(x, y, width, height)) return(true);
 	}
 	return(false);
 }
