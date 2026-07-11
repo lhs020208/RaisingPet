@@ -34,6 +34,7 @@ public:
 
 	bool StartRegister(const std::string& id, const std::string& password);
 	bool StartLogin(const std::string& id, const std::string& password);
+	bool SendMoneyUpdate(unsigned int money);
 	void Disconnect();
 
 	bool ConsumeAuthResult(CLIENT_AUTH_REQUEST& request, CLIENT_AUTH_RESULT& result);

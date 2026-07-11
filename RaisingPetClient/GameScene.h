@@ -66,6 +66,7 @@ private:
 	void LoadOrCreateLocalPlayerStatus();
 	bool LoadLocalPlayerStatus();
 	void SaveLocalPlayerStatus() const;
+	void SyncMoneyToServer() const;
 
 public:
 	UINT GetMoney() { return m_nMoney; }

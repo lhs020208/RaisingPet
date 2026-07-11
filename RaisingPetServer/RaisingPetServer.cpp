@@ -29,6 +29,7 @@ enum class PacketType : std::uint16_t {
 	RegisterResponse = 2,
 	LoginRequest = 3,
 	LoginResponse = 4,
+	MoneyUpdate = 5,
 };
 
 enum class AuthResult : std::uint8_t {
@@ -174,6 +175,15 @@ public:
 			std::cerr << "SetPlayerOffline failed: " << mysql_error(connection_) << '\n';
 	}
 
+	void UpdatePlayerMoney(const std::string& id, std::uint64_t money) {
+		if (!IsAccountTextValid(id, 32)) return;
+		const std::string query =
+			"UPDATE `Player` SET `Money` = " + std::to_string(money) +
+			" WHERE `PlayerID` = '" + Escape(id) + "'";
+		if (mysql_query(connection_, query.c_str()) != 0)
+			std::cerr << "UpdatePlayerMoney failed: " << mysql_error(connection_) << '\n';
+	}
+
 private:
 	static bool IsAccountTextValid(const std::string& text, std::size_t maxLength) {
 		if (text.empty() || text.size() > maxLength) return false;
@@ -214,6 +224,12 @@ bool SetNonBlocking(SOCKET socket) {
 
 std::uint16_t ReadUInt16(const char* data) {
 	std::uint16_t value = 0;
+	std::memcpy(&value, data, sizeof(value));
+	return value;
+}
+
+std::uint64_t ReadUInt64(const char* data) {
+	std::uint64_t value = 0;
 	std::memcpy(&value, data, sizeof(value));
 	return value;
 }
@@ -260,6 +276,13 @@ void CloseSession(Database& database, ClientSession& session) {
 
 void ProcessPacket(Database& database, ClientSession& session,
 	PacketType packetType, const std::vector<char>& payload) {
+	if (packetType == PacketType::MoneyUpdate) {
+		if (!session.authenticated || payload.size() != sizeof(std::uint64_t)) return;
+		const std::uint64_t money = ReadUInt64(payload.data());
+		database.UpdatePlayerMoney(session.playerId, money);
+		return;
+	}
+
 	AuthRequest request;
 	if (!ParseAuthRequest(payload, request)) {
 		const PacketType responseType = (packetType == PacketType::RegisterRequest)
@@ -300,7 +323,8 @@ bool ProcessReceiveBuffer(Database& database, ClientSession& session) {
 			session.receiveBuffer.begin() + packetSize);
 
 		const PacketType packetType = static_cast<PacketType>(packetTypeValue);
-		if (packetType != PacketType::RegisterRequest && packetType != PacketType::LoginRequest)
+		if (packetType != PacketType::RegisterRequest && packetType != PacketType::LoginRequest &&
+			packetType != PacketType::MoneyUpdate)
 			return false;
 		ProcessPacket(database, session, packetType, payload);
 	}

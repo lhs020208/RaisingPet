@@ -18,6 +18,7 @@ enum class PacketType : std::uint16_t
 	RegisterResponse = 2,
 	LoginRequest = 3,
 	LoginResponse = 4,
+	MoneyUpdate = 5,
 };
 
 std::uint16_t ReadUInt16(const char* data)
@@ -28,6 +29,12 @@ std::uint16_t ReadUInt16(const char* data)
 }
 
 void WriteUInt16(std::vector<char>& buffer, std::uint16_t value)
+{
+	const char* bytes = reinterpret_cast<const char*>(&value);
+	buffer.insert(buffer.end(), bytes, bytes + sizeof(value));
+}
+
+void WriteUInt64(std::vector<char>& buffer, std::uint64_t value)
 {
 	const char* bytes = reinterpret_cast<const char*>(&value);
 	buffer.insert(buffer.end(), bytes, bytes + sizeof(value));
@@ -60,6 +67,17 @@ std::vector<char> MakeAuthRequestPacket(CLIENT_AUTH_REQUEST request,
 	WriteUInt16(packet, static_cast<std::uint16_t>(password.size()));
 	packet.insert(packet.end(), id.begin(), id.end());
 	packet.insert(packet.end(), password.begin(), password.end());
+	return(packet);
+}
+
+std::vector<char> MakeMoneyUpdatePacket(unsigned int money)
+{
+	std::vector<char> packet;
+	const std::uint16_t packetSize = static_cast<std::uint16_t>(4 + sizeof(std::uint64_t));
+	packet.reserve(packetSize);
+	WriteUInt16(packet, packetSize);
+	WriteUInt16(packet, static_cast<std::uint16_t>(PacketType::MoneyUpdate));
+	WriteUInt64(packet, static_cast<std::uint64_t>(money));
 	return(packet);
 }
 
@@ -109,6 +127,16 @@ bool CClientNetworkManager::StartRegister(const std::string& id, const std::stri
 bool CClientNetworkManager::StartLogin(const std::string& id, const std::string& password)
 {
 	return(StartAuthRequest(CLIENT_AUTH_REQUEST::LOGIN, id, password));
+}
+
+bool CClientNetworkManager::SendMoneyUpdate(unsigned int money)
+{
+	if (!m_bConnected.load()) return(false);
+	const std::vector<char> packet = MakeMoneyUpdatePacket(money);
+
+	std::lock_guard<std::mutex> lock(m_Mutex);
+	if (m_Socket == INVALID_SOCKET) return(false);
+	return(SendAll(m_Socket, packet));
 }
 
 bool CClientNetworkManager::StartAuthRequest(CLIENT_AUTH_REQUEST request,

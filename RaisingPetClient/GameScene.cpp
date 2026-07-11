@@ -159,6 +159,7 @@ void CGameScene::BuildObjects(ID3D12Device* pd3dDevice, ID3D12GraphicsCommandLis
 	}
 
 	LoadOrCreateLocalPlayerStatus();
+	SyncMoneyToServer();
 
 	ID3DBlob* pd3dVertexShaderBlob = NULL;
 	ID3DBlob* pd3dPixelShaderBlob = NULL;
@@ -728,6 +729,7 @@ void CGameScene::CollectPetPossession(CPet* pPet)
 		+ ", Pet Possession: " + std::to_string(pPet->GetNowPossession()) + "\n";
 	OutputDebugStringA(strDebugMessage.c_str());
 	SaveLocalPlayerStatus();
+	SyncMoneyToServer();
 }
 
 void CGameScene::LoadOrCreateLocalPlayerStatus()
@@ -978,6 +980,7 @@ bool CGameScene::DiscountMoney(UINT p)
 
 	m_nMoney -= p;
 	SaveLocalPlayerStatus();
+	SyncMoneyToServer();
 	return true;
 }
 
@@ -985,10 +988,17 @@ void CGameScene::SetMoney(UINT p)
 {
 	m_nMoney = p;
 	SaveLocalPlayerStatus();
+	SyncMoneyToServer();
 }
 
 void CGameScene::AddMoney(UINT p)
 {
 	m_nMoney += p;
 	SaveLocalPlayerStatus();
+	SyncMoneyToServer();
+}
+
+void CGameScene::SyncMoneyToServer() const
+{
+	g_pFramework->GetNetworkManager().SendMoneyUpdate(m_nMoney);
 }
