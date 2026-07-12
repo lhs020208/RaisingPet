@@ -911,6 +911,12 @@ void CGameScene::OnProcessingMouseMessage(HWND hWnd, UINT nMessageID, WPARAM wPa
 	int nEnhancementType = -1;
 	if (m_ShopUI.ConsumePetEnhancementRequest(nEnhancementType))
 		EnhanceActivePet(nEnhancementType);
+	if (m_ShopUI.ConsumeLoginSceneReturnRequest())
+	{
+		g_pFramework->GetNetworkManager().Disconnect();
+		g_pFramework->RequestSceneChange(SCENE_TYPE::LOGIN);
+		return;
+	}
 	int nFinancialCategory = -1;
 	int nFinancialProductIndex = -1;
 	if (m_ShopUI.ConsumeFinancialProductRequest(nFinancialCategory, nFinancialProductIndex))

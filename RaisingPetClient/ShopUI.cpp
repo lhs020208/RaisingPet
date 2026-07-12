@@ -1150,6 +1150,13 @@ bool CShopUI::ConsumeFinancialProductRequest(int& category, int& productIndex)
 	return(true);
 }
 
+bool CShopUI::ConsumeLoginSceneReturnRequest()
+{
+	if (!m_bPendingLoginSceneReturnRequest) return(false);
+	m_bPendingLoginSceneReturnRequest = false;
+	return(true);
+}
+
 void CShopUI::SetFinancialProductActive(int category, int productIndex, UINT durationSeconds)
 {
 	if (category < 0 || category >= 2 || productIndex < 0 || productIndex >= 10) return;
@@ -1291,6 +1298,12 @@ bool CShopUI::ProcessShopUIClick(float x, float y, float width, float height, UI
 	}
 	if (m_eShopPage == SHOP_PAGE::SLOT_MENU)
 	{
+		if (!networkConnected && IsPointInRectangle(x, y, GetShopNetworkIconRectangle(width, height,
+			m_xmf2ShopBoardOffset.x, m_xmf2ShopBoardOffset.y)))
+		{
+			m_bPendingLoginSceneReturnRequest = true;
+			return(true);
+		}
 		for (int i = 0; i < 4; ++i)
 		{
 			if (!IsPointInRectangle(x, y, GetShopSlotRectangle(i, width, height,

@@ -49,6 +49,7 @@ public:
 	bool ConsumePetConfirmationRequest(size_t& nSelectedPetIndex);
 	bool ConsumePetEnhancementRequest(int& nEnhancementType);
 	bool ConsumeFinancialProductRequest(int& nCategory, int& nProductIndex);
+	bool ConsumeLoginSceneReturnRequest();
 	void SetFinancialProductActive(int nCategory, int nProductIndex, UINT nDurationSeconds);
 	void ClearFinancialProductActive(int nCategory, int nProductIndex);
 	void SetFinancialMaximumProductIndex(int nCategory, int nProductIndex);
@@ -122,6 +123,7 @@ private:
 	CCamera m_PreviewPetCamera;
 	int m_nPressedEnhanceButton = -1;
 	int m_nPendingEnhancementType = -1;
+	bool m_bPendingLoginSceneReturnRequest = false;
 	int m_nFinancialCategory = 0;
 	int m_nFinancialProductIndices[2] = { 0, 0 };
 	int m_nFinancialMaximumProductIndices[2] = { 0, 0 };
