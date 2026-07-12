@@ -51,6 +51,7 @@ public:
 	bool ConsumeFinancialProductRequest(int& nCategory, int& nProductIndex);
 	void SetFinancialProductActive(int nCategory, int nProductIndex, UINT nDurationSeconds);
 	void ClearFinancialProductActive(int nCategory, int nProductIndex);
+	void SetFinancialMaximumProductIndex(int nCategory, int nProductIndex);
 
 private:
 	struct UI_IMAGE_RESOURCE
@@ -114,6 +115,7 @@ private:
 	int m_nPendingEnhancementType = -1;
 	int m_nFinancialCategory = 0;
 	int m_nFinancialProductIndices[2] = { 0, 0 };
+	int m_nFinancialMaximumProductIndices[2] = { 0, 0 };
 	int m_nPendingFinancialCategory = -1;
 	int m_nPendingFinancialProductIndex = -1;
 	bool m_bFinancialProductActive[2] = { false, false };

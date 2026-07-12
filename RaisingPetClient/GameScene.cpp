@@ -159,6 +159,7 @@ void CGameScene::BuildObjects(ID3D12Device* pd3dDevice, ID3D12GraphicsCommandLis
 	}
 
 	LoadOrCreateLocalPlayerStatus();
+	ApplyFinancialProgressToShopUI();
 	SyncMoneyToServer();
 
 	ID3DBlob* pd3dVertexShaderBlob = NULL;
@@ -755,7 +756,8 @@ bool CGameScene::LoadLocalPlayerStatus()
 	input.read(reinterpret_cast<char*>(&version), sizeof(version));
 	input.read(reinterpret_cast<char*>(&payloadSize), sizeof(payloadSize));
 	input.read(reinterpret_cast<char*>(&checksum), sizeof(checksum));
-	if (!input || memcmp(magic, "RPLPST01", sizeof(magic)) != 0 || version != 1 || payloadSize != 12)
+	if (!input || memcmp(magic, "RPLPST01", sizeof(magic)) != 0 || version != 1 ||
+		(payloadSize != 12 && payloadSize != 20))
 		return(false);
 
 	std::vector<unsigned char> payload(payloadSize);
@@ -769,13 +771,22 @@ bool CGameScene::LoadLocalPlayerStatus()
 	UINT money = 0;
 	UINT pay = 0;
 	UINT maxPossession = 0;
+	UINT savingsMaximumProductIndex = 0;
+	UINT loanMaximumProductIndex = 0;
 	if (!ReadUInt(payload, offset, money) || !ReadUInt(payload, offset, pay)
 		|| !ReadUInt(payload, offset, maxPossession))
 		return(false);
+	if (payloadSize >= 20 && (!ReadUInt(payload, offset, savingsMaximumProductIndex)
+		|| !ReadUInt(payload, offset, loanMaximumProductIndex)))
+		return(false);
 	if (pay == 0) pay = 1;
 	if (maxPossession == 0) maxPossession = 1;
+	if (savingsMaximumProductIndex > 9) savingsMaximumProductIndex = 9;
+	if (loanMaximumProductIndex > 9) loanMaximumProductIndex = 9;
 
 	m_nMoney = money;
+	m_nFinancialMaximumProductIndices[0] = savingsMaximumProductIndex;
+	m_nFinancialMaximumProductIndices[1] = loanMaximumProductIndex;
 	activePet->SetPay(pay);
 	activePet->GetMaxPossession(maxPossession);
 	if (activePet->GetNowPossession() > activePet->GetMaxPossession())
@@ -794,10 +805,12 @@ void CGameScene::SaveLocalPlayerStatus() const
 	CreateDirectoryA("Network", NULL);
 
 	std::vector<unsigned char> payload;
-	payload.reserve(12);
+	payload.reserve(20);
 	AppendUInt(payload, m_nMoney);
 	AppendUInt(payload, activePet->GetPay());
 	AppendUInt(payload, activePet->GetMaxPossession());
+	AppendUInt(payload, m_nFinancialMaximumProductIndices[0]);
+	AppendUInt(payload, m_nFinancialMaximumProductIndices[1]);
 	const UINT checksum = CalculateLocalPlayerStatusChecksum(payload);
 	TransformLocalPlayerStatusPayload(payload);
 
@@ -977,9 +990,12 @@ void CGameScene::Animate(float fElapsedTime)
 		ApplyServerMoneyChange(financialResult.nFinalMoney);
 		const int nCategory = (financialResult.eCategory == CLIENT_FINANCIAL_CATEGORY::SAVINGS) ? 0 : 1;
 		if (financialResult.nProductId >= 1 && financialResult.nProductId <= 10)
+		{
+			const int nProductIndex = static_cast<int>(financialResult.nProductId - 1);
+			AdvanceFinancialProgressIfNeeded(nCategory, nProductIndex);
 			m_ShopUI.SetFinancialProductActive(nCategory,
-				static_cast<int>(financialResult.nProductId - 1),
-				financialResult.nDurationSeconds);
+				nProductIndex, financialResult.nDurationSeconds);
+		}
 	}
 
 	CLIENT_FINANCIAL_ACTIVE_STATUS financialActiveStatus;
@@ -1055,5 +1071,23 @@ void CGameScene::SyncMoneyToServer() const
 void CGameScene::ApplyServerMoneyChange(UINT nMoney)
 {
 	m_nMoney = nMoney;
+	SaveLocalPlayerStatus();
+}
+
+void CGameScene::ApplyFinancialProgressToShopUI()
+{
+	m_ShopUI.SetFinancialMaximumProductIndex(0,
+		static_cast<int>(m_nFinancialMaximumProductIndices[0]));
+	m_ShopUI.SetFinancialMaximumProductIndex(1,
+		static_cast<int>(m_nFinancialMaximumProductIndices[1]));
+}
+
+void CGameScene::AdvanceFinancialProgressIfNeeded(int nCategory, int nProductIndex)
+{
+	if (nCategory < 0 || nCategory >= 2 || nProductIndex < 0 || nProductIndex >= 10) return;
+	const UINT nCurrentMaximumIndex = m_nFinancialMaximumProductIndices[nCategory];
+	if (static_cast<UINT>(nProductIndex) != nCurrentMaximumIndex || nCurrentMaximumIndex >= 9) return;
+	m_nFinancialMaximumProductIndices[nCategory] = nCurrentMaximumIndex + 1;
+	ApplyFinancialProgressToShopUI();
 	SaveLocalPlayerStatus();
 }

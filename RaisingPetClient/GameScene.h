@@ -68,6 +68,8 @@ private:
 	void SaveLocalPlayerStatus() const;
 	void SyncMoneyToServer() const;
 	void ApplyServerMoneyChange(UINT nMoney);
+	void ApplyFinancialProgressToShopUI();
+	void AdvanceFinancialProgressIfNeeded(int nCategory, int nProductIndex);
 
 public:
 	UINT GetMoney() { return m_nMoney; }
@@ -77,4 +79,5 @@ public:
 
 private:
 	UINT m_nMoney = 0;
+	UINT m_nFinancialMaximumProductIndices[2] = { 0, 0 };
 };

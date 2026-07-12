@@ -904,7 +904,8 @@ void CShopUI::RenderFinancialPage(ID3D12GraphicsCommandList* commandList, CCamer
 	const int productIndex = m_nFinancialProductIndices[m_nFinancialCategory];
 	const bool categoryLocked = m_bFinancialProductActive[m_nFinancialCategory];
 	const UINT arrowTint = (categoryLocked || productIndex == 0) ? 0x00BFBFBF : 0x00FFFFFF;
-	const UINT rightArrowTint = (categoryLocked || productIndex == 9) ? 0x00BFBFBF : 0x00FFFFFF;
+	const UINT rightArrowTint = (categoryLocked || productIndex == 9 ||
+		productIndex >= m_nFinancialMaximumProductIndices[m_nFinancialCategory]) ? 0x00BFBFBF : 0x00FFFFFF;
 	RenderUiImage(commandList, camera, m_FinancialLeftButtonResource,
 		GetFinancialLeftButtonRectangle(width, height), arrowTint);
 	RenderUiImage(commandList, camera, m_FinancialRightButtonResource,
@@ -1115,6 +1116,16 @@ void CShopUI::ClearFinancialProductActive(int category, int productIndex)
 	m_fActiveFinancialElapsedSeconds[category] = 0.0f;
 }
 
+void CShopUI::SetFinancialMaximumProductIndex(int category, int productIndex)
+{
+	if (category < 0 || category >= 2) return;
+	if (productIndex < 0) productIndex = 0;
+	if (productIndex > 9) productIndex = 9;
+	m_nFinancialMaximumProductIndices[category] = productIndex;
+	if (!m_bFinancialProductActive[category] && m_nFinancialProductIndices[category] > productIndex)
+		m_nFinancialProductIndices[category] = productIndex;
+}
+
 bool CShopUI::IsPointOver(float x, float y, float width, float height) const
 {
 	if (IsPointInRectangle(x, y, GetShopIconRectangle(width, height))) return(true);
@@ -1158,7 +1169,7 @@ bool CShopUI::ProcessFinancialClick(float x, float y, float width, float height)
 	{
 		if (m_bFinancialProductActive[m_nFinancialCategory]) return(true);
 		int& index = m_nFinancialProductIndices[m_nFinancialCategory];
-		if (index < 9) ++index;
+		if (index < 9 && index < m_nFinancialMaximumProductIndices[m_nFinancialCategory]) ++index;
 		return(true);
 	}
 	if (IsPointInRectangle(x, y, GetFinancialProductNameRectangle(width, height,
