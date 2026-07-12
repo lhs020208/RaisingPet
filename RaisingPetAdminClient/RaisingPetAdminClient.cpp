@@ -197,7 +197,10 @@ int main(int argc, char* argv[]) {
 	}
 
 	std::cout << "Admin connected.\n";
-	std::cout << "Available command: addmoney {playerId} {amount}\n";
+	std::cout << "Available commands:\n";
+	std::cout << "  addmoney {playerId|_allplayer} {amount|-all}\n";
+	std::cout << "  clearIL {playerId|_allplayer} {I|L|IL}\n";
+	std::cout << "  DB CLEAR\n";
 	std::cout << "Type quit/exit to close.\n";
 
 	std::string line;

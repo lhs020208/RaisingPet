@@ -1,19 +1,15 @@
 USE RaisingPet;
 
-SET FOREIGN_KEY_CHECKS = 0;
-
 -- Reset stock-related player state.
-TRUNCATE TABLE StockPrice;
-TRUNCATE TABLE StockTrade;
-TRUNCATE TABLE StockSale;
-TRUNCATE TABLE StockHolding;
-TRUNCATE TABLE Stock;
+DELETE FROM StockPrice;
+DELETE FROM StockTrade;
+DELETE FROM StockSale;
+DELETE FROM StockHolding;
+DELETE FROM Stock;
 
 -- Reset savings/loan subscriptions while keeping product tables intact.
-TRUNCATE TABLE PlayerLoan;
-TRUNCATE TABLE PlayerSavings;
-
-SET FOREIGN_KEY_CHECKS = 1;
+DELETE FROM PlayerLoan;
+DELETE FROM PlayerSavings;
 
 -- Keep accounts, but reset runtime/player-owned state.
 UPDATE Player

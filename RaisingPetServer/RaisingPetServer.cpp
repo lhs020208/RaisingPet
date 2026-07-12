@@ -93,6 +93,21 @@ struct FinancialActiveStatus {
 	std::uint32_t remainingSeconds = 0;
 };
 
+struct FinancialClearResult {
+	std::string playerId;
+	bool playerFound = false;
+	bool savingsCleared = false;
+	bool loanCleared = false;
+	std::uint32_t savingsId = 0;
+	std::uint32_t loanId = 0;
+};
+
+struct AdminMoneyChangeResult {
+	std::string playerId;
+	std::int64_t delta = 0;
+	std::uint64_t finalMoney = 0;
+};
+
 struct PacketHeader {
 	std::uint16_t size = 0;
 	std::uint16_t type = 0;
@@ -544,6 +559,207 @@ public:
 		return true;
 	}
 
+	bool LoadAllPlayerIds(std::vector<std::string>& playerIds, std::string& failureReason) {
+		playerIds.clear();
+		if (mysql_query(connection_, "SELECT `PlayerID` FROM `Player`") != 0) {
+			failureReason = std::string("failed to select players: ") + mysql_error(connection_);
+			return false;
+		}
+		MYSQL_RES* result = mysql_store_result(connection_);
+		if (!result) {
+			failureReason = std::string("failed to read players: ") + mysql_error(connection_);
+			return false;
+		}
+		MYSQL_ROW row = nullptr;
+		while ((row = mysql_fetch_row(result)) != nullptr) {
+			if (row[0]) playerIds.push_back(row[0]);
+		}
+		mysql_free_result(result);
+		return true;
+	}
+
+	bool ClearFinancialProducts(const std::string& id, bool clearSavings, bool clearLoan,
+		FinancialClearResult& clearResult, std::string& failureReason) {
+		clearResult = {};
+		clearResult.playerId = id;
+		if (!clearSavings && !clearLoan) {
+			failureReason = "nothing to clear";
+			return false;
+		}
+		if (!IsAccountTextValid(id, 32)) {
+			failureReason = "invalid player id";
+			return false;
+		}
+
+		const std::string escapedId = Escape(id);
+		if (mysql_query(connection_, "START TRANSACTION") != 0) {
+			failureReason = std::string("failed to start transaction: ") + mysql_error(connection_);
+			return false;
+		}
+
+		if (!PlayerExistsForUpdate(escapedId)) {
+			mysql_query(connection_, "ROLLBACK");
+			failureReason = "player not found";
+			return false;
+		}
+		clearResult.playerFound = true;
+
+		if (clearSavings && !LoadSavingsForClear(escapedId, clearResult.savingsId)) {
+			mysql_query(connection_, "ROLLBACK");
+			failureReason = "failed to read savings";
+			return false;
+		}
+		if (clearLoan && !LoadLoanForClear(escapedId, clearResult.loanId)) {
+			mysql_query(connection_, "ROLLBACK");
+			failureReason = "failed to read loan";
+			return false;
+		}
+
+		if (clearSavings && clearResult.savingsId != 0) {
+			const std::string query =
+				"DELETE FROM `PlayerSavings` WHERE `PlayerID` = '" + escapedId + "'";
+			if (mysql_query(connection_, query.c_str()) != 0) {
+				mysql_query(connection_, "ROLLBACK");
+				failureReason = std::string("failed to delete savings: ") + mysql_error(connection_);
+				return false;
+			}
+			clearResult.savingsCleared = mysql_affected_rows(connection_) > 0;
+		}
+		if (clearLoan && clearResult.loanId != 0) {
+			const std::string query =
+				"DELETE FROM `PlayerLoan` WHERE `PlayerID` = '" + escapedId + "'";
+			if (mysql_query(connection_, query.c_str()) != 0) {
+				mysql_query(connection_, "ROLLBACK");
+				failureReason = std::string("failed to delete loan: ") + mysql_error(connection_);
+				return false;
+			}
+			clearResult.loanCleared = mysql_affected_rows(connection_) > 0;
+		}
+
+		if (mysql_query(connection_, "COMMIT") != 0) {
+			mysql_query(connection_, "ROLLBACK");
+			failureReason = std::string("failed to commit: ") + mysql_error(connection_);
+			return false;
+		}
+
+		if ((clearSavings && clearResult.savingsCleared) ||
+			(clearLoan && clearResult.loanCleared))
+			return true;
+		failureReason = "player has no requested product";
+		return false;
+	}
+
+	bool ClearFinancialProductsForAll(bool clearSavings, bool clearLoan,
+		std::vector<FinancialClearResult>& clearResults, std::string& failureReason) {
+		clearResults.clear();
+		if (!clearSavings && !clearLoan) {
+			failureReason = "nothing to clear";
+			return false;
+		}
+		if (mysql_query(connection_, "START TRANSACTION") != 0) {
+			failureReason = std::string("failed to start transaction: ") + mysql_error(connection_);
+			return false;
+		}
+
+		if (clearSavings && !LoadAllSavingsForClear(clearResults)) {
+			mysql_query(connection_, "ROLLBACK");
+			failureReason = "failed to read savings";
+			return false;
+		}
+		if (clearLoan && !LoadAllLoansForClear(clearResults)) {
+			mysql_query(connection_, "ROLLBACK");
+			failureReason = "failed to read loans";
+			return false;
+		}
+
+		if (clearSavings &&
+			mysql_query(connection_, "DELETE FROM `PlayerSavings`") != 0) {
+			mysql_query(connection_, "ROLLBACK");
+			failureReason = std::string("failed to delete savings: ") + mysql_error(connection_);
+			return false;
+		}
+		if (clearLoan &&
+			mysql_query(connection_, "DELETE FROM `PlayerLoan`") != 0) {
+			mysql_query(connection_, "ROLLBACK");
+			failureReason = std::string("failed to delete loans: ") + mysql_error(connection_);
+			return false;
+		}
+
+		if (mysql_query(connection_, "COMMIT") != 0) {
+			mysql_query(connection_, "ROLLBACK");
+			failureReason = std::string("failed to commit: ") + mysql_error(connection_);
+			return false;
+		}
+		for (FinancialClearResult& result : clearResults) {
+			result.playerFound = true;
+			result.savingsCleared = result.savingsId != 0;
+			result.loanCleared = result.loanId != 0;
+		}
+		return true;
+	}
+
+	bool TryClearOnlinePlayerMoney(const std::string& id, std::int64_t& delta,
+		std::uint64_t& finalMoney, std::string& failureReason) {
+		if (!IsAccountTextValid(id, 32)) {
+			failureReason = "invalid player id";
+			return false;
+		}
+
+		const std::string escapedId = Escape(id);
+		if (mysql_query(connection_, "START TRANSACTION") != 0) {
+			failureReason = std::string("failed to start transaction: ") + mysql_error(connection_);
+			return false;
+		}
+
+		std::uint64_t currentMoney = 0;
+		bool isOnline = false;
+		if (!LoadPlayerMoneyForUpdate(escapedId, currentMoney, isOnline)) {
+			mysql_query(connection_, "ROLLBACK");
+			failureReason = "player not found";
+			return false;
+		}
+		if (!isOnline) {
+			mysql_query(connection_, "ROLLBACK");
+			failureReason = "player is offline";
+			return false;
+		}
+
+		const std::string update =
+			"UPDATE `Player` SET `Money` = 0 WHERE `PlayerID` = '" + escapedId + "'";
+		if (mysql_query(connection_, update.c_str()) != 0) {
+			mysql_query(connection_, "ROLLBACK");
+			failureReason = std::string("failed to update money: ") + mysql_error(connection_);
+			return false;
+		}
+		if (mysql_query(connection_, "COMMIT") != 0) {
+			mysql_query(connection_, "ROLLBACK");
+			failureReason = std::string("failed to commit: ") + mysql_error(connection_);
+			return false;
+		}
+		delta = -static_cast<std::int64_t>(currentMoney);
+		finalMoney = 0;
+		return true;
+	}
+
+	bool ResetRuntimeStatePreservingAccounts(std::string& failureReason) {
+		const char* queries[] = {
+			"DELETE FROM `StockPrice`",
+			"DELETE FROM `StockTrade`",
+			"DELETE FROM `StockSale`",
+			"DELETE FROM `StockHolding`",
+			"DELETE FROM `Stock`",
+			"DELETE FROM `PlayerLoan`",
+			"DELETE FROM `PlayerSavings`",
+			"UPDATE `Player` SET `Money` = 0, `IsOnline` = FALSE"
+		};
+		for (const char* query : queries) {
+			if (mysql_query(connection_, query) == 0) continue;
+			failureReason = std::string("failed query [") + query + "]: " + mysql_error(connection_);
+			return false;
+		}
+		return true;
+	}
+
 private:
 	static FinancialApplicationResult WithResult(FinancialApplicationResult result,
 		FinancialResult financialResult) {
@@ -601,6 +817,101 @@ private:
 		money = row[0] ? std::stoull(row[0]) : 0;
 		isOnline = row[1] && std::string(row[1]) != "0";
 		mysql_free_result(result);
+		return true;
+	}
+
+	bool PlayerExistsForUpdate(const std::string& escapedId) {
+		const std::string query =
+			"SELECT 1 FROM `Player` WHERE `PlayerID` = '" + escapedId + "' LIMIT 1 FOR UPDATE";
+		if (mysql_query(connection_, query.c_str()) != 0) {
+			std::cerr << "PlayerExistsForUpdate failed: " << mysql_error(connection_) << '\n';
+			return false;
+		}
+		MYSQL_RES* result = mysql_store_result(connection_);
+		if (!result) return false;
+		const bool exists = mysql_fetch_row(result) != nullptr;
+		mysql_free_result(result);
+		return exists;
+	}
+
+	bool LoadSavingsForClear(const std::string& escapedId, std::uint32_t& savingsId) {
+		savingsId = 0;
+		const std::string query =
+			"SELECT `SavingsID` FROM `PlayerSavings` WHERE `PlayerID` = '" +
+			escapedId + "' LIMIT 1 FOR UPDATE";
+		if (mysql_query(connection_, query.c_str()) != 0) {
+			std::cerr << "LoadSavingsForClear failed: " << mysql_error(connection_) << '\n';
+			return false;
+		}
+		MYSQL_RES* result = mysql_store_result(connection_);
+		if (!result) return false;
+		MYSQL_ROW row = mysql_fetch_row(result);
+		if (row && row[0]) savingsId = static_cast<std::uint32_t>(std::stoul(row[0]));
+		mysql_free_result(result);
+		return true;
+	}
+
+	bool LoadLoanForClear(const std::string& escapedId, std::uint32_t& loanId) {
+		loanId = 0;
+		const std::string query =
+			"SELECT `LoanID` FROM `PlayerLoan` WHERE `PlayerID` = '" +
+			escapedId + "' LIMIT 1 FOR UPDATE";
+		if (mysql_query(connection_, query.c_str()) != 0) {
+			std::cerr << "LoadLoanForClear failed: " << mysql_error(connection_) << '\n';
+			return false;
+		}
+		MYSQL_RES* result = mysql_store_result(connection_);
+		if (!result) return false;
+		MYSQL_ROW row = mysql_fetch_row(result);
+		if (row && row[0]) loanId = static_cast<std::uint32_t>(std::stoul(row[0]));
+		mysql_free_result(result);
+		return true;
+	}
+
+	FinancialClearResult& FindOrCreateClearResult(
+		std::vector<FinancialClearResult>& results, const std::string& playerId) {
+		for (FinancialClearResult& result : results) {
+			if (result.playerId == playerId) return result;
+		}
+		FinancialClearResult result;
+		result.playerId = playerId;
+		results.push_back(result);
+		return results.back();
+	}
+
+	bool LoadAllSavingsForClear(std::vector<FinancialClearResult>& results) {
+		const char* query = "SELECT `PlayerID`, `SavingsID` FROM `PlayerSavings` FOR UPDATE";
+		if (mysql_query(connection_, query) != 0) {
+			std::cerr << "LoadAllSavingsForClear failed: " << mysql_error(connection_) << '\n';
+			return false;
+		}
+		MYSQL_RES* resultSet = mysql_store_result(connection_);
+		if (!resultSet) return false;
+		MYSQL_ROW row = nullptr;
+		while ((row = mysql_fetch_row(resultSet)) != nullptr) {
+			if (!row[0] || !row[1]) continue;
+			FinancialClearResult& result = FindOrCreateClearResult(results, row[0]);
+			result.savingsId = static_cast<std::uint32_t>(std::stoul(row[1]));
+		}
+		mysql_free_result(resultSet);
+		return true;
+	}
+
+	bool LoadAllLoansForClear(std::vector<FinancialClearResult>& results) {
+		const char* query = "SELECT `PlayerID`, `LoanID` FROM `PlayerLoan` FOR UPDATE";
+		if (mysql_query(connection_, query) != 0) {
+			std::cerr << "LoadAllLoansForClear failed: " << mysql_error(connection_) << '\n';
+			return false;
+		}
+		MYSQL_RES* resultSet = mysql_store_result(connection_);
+		if (!resultSet) return false;
+		MYSQL_ROW row = nullptr;
+		while ((row = mysql_fetch_row(resultSet)) != nullptr) {
+			if (!row[0] || !row[1]) continue;
+			FinancialClearResult& result = FindOrCreateClearResult(results, row[0]);
+			result.loanId = static_cast<std::uint32_t>(std::stoul(row[1]));
+		}
+		mysql_free_result(resultSet);
 		return true;
 	}
 
@@ -945,6 +1256,58 @@ void QueueFinancialActiveStatuses(ClientSession& session,
 		QueuePacket(session, MakeFinancialProductActivePacket(status));
 }
 
+void QueueFinancialClearNotifications(std::vector<ClientSession>& sessions,
+	std::mutex& sessionsMutex, const std::vector<FinancialClearResult>& results) {
+	std::lock_guard<std::mutex> lock(sessionsMutex);
+	for (ClientSession& session : sessions) {
+		if (!session.authenticated || session.socket == INVALID_SOCKET) continue;
+		for (const FinancialClearResult& result : results) {
+			if (result.playerId != session.playerId) continue;
+			if (result.savingsCleared)
+				QueuePacket(session, MakeFinancialProductCompletedPacket(
+					FinancialCategory::Savings, result.savingsId));
+			if (result.loanCleared)
+				QueuePacket(session, MakeFinancialProductCompletedPacket(
+					FinancialCategory::Loan, result.loanId));
+			break;
+		}
+	}
+}
+
+void QueueAdminMoneyChanges(std::vector<ClientSession>& sessions,
+	std::mutex& sessionsMutex, const std::vector<AdminMoneyChangeResult>& results) {
+	std::lock_guard<std::mutex> lock(sessionsMutex);
+	for (ClientSession& session : sessions) {
+		if (!session.authenticated || session.socket == INVALID_SOCKET) continue;
+		for (const AdminMoneyChangeResult& result : results) {
+			if (result.playerId != session.playerId) continue;
+			QueuePacket(session, MakeMoneyChangedPacket(result.delta, result.finalMoney));
+			break;
+		}
+	}
+}
+
+std::string ToUpperAscii(std::string text) {
+	for (char& ch : text) {
+		if (ch >= 'a' && ch <= 'z') ch = static_cast<char>(ch - 'a' + 'A');
+	}
+	return text;
+}
+
+bool ParseClearILMode(const std::string& modeText, bool& clearSavings, bool& clearLoan) {
+	const std::string mode = ToUpperAscii(modeText);
+	clearSavings = mode.find('I') != std::string::npos;
+	clearLoan = mode.find('L') != std::string::npos;
+	return (mode == "I" || mode == "L" || mode == "IL" || mode == "LI");
+}
+
+bool HasAuthenticatedSessions(const std::vector<ClientSession>& sessions) {
+	for (const ClientSession& session : sessions) {
+		if (session.authenticated && session.socket != INVALID_SOCKET) return true;
+	}
+	return false;
+}
+
 std::string ExecuteAdminCommand(const std::string& command, Database& database,
 	std::vector<ClientSession>& sessions, std::mutex& sessionsMutex) {
 	std::istringstream input(command);
@@ -956,37 +1319,124 @@ std::string ExecuteAdminCommand(const std::string& command, Database& database,
 		std::string extra;
 		input >> playerId >> deltaText >> extra;
 		if (playerId.empty() || deltaText.empty() || !extra.empty())
-			return "FAIL usage: addmoney {playerId} {amount}";
+			return "FAIL usage: addmoney {playerId|_allplayer} {amount|-all}";
 
 		std::int64_t delta = 0;
-		try {
-			size_t parsed = 0;
-			delta = std::stoll(deltaText, &parsed);
-			if (parsed != deltaText.size()) return "FAIL invalid amount";
-		}
-		catch (...) {
-			return "FAIL invalid amount";
+		const bool clearAllMoney = (deltaText == "-all");
+		if (!clearAllMoney) {
+			try {
+				size_t parsed = 0;
+				delta = std::stoll(deltaText, &parsed);
+				if (parsed != deltaText.size()) return "FAIL invalid amount";
+			}
+			catch (...) {
+				return "FAIL invalid amount";
+			}
 		}
 
-		std::lock_guard<std::mutex> lock(sessionsMutex);
-		ClientSession* targetSession = nullptr;
-		for (ClientSession& session : sessions) {
-			if (!session.authenticated || session.playerId != playerId ||
-				session.socket == INVALID_SOCKET) continue;
-			targetSession = &session;
-			break;
+		if (playerId == "_allplayer") {
+			std::vector<std::string> playerIds;
+			std::string reason;
+			if (!database.LoadAllPlayerIds(playerIds, reason))
+				return "FAIL " + reason;
+			int applied = 0;
+			int skipped = 0;
+			std::vector<AdminMoneyChangeResult> moneyChanges;
+			for (const std::string& targetPlayerId : playerIds) {
+				std::uint64_t finalMoney = 0;
+				std::int64_t actualDelta = delta;
+				std::string playerReason;
+				const bool success = clearAllMoney
+					? database.TryClearOnlinePlayerMoney(targetPlayerId, actualDelta, finalMoney, playerReason)
+					: database.TryAddMoneyToOnlinePlayer(targetPlayerId, actualDelta, finalMoney, playerReason);
+				if (!success) {
+					++skipped;
+					continue;
+				}
+				moneyChanges.push_back({ targetPlayerId, actualDelta, finalMoney });
+				++applied;
+			}
+			QueueAdminMoneyChanges(sessions, sessionsMutex, moneyChanges);
+			return "OK addmoney _allplayer applied=" + std::to_string(applied) +
+				" skipped=" + std::to_string(skipped);
 		}
-		if (!targetSession) return "FAIL player is offline";
+		else {
+			std::lock_guard<std::mutex> lock(sessionsMutex);
+			ClientSession* targetSession = nullptr;
+			for (ClientSession& session : sessions) {
+				if (!session.authenticated || session.playerId != playerId ||
+					session.socket == INVALID_SOCKET) continue;
+				targetSession = &session;
+				break;
+			}
+			if (!targetSession) return "FAIL player is offline";
 
-		std::uint64_t finalMoney = 0;
+			std::uint64_t finalMoney = 0;
+			std::int64_t actualDelta = delta;
+			std::string reason;
+			const bool success = clearAllMoney
+				? database.TryClearOnlinePlayerMoney(playerId, actualDelta, finalMoney, reason)
+				: database.TryAddMoneyToOnlinePlayer(playerId, actualDelta, finalMoney, reason);
+			if (!success) return "FAIL " + reason;
+
+			QueuePacket(*targetSession, MakeMoneyChangedPacket(actualDelta, finalMoney));
+
+			return "OK " + playerId + " delta=" + std::to_string(actualDelta) +
+				" money=" + std::to_string(finalMoney);
+		}
+	}
+	if (ToUpperAscii(commandName) == "CLEARIL") {
+		std::string playerId;
+		std::string modeText;
+		std::string extra;
+		input >> playerId >> modeText >> extra;
+		if (playerId.empty() || modeText.empty() || !extra.empty())
+			return "FAIL usage: clearIL {playerId|_allplayer} {I|L|IL}";
+		bool clearSavings = false;
+		bool clearLoan = false;
+		if (!ParseClearILMode(modeText, clearSavings, clearLoan))
+			return "FAIL invalid clearIL mode";
+
+		if (playerId == "_allplayer") {
+			std::vector<FinancialClearResult> results;
+			std::string reason;
+			if (!database.ClearFinancialProductsForAll(clearSavings, clearLoan, results, reason))
+				return "FAIL " + reason;
+			QueueFinancialClearNotifications(sessions, sessionsMutex, results);
+			int savingsCount = 0;
+			int loanCount = 0;
+			for (const FinancialClearResult& result : results) {
+				if (result.savingsCleared) ++savingsCount;
+				if (result.loanCleared) ++loanCount;
+			}
+			return "OK clearIL _allplayer savings=" + std::to_string(savingsCount) +
+				" loans=" + std::to_string(loanCount);
+		}
+
+		FinancialClearResult result;
 		std::string reason;
-		if (!database.TryAddMoneyToOnlinePlayer(playerId, delta, finalMoney, reason))
+		if (!database.ClearFinancialProducts(playerId, clearSavings, clearLoan, result, reason))
 			return "FAIL " + reason;
-
-		QueuePacket(*targetSession, MakeMoneyChangedPacket(delta, finalMoney));
-
-		return "OK " + playerId + " delta=" + std::to_string(delta) +
-			" money=" + std::to_string(finalMoney);
+		QueueFinancialClearNotifications(sessions, sessionsMutex, std::vector<FinancialClearResult>{ result });
+		return "OK clearIL " + playerId +
+			" savings=" + std::to_string(result.savingsCleared ? 1 : 0) +
+			" loans=" + std::to_string(result.loanCleared ? 1 : 0);
+	}
+	if (ToUpperAscii(commandName) == "DB") {
+		std::string subCommand;
+		std::string extra;
+		input >> subCommand >> extra;
+		if (ToUpperAscii(subCommand) != "CLEAR" || !extra.empty())
+			return "FAIL usage: DB CLEAR";
+		{
+			std::lock_guard<std::mutex> lock(sessionsMutex);
+			if (HasAuthenticatedSessions(sessions))
+				return "FAIL players are online";
+		}
+		std::string reason;
+		if (!database.ResetRuntimeStatePreservingAccounts(reason))
+			return "FAIL " + reason;
+		return "OK DB CLEAR";
 	}
 	if (commandName.empty()) return "FAIL empty command";
 	return "FAIL unknown command";
