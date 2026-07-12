@@ -225,6 +225,7 @@ int main(int argc, char* argv[]) {
 	std::cout << "Available commands:\n";
 	std::cout << "  addmoney {playerId|_allplayer} {amount|-all}\n";
 	std::cout << "  clearIL {playerId|_allplayer} {I|L|IL}\n";
+	std::cout << "  deleteplayer {playerId|_allplayer}\n";
 	std::cout << "  see {playerId|_allplayer} [D] [I] [M]\n";
 	std::cout << "  DB CLEAR\n";
 	std::cout << "Type quit/exit to close.\n";

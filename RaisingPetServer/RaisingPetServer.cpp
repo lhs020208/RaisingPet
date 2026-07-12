@@ -858,6 +858,108 @@ public:
 		return true;
 	}
 
+	bool DeletePlayerIfOffline(const std::string& id, std::string& failureReason) {
+		if (!IsAccountTextValid(id, 32)) {
+			failureReason = "invalid player id";
+			return false;
+		}
+
+		const std::string escapedId = Escape(id);
+		if (mysql_query(connection_, "START TRANSACTION") != 0) {
+			failureReason = std::string("failed to start transaction: ") + mysql_error(connection_);
+			return false;
+		}
+
+		if (!EnsurePlayerExistsAndOfflineForUpdate(escapedId, failureReason)) {
+			mysql_query(connection_, "ROLLBACK");
+			return false;
+		}
+
+		if (!DeletePlayerRuntimeRows(escapedId, failureReason)) {
+			mysql_query(connection_, "ROLLBACK");
+			return false;
+		}
+
+		const std::string deletePlayer =
+			"DELETE FROM `Player` WHERE `PlayerID` = '" + escapedId + "'";
+		if (mysql_query(connection_, deletePlayer.c_str()) != 0) {
+			mysql_query(connection_, "ROLLBACK");
+			failureReason = std::string("failed to delete player: ") + mysql_error(connection_);
+			return false;
+		}
+		if (mysql_affected_rows(connection_) == 0) {
+			mysql_query(connection_, "ROLLBACK");
+			failureReason = "player not found";
+			return false;
+		}
+
+		if (mysql_query(connection_, "COMMIT") != 0) {
+			mysql_query(connection_, "ROLLBACK");
+			failureReason = std::string("failed to commit: ") + mysql_error(connection_);
+			return false;
+		}
+		return true;
+	}
+
+	bool DeleteAllPlayersIfOffline(std::uint64_t& deletedCount, std::string& failureReason) {
+		deletedCount = 0;
+		if (mysql_query(connection_, "START TRANSACTION") != 0) {
+			failureReason = std::string("failed to start transaction: ") + mysql_error(connection_);
+			return false;
+		}
+
+		const char* onlineQuery =
+			"SELECT `PlayerID` FROM `Player` WHERE `IsOnline` = TRUE LIMIT 1 FOR UPDATE";
+		if (mysql_query(connection_, onlineQuery) != 0) {
+			mysql_query(connection_, "ROLLBACK");
+			failureReason = std::string("failed to check online players: ") + mysql_error(connection_);
+			return false;
+		}
+		MYSQL_RES* result = mysql_store_result(connection_);
+		if (!result) {
+			mysql_query(connection_, "ROLLBACK");
+			failureReason = std::string("failed to read online players: ") + mysql_error(connection_);
+			return false;
+		}
+		const bool hasOnlinePlayer = mysql_fetch_row(result) != nullptr;
+		mysql_free_result(result);
+		if (hasOnlinePlayer) {
+			mysql_query(connection_, "ROLLBACK");
+			failureReason = "players are online";
+			return false;
+		}
+
+		const char* queries[] = {
+			"DELETE FROM `StockPrice`",
+			"DELETE FROM `StockTrade`",
+			"DELETE FROM `StockSale`",
+			"DELETE FROM `StockHolding`",
+			"DELETE FROM `Stock`",
+			"DELETE FROM `PlayerLoan`",
+			"DELETE FROM `PlayerSavings`"
+		};
+		for (const char* query : queries) {
+			if (mysql_query(connection_, query) == 0) continue;
+			mysql_query(connection_, "ROLLBACK");
+			failureReason = std::string("failed query [") + query + "]: " + mysql_error(connection_);
+			return false;
+		}
+
+		if (mysql_query(connection_, "DELETE FROM `Player`") != 0) {
+			mysql_query(connection_, "ROLLBACK");
+			failureReason = std::string("failed to delete players: ") + mysql_error(connection_);
+			return false;
+		}
+		deletedCount = static_cast<std::uint64_t>(mysql_affected_rows(connection_));
+
+		if (mysql_query(connection_, "COMMIT") != 0) {
+			mysql_query(connection_, "ROLLBACK");
+			failureReason = std::string("failed to commit: ") + mysql_error(connection_);
+			return false;
+		}
+		return true;
+	}
+
 private:
 	static FinancialApplicationResult WithResult(FinancialApplicationResult result,
 		FinancialResult financialResult) {
@@ -930,6 +1032,58 @@ private:
 		const bool exists = mysql_fetch_row(result) != nullptr;
 		mysql_free_result(result);
 		return exists;
+	}
+
+	bool EnsurePlayerExistsAndOfflineForUpdate(const std::string& escapedId,
+		std::string& failureReason) {
+		const std::string query =
+			"SELECT `IsOnline` FROM `Player` WHERE `PlayerID` = '" +
+			escapedId + "' LIMIT 1 FOR UPDATE";
+		if (mysql_query(connection_, query.c_str()) != 0) {
+			failureReason = std::string("failed to select player: ") + mysql_error(connection_);
+			return false;
+		}
+		MYSQL_RES* result = mysql_store_result(connection_);
+		if (!result) {
+			failureReason = std::string("failed to read player: ") + mysql_error(connection_);
+			return false;
+		}
+		MYSQL_ROW row = mysql_fetch_row(result);
+		if (!row) {
+			mysql_free_result(result);
+			failureReason = "player not found";
+			return false;
+		}
+		const bool isOnline = row[0] && std::string(row[0]) != "0";
+		mysql_free_result(result);
+		if (isOnline) {
+			failureReason = "player is online";
+			return false;
+		}
+		return true;
+	}
+
+	bool DeletePlayerRuntimeRows(const std::string& escapedId, std::string& failureReason) {
+		const std::string issuedStockSubquery =
+			"(SELECT `StockID` FROM `Stock` WHERE `IssuerID` = '" + escapedId + "')";
+		const std::string queries[] = {
+			"DELETE FROM `StockTrade` WHERE `BuyerID` = '" + escapedId +
+				"' OR `SellerID` = '" + escapedId + "' OR `StockID` IN " + issuedStockSubquery,
+			"DELETE FROM `StockSale` WHERE `SellerID` = '" + escapedId +
+				"' OR `StockID` IN " + issuedStockSubquery,
+			"DELETE FROM `StockHolding` WHERE `PlayerID` = '" + escapedId +
+				"' OR `StockID` IN " + issuedStockSubquery,
+			"DELETE FROM `StockPrice` WHERE `StockID` IN " + issuedStockSubquery,
+			"DELETE FROM `Stock` WHERE `IssuerID` = '" + escapedId + "'",
+			"DELETE FROM `PlayerLoan` WHERE `PlayerID` = '" + escapedId + "'",
+			"DELETE FROM `PlayerSavings` WHERE `PlayerID` = '" + escapedId + "'"
+		};
+		for (const std::string& query : queries) {
+			if (mysql_query(connection_, query.c_str()) == 0) continue;
+			failureReason = std::string("failed query [") + query + "]: " + mysql_error(connection_);
+			return false;
+		}
+		return true;
 	}
 
 	bool LoadSavingsForClear(const std::string& escapedId, std::uint32_t& savingsId) {
@@ -1590,6 +1744,39 @@ std::string ExecuteAdminCommand(const std::string& command, Database& database,
 		if (!database.LoadPlayerSeeInfo(playerId, options.detail, info, reason))
 			return "FAIL " + reason;
 		return FormatSingleSeeResponse(info, options);
+	}
+	if (ToUpperAscii(commandName) == "DELETEPLAYER") {
+		std::string playerId;
+		std::string extra;
+		input >> playerId >> extra;
+		if (playerId.empty() || !extra.empty())
+			return "FAIL usage: deleteplayer {playerId|_allplayer}";
+
+		std::string reason;
+		if (playerId == "_allplayer") {
+			{
+				std::lock_guard<std::mutex> lock(sessionsMutex);
+				if (HasAuthenticatedSessions(sessions))
+					return "FAIL players are online";
+			}
+			std::uint64_t deletedCount = 0;
+			if (!database.DeleteAllPlayersIfOffline(deletedCount, reason))
+				return "FAIL " + reason;
+			return "OK deleteplayer _allplayer deleted=" + std::to_string(deletedCount);
+		}
+
+		{
+			std::lock_guard<std::mutex> lock(sessionsMutex);
+			for (const ClientSession& session : sessions) {
+				if (!session.authenticated || session.playerId != playerId ||
+					session.socket == INVALID_SOCKET) continue;
+				return "FAIL player is online";
+			}
+		}
+
+		if (!database.DeletePlayerIfOffline(playerId, reason))
+			return "FAIL " + reason;
+		return "OK deleteplayer " + playerId;
 	}
 	if (commandName == "addmoney") {
 		std::string playerId;
