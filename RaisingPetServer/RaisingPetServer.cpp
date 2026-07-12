@@ -108,6 +108,29 @@ struct AdminMoneyChangeResult {
 	std::uint64_t finalMoney = 0;
 };
 
+struct PlayerSavingsSeeInfo {
+	bool active = false;
+	std::uint32_t savingsId = 0;
+	std::string startTime;
+	std::string endTime;
+};
+
+struct PlayerLoanSeeInfo {
+	bool active = false;
+	std::uint32_t loanId = 0;
+	std::string startTime;
+	std::string repaymentTime;
+	bool waitingForCollection = false;
+};
+
+struct PlayerSeeInfo {
+	std::string playerId;
+	std::uint64_t money = 0;
+	bool isOnline = false;
+	PlayerSavingsSeeInfo savings;
+	PlayerLoanSeeInfo loan;
+};
+
 struct PacketHeader {
 	std::uint16_t size = 0;
 	std::uint16_t type = 0;
@@ -578,6 +601,81 @@ public:
 		return true;
 	}
 
+	bool LoadPlayerSeeInfo(const std::string& id, bool detail,
+		PlayerSeeInfo& info, std::string& failureReason) {
+		info = {};
+		if (!IsAccountTextValid(id, 32)) {
+			failureReason = "invalid player id";
+			return false;
+		}
+
+		const std::string escapedId = Escape(id);
+		const std::string query =
+			"SELECT `PlayerID`, `Money`, `IsOnline` FROM `Player` WHERE `PlayerID` = '" +
+			escapedId + "' LIMIT 1";
+		if (mysql_query(connection_, query.c_str()) != 0) {
+			failureReason = std::string("failed to select player: ") + mysql_error(connection_);
+			return false;
+		}
+
+		MYSQL_RES* result = mysql_store_result(connection_);
+		if (!result) {
+			failureReason = std::string("failed to read player: ") + mysql_error(connection_);
+			return false;
+		}
+		MYSQL_ROW row = mysql_fetch_row(result);
+		if (!row) {
+			mysql_free_result(result);
+			failureReason = "player not found";
+			return false;
+		}
+		info.playerId = row[0] ? row[0] : "";
+		info.money = row[1] ? std::stoull(row[1]) : 0;
+		info.isOnline = row[2] && std::string(row[2]) != "0";
+		mysql_free_result(result);
+
+		if (detail && !LoadSeeFinancialDetails(escapedId, info, failureReason))
+			return false;
+		return true;
+	}
+
+	bool LoadAllPlayerSeeInfos(bool detail, bool onlineOnly, bool sortByMoney,
+		std::vector<PlayerSeeInfo>& infos, std::string& failureReason) {
+		infos.clear();
+		std::string query = "SELECT `PlayerID`, `Money`, `IsOnline` FROM `Player`";
+		if (onlineOnly) query += " WHERE `IsOnline` = TRUE";
+		if (sortByMoney) query += " ORDER BY `Money` DESC, `PlayerID` ASC";
+
+		if (mysql_query(connection_, query.c_str()) != 0) {
+			failureReason = std::string("failed to select players: ") + mysql_error(connection_);
+			return false;
+		}
+		MYSQL_RES* result = mysql_store_result(connection_);
+		if (!result) {
+			failureReason = std::string("failed to read players: ") + mysql_error(connection_);
+			return false;
+		}
+
+		MYSQL_ROW row = nullptr;
+		while ((row = mysql_fetch_row(result)) != nullptr) {
+			PlayerSeeInfo info;
+			info.playerId = row[0] ? row[0] : "";
+			info.money = row[1] ? std::stoull(row[1]) : 0;
+			info.isOnline = row[2] && std::string(row[2]) != "0";
+			infos.push_back(info);
+		}
+		mysql_free_result(result);
+
+		if (detail) {
+			for (PlayerSeeInfo& info : infos) {
+				const std::string escapedId = Escape(info.playerId);
+				if (!LoadSeeFinancialDetails(escapedId, info, failureReason))
+					return false;
+			}
+		}
+		return true;
+	}
+
 	bool ClearFinancialProducts(const std::string& id, bool clearSavings, bool clearLoan,
 		FinancialClearResult& clearResult, std::string& failureReason) {
 		clearResult = {};
@@ -912,6 +1010,66 @@ private:
 			result.loanId = static_cast<std::uint32_t>(std::stoul(row[1]));
 		}
 		mysql_free_result(resultSet);
+		return true;
+	}
+
+	bool LoadSeeFinancialDetails(const std::string& escapedId,
+		PlayerSeeInfo& info, std::string& failureReason) {
+		if (!LoadSeeSavings(escapedId, info.savings, failureReason)) return false;
+		if (!LoadSeeLoan(escapedId, info.loan, failureReason)) return false;
+		return true;
+	}
+
+	bool LoadSeeSavings(const std::string& escapedId,
+		PlayerSavingsSeeInfo& savings, std::string& failureReason) {
+		savings = {};
+		const std::string query =
+			"SELECT `SavingsID`, `StartTime`, `EndTime` FROM `PlayerSavings` "
+			"WHERE `PlayerID` = '" + escapedId + "' LIMIT 1";
+		if (mysql_query(connection_, query.c_str()) != 0) {
+			failureReason = std::string("failed to select savings: ") + mysql_error(connection_);
+			return false;
+		}
+		MYSQL_RES* result = mysql_store_result(connection_);
+		if (!result) {
+			failureReason = std::string("failed to read savings: ") + mysql_error(connection_);
+			return false;
+		}
+		MYSQL_ROW row = mysql_fetch_row(result);
+		if (row) {
+			savings.active = true;
+			savings.savingsId = row[0] ? static_cast<std::uint32_t>(std::stoul(row[0])) : 0;
+			savings.startTime = row[1] ? row[1] : "";
+			savings.endTime = row[2] ? row[2] : "";
+		}
+		mysql_free_result(result);
+		return true;
+	}
+
+	bool LoadSeeLoan(const std::string& escapedId,
+		PlayerLoanSeeInfo& loan, std::string& failureReason) {
+		loan = {};
+		const std::string query =
+			"SELECT `LoanID`, `StartTime`, `RepaymentTime`, `IsWaitingForCollection` "
+			"FROM `PlayerLoan` WHERE `PlayerID` = '" + escapedId + "' LIMIT 1";
+		if (mysql_query(connection_, query.c_str()) != 0) {
+			failureReason = std::string("failed to select loan: ") + mysql_error(connection_);
+			return false;
+		}
+		MYSQL_RES* result = mysql_store_result(connection_);
+		if (!result) {
+			failureReason = std::string("failed to read loan: ") + mysql_error(connection_);
+			return false;
+		}
+		MYSQL_ROW row = mysql_fetch_row(result);
+		if (row) {
+			loan.active = true;
+			loan.loanId = row[0] ? static_cast<std::uint32_t>(std::stoul(row[0])) : 0;
+			loan.startTime = row[1] ? row[1] : "";
+			loan.repaymentTime = row[2] ? row[2] : "";
+			loan.waitingForCollection = row[3] && std::string(row[3]) != "0";
+		}
+		mysql_free_result(result);
 		return true;
 	}
 
@@ -1301,6 +1459,103 @@ bool ParseClearILMode(const std::string& modeText, bool& clearSavings, bool& cle
 	return (mode == "I" || mode == "L" || mode == "IL" || mode == "LI");
 }
 
+struct SeeCommandOptions {
+	bool detail = false;
+	bool onlineOnly = false;
+	bool sortByMoney = false;
+};
+
+bool ParseSeeOptions(std::istringstream& input, SeeCommandOptions& options) {
+	std::string token;
+	while (input >> token) {
+		const std::string upper = ToUpperAscii(token);
+		for (const char ch : upper) {
+			if (ch == 'D') options.detail = true;
+			else if (ch == 'I') options.onlineOnly = true;
+			else if (ch == 'M') options.sortByMoney = true;
+			else return false;
+		}
+	}
+	return true;
+}
+
+std::string EscapeAdminLineResponse(const std::string& text) {
+	std::string escaped;
+	escaped.reserve(text.size());
+	for (const char ch : text) {
+		if (ch == '\n') escaped += "\\n";
+		else if (ch == '\t') escaped += "\\t";
+		else if (ch != '\r') escaped.push_back(ch);
+	}
+	return escaped;
+}
+
+std::string OnlineText(bool online) {
+	return online ? "ON" : "OFF";
+}
+
+void AppendBasicPlayerSeeLine(std::ostringstream& output, const PlayerSeeInfo& info,
+	bool includeOnline, int index) {
+	if (index > 0) output << index << ". ";
+	output << "ID: " << info.playerId << " | Money: " << info.money;
+	if (includeOnline) output << " | Online: " << OnlineText(info.isOnline);
+}
+
+void AppendDetailedPlayerSeeLines(std::ostringstream& output, const PlayerSeeInfo& info,
+	bool includeOnline, int index) {
+	if (index > 0) output << "[" << index << "] ";
+	output << "ID: " << info.playerId << '\n';
+	output << "  Money: " << info.money << '\n';
+	if (includeOnline) output << "  Online: " << OnlineText(info.isOnline) << '\n';
+	if (info.savings.active) {
+		output << "  Savings: true | SavingsID: " << info.savings.savingsId
+			<< " | Start: " << info.savings.startTime
+			<< " | End: " << info.savings.endTime << '\n';
+	}
+	else {
+		output << "  Savings: false\n";
+	}
+	if (info.loan.active) {
+		output << "  Loan: true | LoanID: " << info.loan.loanId
+			<< " | Start: " << info.loan.startTime
+			<< " | Repayment: " << info.loan.repaymentTime
+			<< " | WaitingCollection: " << (info.loan.waitingForCollection ? "true" : "false");
+	}
+	else {
+		output << "  Loan: false";
+	}
+}
+
+std::string FormatSingleSeeResponse(const PlayerSeeInfo& info, const SeeCommandOptions& options) {
+	std::ostringstream output;
+	if (options.detail) {
+		output << "OK Player Detail\n";
+		AppendDetailedPlayerSeeLines(output, info, false, 0);
+	}
+	else {
+		output << "OK Player\n";
+		AppendBasicPlayerSeeLine(output, info, false, 0);
+	}
+	return EscapeAdminLineResponse(output.str());
+}
+
+std::string FormatAllSeeResponse(const std::vector<PlayerSeeInfo>& infos,
+	const SeeCommandOptions& options) {
+	std::ostringstream output;
+	output << (options.detail ? "OK Players Detail" : "OK Players")
+		<< " count=" << infos.size();
+	for (std::size_t i = 0; i < infos.size(); ++i) {
+		output << '\n';
+		if (options.detail) {
+			AppendDetailedPlayerSeeLines(output, infos[i], true, static_cast<int>(i + 1));
+		}
+		else {
+			AppendBasicPlayerSeeLine(output, infos[i], true, static_cast<int>(i + 1));
+		}
+	}
+	return EscapeAdminLineResponse(output.str());
+}
+
 bool HasAuthenticatedSessions(const std::vector<ClientSession>& sessions) {
 	for (const ClientSession& session : sessions) {
 		if (session.authenticated && session.socket != INVALID_SOCKET) return true;
@@ -1313,6 +1568,29 @@ std::string ExecuteAdminCommand(const std::string& command, Database& database,
 	std::istringstream input(command);
 	std::string commandName;
 	input >> commandName;
+	if (ToUpperAscii(commandName) == "SEE") {
+		std::string playerId;
+		input >> playerId;
+		if (playerId.empty()) return "FAIL usage: see {playerId|_allplayer} [D] [I] [M]";
+
+		SeeCommandOptions options;
+		if (!ParseSeeOptions(input, options))
+			return "FAIL invalid see option";
+
+		std::string reason;
+		if (playerId == "_allplayer") {
+			std::vector<PlayerSeeInfo> infos;
+			if (!database.LoadAllPlayerSeeInfos(options.detail, options.onlineOnly,
+				options.sortByMoney, infos, reason))
+				return "FAIL " + reason;
+			return FormatAllSeeResponse(infos, options);
+		}
+
+		PlayerSeeInfo info;
+		if (!database.LoadPlayerSeeInfo(playerId, options.detail, info, reason))
+			return "FAIL " + reason;
+		return FormatSingleSeeResponse(info, options);
+	}
 	if (commandName == "addmoney") {
 		std::string playerId;
 		std::string deltaText;

@@ -116,6 +116,31 @@ bool ReceiveLine(SOCKET socket, std::string& line) {
 		if (ch != '\r') line.push_back(ch);
 	}
 }
+
+std::string DecodeServerConsoleText(const std::string& text) {
+	std::string decoded;
+	decoded.reserve(text.size());
+	for (std::size_t i = 0; i < text.size(); ++i) {
+		if (text[i] != '\\' || i + 1 >= text.size()) {
+			decoded.push_back(text[i]);
+			continue;
+		}
+
+		const char next = text[i + 1];
+		if (next == 'n') {
+			decoded.push_back('\n');
+			++i;
+		}
+		else if (next == 't') {
+			decoded.push_back('\t');
+			++i;
+		}
+		else {
+			decoded.push_back(text[i]);
+		}
+	}
+	return decoded;
+}
 } // namespace
 
 int main(int argc, char* argv[]) {
@@ -200,6 +225,7 @@ int main(int argc, char* argv[]) {
 	std::cout << "Available commands:\n";
 	std::cout << "  addmoney {playerId|_allplayer} {amount|-all}\n";
 	std::cout << "  clearIL {playerId|_allplayer} {I|L|IL}\n";
+	std::cout << "  see {playerId|_allplayer} [D] [I] [M]\n";
 	std::cout << "  DB CLEAR\n";
 	std::cout << "Type quit/exit to close.\n";
 
@@ -221,7 +247,7 @@ int main(int argc, char* argv[]) {
 			std::cerr << "Failed to receive server response. Connection closed.\n";
 			break;
 		}
-		std::cout << response << '\n';
+		std::cout << DecodeServerConsoleText(response) << '\n';
 	}
 
 	shutdown(socketHandle, SD_BOTH);
