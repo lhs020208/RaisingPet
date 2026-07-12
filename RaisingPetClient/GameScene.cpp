@@ -533,7 +533,7 @@ void CGameScene::Render(ID3D12GraphicsCommandList* pd3dCommandList, CCamera* pCa
 	for (PET_RENDER_RESOURCE& petResource : m_vPetResources)
 		shopPets.push_back({ petResource.pPet, petResource.pd3dSrvDescriptorHeap });
 	m_ShopUI.Render(pd3dCommandList, pCamera, m_nMoney, m_nActivePetIndex,
-		shopPets, GetShopTextRenderContext());
+		shopPets, GetShopTextRenderContext(), g_pFramework->GetNetworkManager().IsConnected());
 }
 void CGameScene::RenderPetPossessionText(ID3D12GraphicsCommandList* pd3dCommandList, CCamera* pCamera, CPet* pPet)
 {
@@ -903,7 +903,8 @@ void CGameScene::RenderCoinEffects(ID3D12GraphicsCommandList* pd3dCommandList, C
 void CGameScene::OnProcessingMouseMessage(HWND hWnd, UINT nMessageID, WPARAM wParam, LPARAM lParam)
 {
 	const bool bShopMessageProcessed = m_ShopUI.OnProcessingMouseMessage(hWnd, nMessageID, wParam, lParam,
-		m_nMoney, m_vPetResources.size(), m_nActivePetIndex, GetShopTextRenderContext());
+		m_nMoney, m_vPetResources.size(), m_nActivePetIndex, GetShopTextRenderContext(),
+		g_pFramework->GetNetworkManager().IsConnected());
 	size_t nConfirmedPetIndex = 0;
 	if (m_ShopUI.ConsumePetConfirmationRequest(nConfirmedPetIndex))
 		ChangeActivePet(nConfirmedPetIndex);

@@ -200,6 +200,31 @@ XMFLOAT4 GetShopSlotRectangle(int index, float width, float height, float offset
 	return(XMFLOAT4(left, top, left + slotWidth, top + slotHeight));
 }
 
+XMFLOAT4 GetShopNetworkIconRectangle(float width, float height, float offsetX = 0.0f, float offsetY = 0.0f)
+{
+	const XMFLOAT4 board = GetShopBoardRectangle(width, height, offsetX, offsetY);
+	const float boardWidth = board.z - board.x;
+	const float boardHeight = board.w - board.y;
+	const float iconSize = boardHeight * 0.34f;
+	const float centerX = board.x + boardWidth * 0.76f;
+	const float centerY = board.y + boardHeight * 0.48f;
+	return(XMFLOAT4(centerX - iconSize * 0.5f, centerY - iconSize * 0.5f,
+		centerX + iconSize * 0.5f, centerY + iconSize * 0.5f));
+}
+
+XMFLOAT4 GetShopNetworkErrorLogRectangle(int slotIndex, float width, float height,
+	float offsetX = 0.0f, float offsetY = 0.0f)
+{
+	const XMFLOAT4 board = GetShopBoardRectangle(width, height, offsetX, offsetY);
+	const XMFLOAT4 slot = GetShopSlotRectangle(slotIndex, width, height, offsetX, offsetY);
+	const float boardWidth = board.z - board.x;
+	const float logWidth = boardWidth * 0.58f;
+	const float logHeight = logWidth * (133.0f / 1756.0f);
+	const float centerX = (slot.x + slot.z) * 0.5f;
+	const float top = slot.y - logHeight - 12.0f;
+	return(XMFLOAT4(centerX - logWidth * 0.5f, top, centerX + logWidth * 0.5f, top + logHeight));
+}
+
 XMFLOAT4 GetPetContentPanelRectangle(bool rightPanel, float width, float height,
 	float offsetX = 0.0f, float offsetY = 0.0f)
 {
@@ -384,6 +409,9 @@ void CShopUI::BuildObjects(ID3D12Device* device, ID3D12GraphicsCommandList* comm
 	loadImage(L"Assets/Image/Shop/ShopSlot2.dds", m_ShopSlotResources[1]);
 	loadImage(L"Assets/Image/Shop/ShopSlot3.dds", m_ShopSlotResources[2]);
 	loadImage(L"Assets/Image/Shop/ShopSlot4.dds", m_ShopSlotResources[3]);
+	loadImage(L"Assets/Image/Shop/InternetOnIcon.dds", m_InternetOnIconResource);
+	loadImage(L"Assets/Image/Shop/InternetOffIcon.dds", m_InternetOffIconResource);
+	loadImage(L"Assets/Image/Shop/NetworkErrorLog.dds", m_NetworkErrorLogResource);
 	loadImage(L"Assets/Image/Common/EmptySquare.dds", m_EmptySquareResources[0]);
 	loadImage(L"Assets/Image/Common/EmptySquare.dds", m_EmptySquareResources[1]);
 	loadImage(L"Assets/Image/Shop/PetConfirmationButton.dds", m_PetConfirmationButtonResource);
@@ -431,7 +459,8 @@ void CShopUI::ReleaseObjects()
 		&m_FinancialCategoryButtonResources[0], &m_FinancialCategoryButtonResources[1],
 		&m_FinancialLeftButtonResource, &m_FinancialRightButtonResource,
 		&m_FinancialTimerFrameResource, &m_FinancialMoneyFrameResource,
-		&m_FinancialRightPointResource };
+		&m_FinancialRightPointResource, &m_InternetOnIconResource,
+		&m_InternetOffIconResource, &m_NetworkErrorLogResource };
 	for (UI_IMAGE_RESOURCE* image : images)
 	{
 		if (image->pd3dTexture) image->pd3dTexture->Release();
@@ -463,6 +492,11 @@ void CShopUI::Animate(float elapsedTime)
 			m_fActiveFinancialElapsedSeconds[category] =
 			static_cast<float>(m_nActiveFinancialDurationSeconds[category]);
 	}
+	for (SHOP_NETWORK_ERROR_LOG& log : m_NetworkErrorLogs)
+		log.fElapsedTime += elapsedTime;
+	m_NetworkErrorLogs.erase(std::remove_if(m_NetworkErrorLogs.begin(), m_NetworkErrorLogs.end(),
+		[](const SHOP_NETWORK_ERROR_LOG& log) { return(log.fElapsedTime >= 1.0f); }),
+		m_NetworkErrorLogs.end());
 }
 
 void CShopUI::ReleaseUploadBuffers()
@@ -477,7 +511,8 @@ void CShopUI::ReleaseUploadBuffers()
 		&m_FinancialCategoryButtonResources[0], &m_FinancialCategoryButtonResources[1],
 		&m_FinancialLeftButtonResource, &m_FinancialRightButtonResource,
 		&m_FinancialTimerFrameResource, &m_FinancialMoneyFrameResource,
-		&m_FinancialRightPointResource };
+		&m_FinancialRightPointResource, &m_InternetOnIconResource,
+		&m_InternetOffIconResource, &m_NetworkErrorLogResource };
 	for (UI_IMAGE_RESOURCE* image : images)
 	{
 		if (image->pd3dTextureUploadBuffer)
@@ -960,7 +995,7 @@ void CShopUI::RenderFinancialPage(ID3D12GraphicsCommandList* commandList, CCamer
 
 void CShopUI::Render(ID3D12GraphicsCommandList* commandList, CCamera* camera, UINT money,
 	size_t activePetIndex, const std::vector<SHOP_PET_RENDER_RESOURCE>& pets,
-	const SHOP_TEXT_RENDER_CONTEXT& context)
+	const SHOP_TEXT_RENDER_CONTEXT& context, bool networkConnected)
 {
 	if (!camera) return;
 	RebuildPetScrollMetricsIfNeeded(pets.size());
@@ -973,8 +1008,27 @@ void CShopUI::Render(ID3D12GraphicsCommandList* commandList, CCamera* camera, UI
 		if (m_eShopPage == SHOP_PAGE::SLOT_MENU)
 		{
 			for (int i = 0; i < 4; ++i)
+			{
+				const UINT slotTint = (!networkConnected && (i == 2 || i == 3))
+					? 0x00BFBFBF : 0x00FFFFFF;
 				RenderUiImage(commandList, camera, m_ShopSlotResources[i],
-					GetShopSlotRectangle(i, width, height, m_xmf2ShopBoardOffset.x, m_xmf2ShopBoardOffset.y));
+					GetShopSlotRectangle(i, width, height, m_xmf2ShopBoardOffset.x, m_xmf2ShopBoardOffset.y),
+					slotTint);
+			}
+			RenderUiImage(commandList, camera,
+				networkConnected ? m_InternetOnIconResource : m_InternetOffIconResource,
+				GetShopNetworkIconRectangle(width, height,
+					m_xmf2ShopBoardOffset.x, m_xmf2ShopBoardOffset.y));
+			for (const SHOP_NETWORK_ERROR_LOG& log : m_NetworkErrorLogs)
+			{
+				const float alphaRatio = max(0.0f, 1.0f - log.fElapsedTime);
+				const UINT alpha = max(1u, static_cast<UINT>(alphaRatio * 255.0f + 0.5f));
+				const float moveY = -20.0f * log.fElapsedTime;
+				RenderUiImage(commandList, camera, m_NetworkErrorLogResource,
+					XMFLOAT4(log.rectangle.x, log.rectangle.y + moveY,
+						log.rectangle.z, log.rectangle.w + moveY),
+					(alpha << 24) | 0x00FFFFFF);
+			}
 		}
 		else if (m_eShopPage == SHOP_PAGE::SLOT_CONTENT_1)
 		{
@@ -1187,8 +1241,19 @@ bool CShopUI::ProcessFinancialClick(float x, float y, float width, float height)
 		m_xmf2ShopBoardOffset.x, m_xmf2ShopBoardOffset.y)));
 }
 
+void CShopUI::SpawnNetworkErrorLog(float width, float height, int slotIndex)
+{
+	SHOP_NETWORK_ERROR_LOG log;
+	log.rectangle = GetShopNetworkErrorLogRectangle(slotIndex, width, height,
+		m_xmf2ShopBoardOffset.x, m_xmf2ShopBoardOffset.y);
+	log.fElapsedTime = 0.0f;
+	m_NetworkErrorLogs.clear();
+	m_NetworkErrorLogs.push_back(log);
+}
+
 bool CShopUI::ProcessShopUIClick(float x, float y, float width, float height, UINT money,
-	size_t petCount, size_t activePetIndex, const SHOP_TEXT_RENDER_CONTEXT& context)
+	size_t petCount, size_t activePetIndex, const SHOP_TEXT_RENDER_CONTEXT& context,
+	bool networkConnected)
 {
 	const bool iconClicked = IsPointInRectangle(x, y, GetShopIconRectangle(width, height));
 	const bool closeClicked = m_bShopActive && IsPointInRectangle(x, y,
@@ -1230,6 +1295,11 @@ bool CShopUI::ProcessShopUIClick(float x, float y, float width, float height, UI
 		{
 			if (!IsPointInRectangle(x, y, GetShopSlotRectangle(i, width, height,
 				m_xmf2ShopBoardOffset.x, m_xmf2ShopBoardOffset.y))) continue;
+			if (!networkConnected && (i == 2 || i == 3))
+			{
+				SpawnNetworkErrorLog(width, height, i);
+				return(true);
+			}
 			m_eShopPage = static_cast<SHOP_PAGE>(static_cast<int>(SHOP_PAGE::SLOT_CONTENT_1) + i);
 			m_nSelectedShopSlot = i;
 			if (m_eShopPage == SHOP_PAGE::SLOT_CONTENT_1)
@@ -1277,7 +1347,8 @@ bool CShopUI::ProcessShopUIClick(float x, float y, float width, float height, UI
 }
 
 bool CShopUI::OnProcessingMouseMessage(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam,
-	UINT money, size_t nPetCount, size_t activePetIndex, const SHOP_TEXT_RENDER_CONTEXT& context)
+	UINT money, size_t nPetCount, size_t activePetIndex, const SHOP_TEXT_RENDER_CONTEXT& context,
+	bool networkConnected)
 {
 	RECT client;
 	GetClientRect(hWnd, &client);
@@ -1329,7 +1400,8 @@ bool CShopUI::OnProcessingMouseMessage(HWND hWnd, UINT message, WPARAM wParam, L
 			m_fPetScrollDragLastY = y;
 			return(true);
 		}
-		if (ProcessShopUIClick(x, y, width, height, money, nPetCount, activePetIndex, context)) return(true);
+		if (ProcessShopUIClick(x, y, width, height, money, nPetCount, activePetIndex, context,
+			networkConnected)) return(true);
 		if (m_bShopActive)
 		{
 			const XMFLOAT4 board = GetShopBoardRectangle(width, height,

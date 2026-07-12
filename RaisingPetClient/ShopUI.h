@@ -41,11 +41,11 @@ public:
 
 	void Render(ID3D12GraphicsCommandList* pd3dCommandList, CCamera* pCamera, UINT nMoney,
 		size_t nActivePetIndex, const std::vector<SHOP_PET_RENDER_RESOURCE>& pets,
-		const SHOP_TEXT_RENDER_CONTEXT& textContext);
+		const SHOP_TEXT_RENDER_CONTEXT& textContext, bool bNetworkConnected);
 	bool IsPointOver(float x, float y, float fViewportWidth, float fViewportHeight) const;
 	bool OnProcessingMouseMessage(HWND hWnd, UINT nMessageID, WPARAM wParam, LPARAM lParam,
 		UINT nMoney, size_t nPetCount, size_t nActivePetIndex,
-		const SHOP_TEXT_RENDER_CONTEXT& textContext);
+		const SHOP_TEXT_RENDER_CONTEXT& textContext, bool bNetworkConnected);
 	bool ConsumePetConfirmationRequest(size_t& nSelectedPetIndex);
 	bool ConsumePetEnhancementRequest(int& nEnhancementType);
 	bool ConsumeFinancialProductRequest(int& nCategory, int& nProductIndex);
@@ -59,6 +59,12 @@ private:
 		ID3D12Resource* pd3dTexture = NULL;
 		ID3D12Resource* pd3dTextureUploadBuffer = NULL;
 		ID3D12DescriptorHeap* pd3dSrvDescriptorHeap = NULL;
+	};
+
+	struct SHOP_NETWORK_ERROR_LOG
+	{
+		XMFLOAT4 rectangle = XMFLOAT4(0.0f, 0.0f, 0.0f, 0.0f);
+		float fElapsedTime = 0.0f;
 	};
 
 	enum class SHOP_PAGE
@@ -92,6 +98,9 @@ private:
 	UI_IMAGE_RESOURCE m_FinancialTimerFrameResource;
 	UI_IMAGE_RESOURCE m_FinancialMoneyFrameResource;
 	UI_IMAGE_RESOURCE m_FinancialRightPointResource;
+	UI_IMAGE_RESOURCE m_InternetOnIconResource;
+	UI_IMAGE_RESOURCE m_InternetOffIconResource;
+	UI_IMAGE_RESOURCE m_NetworkErrorLogResource;
 
 	bool m_bShopActive = false;
 	SHOP_PAGE m_eShopPage = SHOP_PAGE::SLOT_MENU;
@@ -122,6 +131,7 @@ private:
 	int m_nActiveFinancialProductIndex[2] = { -1, -1 };
 	UINT m_nActiveFinancialDurationSeconds[2] = { 0, 0 };
 	float m_fActiveFinancialElapsedSeconds[2] = { 0.0f, 0.0f };
+	std::vector<SHOP_NETWORK_ERROR_LOG> m_NetworkErrorLogs;
 
 	void RenderUiImage(ID3D12GraphicsCommandList* pd3dCommandList, CCamera* pCamera,
 		UI_IMAGE_RESOURCE& imageResource, const XMFLOAT4& rectangle, UINT nTintColor = 0x00FFFFFF);
@@ -137,7 +147,8 @@ private:
 		const SHOP_TEXT_RENDER_CONTEXT& textContext) const;
 	bool ProcessShopUIClick(float x, float y, float fViewportWidth, float fViewportHeight,
 		UINT nMoney, size_t nPetCount, size_t nActivePetIndex,
-		const SHOP_TEXT_RENDER_CONTEXT& textContext);
+		const SHOP_TEXT_RENDER_CONTEXT& textContext, bool bNetworkConnected);
+	void SpawnNetworkErrorLog(float fViewportWidth, float fViewportHeight, int nSlotIndex);
 	void DeactivateShop(float fViewportWidth, float fViewportHeight, size_t nActivePetIndex);
 	void ResetSelectedPet(size_t nActivePetIndex, size_t nPetCount);
 	void RebuildPetScrollMetrics(size_t nPetCount);
