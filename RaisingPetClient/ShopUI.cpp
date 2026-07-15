@@ -417,6 +417,11 @@ void CShopUI::BuildObjects(ID3D12Device* device, ID3D12GraphicsCommandList* comm
 	loadImage(L"Assets/Image/Shop/Stock/Limit1.dds", m_StockLimitResources[0]);
 	loadImage(L"Assets/Image/Shop/Stock/Limit2.dds", m_StockLimitResources[1]);
 	loadImage(L"Assets/Image/Shop/Stock/CantCreateStockGenLog.dds", m_CantCreateStockGenLogResource);
+	loadImage(L"Assets/Image/Shop/Stock/StockName.dds", m_StockNameResource);
+	loadImage(L"Assets/Image/Shop/Stock/StockHolders.dds", m_StockHoldersResource);
+	loadImage(L"Assets/Image/Shop/Stock/StockManagementTable.dds", m_StockManagementTableResource);
+	loadImage(L"Assets/Image/Shop/Stock/StockChart.dds", m_StockChartResource);
+	loadImage(L"Assets/Image/Shop/Stock/IssuanceStock.dds", m_IssuanceStockResource);
 	loadImage(L"Assets/Image/Common/EmptySquare.dds", m_EmptySquareResources[0]);
 	loadImage(L"Assets/Image/Common/EmptySquare.dds", m_EmptySquareResources[1]);
 	loadImage(L"Assets/Image/Shop/PetConfirmationButton.dds", m_PetConfirmationButtonResource);
@@ -468,7 +473,9 @@ void CShopUI::ReleaseObjects()
 		&m_InternetOffIconResource, &m_NetworkErrorLogResource,
 		&m_StockSlotResources[0], &m_StockSlotResources[1],
 		&m_StockLimitResources[0], &m_StockLimitResources[1],
-		&m_CantCreateStockGenLogResource };
+		&m_CantCreateStockGenLogResource, &m_StockNameResource,
+		&m_StockHoldersResource, &m_StockManagementTableResource,
+		&m_StockChartResource, &m_IssuanceStockResource };
 	for (UI_IMAGE_RESOURCE* image : images)
 	{
 		if (image->pd3dTexture) image->pd3dTexture->Release();
@@ -523,7 +530,9 @@ void CShopUI::ReleaseUploadBuffers()
 		&m_InternetOffIconResource, &m_NetworkErrorLogResource,
 		&m_StockSlotResources[0], &m_StockSlotResources[1],
 		&m_StockLimitResources[0], &m_StockLimitResources[1],
-		&m_CantCreateStockGenLogResource };
+		&m_CantCreateStockGenLogResource, &m_StockNameResource,
+		&m_StockHoldersResource, &m_StockManagementTableResource,
+		&m_StockChartResource, &m_IssuanceStockResource };
 	for (UI_IMAGE_RESOURCE* image : images)
 	{
 		if (image->pd3dTextureUploadBuffer)
@@ -1025,6 +1034,63 @@ void CShopUI::RenderStockMenuPage(ID3D12GraphicsCommandList* commandList, CCamer
 		RenderUiImage(commandList, camera, m_StockSlotResources[i], GetStockSlotRectangle(i, width, height));
 }
 
+void CShopUI::RenderStockManagementPage(ID3D12GraphicsCommandList* commandList, CCamera* camera)
+{
+	const float width = camera->m_d3dViewport.Width;
+	const float height = camera->m_d3dViewport.Height;
+	const XMFLOAT4 board = GetShopBoardRectangle(width, height,
+		m_xmf2ShopBoardOffset.x, m_xmf2ShopBoardOffset.y);
+	const float boardWidth = board.z - board.x;
+	const float boardHeight = board.w - board.y;
+
+	const float contentLeft = board.x + boardWidth * 0.06f;
+	const float contentTop = board.y + boardHeight * 0.16f;
+	const float leftColumnWidth = boardWidth * 0.52f;
+	const float rightColumnWidth = boardWidth * 0.30f;
+	const float columnGap = boardWidth * 0.055f;
+	const float rightColumnLeft = contentLeft + leftColumnWidth + columnGap;
+
+	const float stockNameWidth = leftColumnWidth;
+	const float stockNameHeight = stockNameWidth * (275.0f / 1341.0f);
+	const XMFLOAT4 stockNameRect(contentLeft, contentTop,
+		contentLeft + stockNameWidth, contentTop + stockNameHeight);
+	RenderUiImage(commandList, camera, m_StockNameResource, stockNameRect);
+
+	const float holdersTop = stockNameRect.w + boardHeight * 0.035f;
+	const float holdersHeight = stockNameWidth * (534.0f / 1341.0f);
+	const XMFLOAT4 holdersRect(contentLeft, holdersTop,
+		contentLeft + stockNameWidth, holdersTop + holdersHeight);
+	RenderUiImage(commandList, camera, m_StockHoldersResource, holdersRect);
+
+	const float tableGapX = boardWidth * 0.012f;
+	const float tableGapY = boardHeight * 0.012f;
+	const float tableWidth = (leftColumnWidth - tableGapX) * 0.5f;
+	const float tableHeight = tableWidth * (141.0f / 775.0f);
+	const float tableTop = holdersRect.w + boardHeight * 0.03f;
+	for (int row = 0; row < 2; ++row)
+	{
+		for (int col = 0; col < 2; ++col)
+		{
+			const float left = contentLeft + col * (tableWidth + tableGapX);
+			const float top = tableTop + row * (tableHeight + tableGapY);
+			RenderUiImage(commandList, camera, m_StockManagementTableResource,
+				XMFLOAT4(left, top, left + tableWidth, top + tableHeight));
+		}
+	}
+
+	const float issuanceWidth = rightColumnWidth * 0.64f;
+	const float issuanceHeight = issuanceWidth * (275.0f / 500.0f);
+	const float issuanceLeft = rightColumnLeft + (rightColumnWidth - issuanceWidth) * 0.5f;
+	RenderUiImage(commandList, camera, m_IssuanceStockResource,
+		XMFLOAT4(issuanceLeft, contentTop, issuanceLeft + issuanceWidth, contentTop + issuanceHeight));
+
+	const float chartWidth = rightColumnWidth;
+	const float chartHeight = chartWidth * (673.0f / 774.0f);
+	const float chartTop = contentTop + issuanceHeight + boardHeight * 0.035f;
+	RenderUiImage(commandList, camera, m_StockChartResource,
+		XMFLOAT4(rightColumnLeft, chartTop, rightColumnLeft + chartWidth, chartTop + chartHeight));
+}
+
 bool CShopUI::ProcessStockMenuClick(float x, float y, float width, float height)
 {
 	if (IsPointInRectangle(x, y, GetStockSlotRectangle(0, width, height)))
@@ -1167,6 +1233,10 @@ void CShopUI::Render(ID3D12GraphicsCommandList* commandList, CCamera* camera, UI
 		else if (m_eShopPage == SHOP_PAGE::SLOT_CONTENT_4)
 		{
 			RenderStockMenuPage(commandList, camera);
+		}
+		else if (m_eShopPage == SHOP_PAGE::STOCK_CONTENT_2)
+		{
+			RenderStockManagementPage(commandList, camera);
 		}
 		else if (m_eShopPage == SHOP_PAGE::STOCK_CONTENT_3)
 		{

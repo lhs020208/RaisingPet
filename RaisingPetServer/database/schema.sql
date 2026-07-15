@@ -23,7 +23,7 @@ CREATE TABLE `InstallmentSavings` (
     `SavingsID` INT UNSIGNED NOT NULL AUTO_INCREMENT,
     `DepositMoney` BIGINT UNSIGNED NOT NULL,
     `ReturnMoney` BIGINT UNSIGNED NOT NULL,
-    `Duration` INT UNSIGNED NOT NULL COMMENT '만기까지 걸리는 시간(초)',
+    `Duration` INT UNSIGNED NOT NULL COMMENT 'Duration in seconds',
     PRIMARY KEY (`SavingsID`),
     CONSTRAINT `CK_InstallmentSavings_Money`
         CHECK (`DepositMoney` > 0 AND `ReturnMoney` > `DepositMoney`),
@@ -53,7 +53,7 @@ CREATE TABLE `Loan` (
     `LoanID` INT UNSIGNED NOT NULL AUTO_INCREMENT,
     `BorrowMoney` BIGINT UNSIGNED NOT NULL,
     `RepaymentMoney` BIGINT UNSIGNED NOT NULL,
-    `Duration` INT UNSIGNED NOT NULL COMMENT '상환까지 걸리는 시간(초)',
+    `Duration` INT UNSIGNED NOT NULL COMMENT 'Duration in seconds',
     PRIMARY KEY (`LoanID`),
     CONSTRAINT `CK_Loan_Money`
         CHECK (`BorrowMoney` > 0 AND `RepaymentMoney` > `BorrowMoney`),
@@ -93,6 +93,8 @@ CREATE TABLE `Stock` (
     CONSTRAINT `FK_Stock_Issuer`
         FOREIGN KEY (`IssuerID`) REFERENCES `Player` (`PlayerID`)
         ON UPDATE CASCADE ON DELETE RESTRICT,
+    CONSTRAINT `CK_Stock_StockName`
+        CHECK (CHAR_LENGTH(`StockName`) > 0),
     CONSTRAINT `CK_Stock_CurrentPrice`
         CHECK (`CurrentPrice` >= 1),
     CONSTRAINT `CK_Stock_TotalQuantity`
@@ -141,9 +143,9 @@ CREATE TABLE `StockTrade` (
     `StockID` INT UNSIGNED NOT NULL,
     `BuyerID` VARCHAR(32) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
     `SellerID` VARCHAR(32) CHARACTER SET ascii COLLATE ascii_bin NULL
-        COMMENT '미판매 주식 거래라면 NULL',
+        COMMENT 'NULL when buying unsold issuer stock',
     `Quantity` INT UNSIGNED NOT NULL,
-    `Price` BIGINT UNSIGNED NOT NULL COMMENT '거래 당시 주당 가격',
+    `Price` BIGINT UNSIGNED NOT NULL COMMENT 'Price per share at trade time',
     `TradeTime` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (`TradeID`),
     KEY `IX_StockTrade_StockTime` (`StockID`, `TradeTime`),
@@ -161,7 +163,9 @@ CREATE TABLE `StockTrade` (
     CONSTRAINT `CK_StockTrade_Quantity`
         CHECK (`Quantity` > 0),
     CONSTRAINT `CK_StockTrade_Price`
-        CHECK (`Price` > 0)
+        CHECK (`Price` > 0),
+    CONSTRAINT `CK_StockTrade_Participants`
+        CHECK (`SellerID` IS NULL OR `BuyerID` <> `SellerID`)
 ) ENGINE = InnoDB;
 
 CREATE TABLE `StockPrice` (
@@ -171,6 +175,7 @@ CREATE TABLE `StockPrice` (
     `NewPrice` BIGINT UNSIGNED NOT NULL,
     `BoughtQuantity` INT UNSIGNED NOT NULL DEFAULT 0,
     `SoldQuantity` INT UNSIGNED NOT NULL DEFAULT 0,
+    `ChangeReason` VARCHAR(255) NULL COMMENT 'Optional display text for price change reason',
     `ChangedTime` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (`StockPriceID`),
     KEY `IX_StockPrice_StockTime` (`StockID`, `ChangedTime`),
@@ -180,4 +185,3 @@ CREATE TABLE `StockPrice` (
     CONSTRAINT `CK_StockPrice_Prices`
         CHECK (`PreviousPrice` > 0 AND `NewPrice` > 0)
 ) ENGINE = InnoDB;
-

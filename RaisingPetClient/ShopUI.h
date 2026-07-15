@@ -109,6 +109,11 @@ private:
 	UI_IMAGE_RESOURCE m_StockSlotResources[2];
 	UI_IMAGE_RESOURCE m_StockLimitResources[2];
 	UI_IMAGE_RESOURCE m_CantCreateStockGenLogResource;
+	UI_IMAGE_RESOURCE m_StockNameResource;
+	UI_IMAGE_RESOURCE m_StockHoldersResource;
+	UI_IMAGE_RESOURCE m_StockManagementTableResource;
+	UI_IMAGE_RESOURCE m_StockChartResource;
+	UI_IMAGE_RESOURCE m_IssuanceStockResource;
 
 	bool m_bShopActive = false;
 	SHOP_PAGE m_eShopPage = SHOP_PAGE::SLOT_MENU;
@@ -177,6 +182,7 @@ private:
 		const SHOP_TEXT_RENDER_CONTEXT& textContext);
 	bool ProcessFinancialClick(float x, float y, float fViewportWidth, float fViewportHeight);
 	void RenderStockMenuPage(ID3D12GraphicsCommandList* pd3dCommandList, CCamera* pCamera);
+	void RenderStockManagementPage(ID3D12GraphicsCommandList* pd3dCommandList, CCamera* pCamera);
 	void RenderCantCreateStockPage(ID3D12GraphicsCommandList* pd3dCommandList, CCamera* pCamera,
 		const SHOP_TEXT_RENDER_CONTEXT& textContext);
 	bool ProcessStockMenuClick(float x, float y, float fViewportWidth, float fViewportHeight);
