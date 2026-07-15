@@ -49,6 +49,9 @@
     <ClInclude Include="ClientNetworkManager.h">
       <Filter>Code\GameFramework</Filter>
     </ClInclude>
+    <ClInclude Include="D2DTextRenderer.h">
+      <Filter>Code\GameFramework</Filter>
+    </ClInclude>
     <ClInclude Include="d3dx12.h">
       <Filter>Code\Texture</Filter>
     </ClInclude>
@@ -103,6 +106,9 @@
       <Filter>Code\GameFramework</Filter>
     </ClCompile>
     <ClCompile Include="ClientNetworkManager.cpp">
+      <Filter>Code\GameFramework</Filter>
+    </ClCompile>
+    <ClCompile Include="D2DTextRenderer.cpp">
       <Filter>Code\GameFramework</Filter>
     </ClCompile>
     <ClCompile Include="DDSTextureLoader12.cpp">

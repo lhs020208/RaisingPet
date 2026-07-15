@@ -142,6 +142,7 @@ xcopy "$(ProjectDir)Assets\Image\Debug\Test.dds" "$(ProjectDir)Executable\Assets
   <ItemGroup>
     <ClInclude Include="Camera.h" />
     <ClInclude Include="ClientNetworkManager.h" />
+    <ClInclude Include="D2DTextRenderer.h" />
     <ClInclude Include="GameScene.h" />
 	<ClInclude Include="LoginScene.h" />
 	<ClInclude Include="SceneManager.h" />
@@ -162,6 +163,7 @@ xcopy "$(ProjectDir)Assets\Image\Debug\Test.dds" "$(ProjectDir)Executable\Assets
   <ItemGroup>
     <ClCompile Include="Camera.cpp" />
     <ClCompile Include="ClientNetworkManager.cpp" />
+    <ClCompile Include="D2DTextRenderer.cpp" />
     <ClCompile Include="DDSTextureLoader12.cpp" />
     <ClCompile Include="GameFramework.cpp" />
     <ClCompile Include="GameScene.cpp" />

@@ -7,6 +7,7 @@
 #include "Camera.h"
 #include "SceneManager.h"
 #include "ClientNetworkManager.h"
+#include "D2DTextRenderer.h"
 
 class CGameFramework
 {
@@ -53,6 +54,8 @@ public:
 	ID3D12GraphicsCommandList* GetCommandList() const { return m_pd3dCommandList; }
 	void RequestSceneChange(SCENE_TYPE sceneType) { m_SceneManager.RequestSceneChange(sceneType); }
 	CClientNetworkManager& GetNetworkManager() { return m_NetworkManager; }
+	void QueueDirectWriteText(const std::wstring& text, const XMFLOAT4& rectangle, float fontSize,
+		UINT color = 0xFF000000, bool horizontalCenter = false, bool verticalCenter = true);
 private:
 	void ProcessSceneChange();
 	HINSTANCE					m_hInstance;
@@ -89,6 +92,7 @@ private:
 	ID3D12Fence					*m_pd3dFence;
 	UINT64						m_nFenceValues[m_nSwapChainBuffers];
 	HANDLE						m_hFenceEvent;
+	CD2DTextRenderer			m_D2DTextRenderer;
 
 #if defined(_DEBUG)
 	ID3D12Debug					*m_pd3dDebugController;

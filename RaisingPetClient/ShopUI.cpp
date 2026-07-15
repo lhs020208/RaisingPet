@@ -1,7 +1,10 @@
-#include "stdafx.h"
+﻿#include "stdafx.h"
 #include "ShopUI.h"
+#include "GameFramework.h"
 #include "DDSTextureLoader12.h"
 #include "d3dx12.h"
+
+extern CGameFramework* g_pFramework;
 
 namespace
 {
@@ -356,7 +359,7 @@ void CShopUI::BuildObjects(ID3D12Device* device, ID3D12GraphicsCommandList* comm
 	pipelineDesc.SampleMask = UINT_MAX;
 	pipelineDesc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
 	pipelineDesc.NumRenderTargets = 1;
-	pipelineDesc.RTVFormats[0] = DXGI_FORMAT_R8G8B8A8_UNORM;
+	pipelineDesc.RTVFormats[0] = DXGI_FORMAT_B8G8R8A8_UNORM;
 	pipelineDesc.DSVFormat = DXGI_FORMAT_D24_UNORM_S8_UINT;
 	pipelineDesc.SampleDesc.Count = 1;
 	result = device->CreateGraphicsPipelineState(&pipelineDesc, __uuidof(ID3D12PipelineState),
@@ -614,9 +617,6 @@ void CShopUI::RenderTextLine(ID3D12GraphicsCommandList* commandList, CCamera* ca
 	}
 	float textWidth = cursorX - left;
 	if (!text.empty() && text.back() != ' ' && textWidth >= glyphGap) textWidth -= glyphGap;
-	const std::string debug = "[RenderTextLine] Text: " + text + ", Width: "
-		+ std::to_string(textWidth) + "\n";
-	OutputDebugStringA(debug.c_str());
 }
 
 void CShopUI::RenderSolidUiRectangle(ID3D12GraphicsCommandList* commandList, CCamera* camera,
@@ -1067,14 +1067,16 @@ void CShopUI::RenderStockManagementPage(ID3D12GraphicsCommandList* commandList, 
 	const float tableWidth = (leftColumnWidth - tableGapX) * 0.5f;
 	const float tableHeight = tableWidth * (141.0f / 775.0f);
 	const float tableTop = holdersRect.w + boardHeight * 0.03f;
+	XMFLOAT4 tableRects[4];
 	for (int row = 0; row < 2; ++row)
 	{
 		for (int col = 0; col < 2; ++col)
 		{
 			const float left = contentLeft + col * (tableWidth + tableGapX);
 			const float top = tableTop + row * (tableHeight + tableGapY);
-			RenderUiImage(commandList, camera, m_StockManagementTableResource,
-				XMFLOAT4(left, top, left + tableWidth, top + tableHeight));
+			const int tableIndex = row * 2 + col;
+			tableRects[tableIndex] = XMFLOAT4(left, top, left + tableWidth, top + tableHeight);
+			RenderUiImage(commandList, camera, m_StockManagementTableResource, tableRects[tableIndex]);
 		}
 	}
 
@@ -1089,6 +1091,46 @@ void CShopUI::RenderStockManagementPage(ID3D12GraphicsCommandList* commandList, 
 	const float chartTop = contentTop + issuanceHeight + boardHeight * 0.035f;
 	RenderUiImage(commandList, camera, m_StockChartResource,
 		XMFLOAT4(rightColumnLeft, chartTop, rightColumnLeft + chartWidth, chartTop + chartHeight));
+
+	if (g_pFramework)
+	{
+		OutputDebugStringW(L"[ShopUI] Queue STOCK_CONTENT_2 DirectWrite texts.\n");
+
+		const float holderLineHeight = (holdersRect.w - holdersRect.y) * 0.225f;
+		const float holderTextLeft = holdersRect.x + (holdersRect.z - holdersRect.x) * 0.055f;
+		const float holderTextRight = holdersRect.z - (holdersRect.z - holdersRect.x) * 0.05f;
+		const float holderTextTop = holdersRect.y + (holdersRect.w - holdersRect.y) * 0.285f;
+		const wchar_t* holderTexts[3] = { L"1. -", L"2. -", L"3. -" };
+		for (int i = 0; i < 3; ++i)
+		{
+			g_pFramework->QueueDirectWriteText(holderTexts[i],
+				XMFLOAT4(holderTextLeft, holderTextTop + holderLineHeight * i,
+					holderTextRight, holderTextTop + holderLineHeight * (i + 1)),
+				boardHeight * 0.037f, 0xFF000000, false, true);
+		}
+
+		const wchar_t* tableTexts[4] =
+		{
+			L"\uD310\uB9E4\uB428 -",
+			L"\uBC1C\uD589\uC218\uC775 -",
+			L"\uBBF8\uD310\uB9E4 -",
+			L"\uCD5C\uADFC\uAC70\uB798 -"
+		};
+		for (int i = 0; i < 4; ++i)
+		{
+			const XMFLOAT4& table = tableRects[i];
+			const bool leftColumnTable = ((i % 2) == 0);
+			const float tableLabelWidth = (table.z - table.x) * (leftColumnTable ? 0.50f : 0.405f);
+			const float tablePaddingX = (table.z - table.x) * 0.055f;
+			g_pFramework->QueueDirectWriteText(tableTexts[i],
+				XMFLOAT4(table.x + tablePaddingX, table.y, table.x + tableLabelWidth, table.w),
+				boardHeight * 0.030f, 0xFF000000, true, true);
+		}
+	}
+	else
+	{
+		OutputDebugStringW(L"[ShopUI] g_pFramework is null. Cannot queue DirectWrite texts.\n");
+	}
 }
 
 bool CShopUI::ProcessStockMenuClick(float x, float y, float width, float height)

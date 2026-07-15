@@ -34,7 +34,11 @@
 using namespace std;
 
 #include <d3d12.h>
+#include <d3d11.h>
+#include <d3d11on12.h>
 #include <dxgi1_4.h>
+#include <d2d1_3.h>
+#include <dwrite_3.h>
 #include <D3Dcompiler.h>
 #include <DirectXMath.h>
 #include <DirectXPackedVector.h>
@@ -68,7 +72,10 @@ using Microsoft::WRL::ComPtr;
 
 #pragma comment(lib, "d3dcompiler.lib")
 #pragma comment(lib, "d3d12.lib")
+#pragma comment(lib, "d3d11.lib")
 #pragma comment(lib, "dxgi.lib")
+#pragma comment(lib, "d2d1.lib")
+#pragma comment(lib, "dwrite.lib")
 #pragma comment(lib, "dcomp.lib")
 
 // TODO: 프로그램에 필요한 추가 헤더는 여기에서 참조합니다.

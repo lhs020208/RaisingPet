@@ -54,6 +54,8 @@ bool CGameFramework::OnCreate(HINSTANCE hInstance, HWND hMainWnd)
 	CreateSwapChain();
 	if (!m_pdxgiSwapChain || !m_pdcompDevice || !m_pdcompTarget || !m_pdcompVisual) return(false);
 	CreateDepthStencilView();
+	m_D2DTextRenderer.CreateObjects(m_pd3dDevice, m_pd3dCommandQueue,
+		m_ppd3dSwapChainBackBuffers, m_nSwapChainBuffers);
 
 	BuildObjects();
 
@@ -73,7 +75,7 @@ void CGameFramework::CreateSwapChain()
 	DXGI_SWAP_CHAIN_DESC1 dxgiSwapChainDesc = {};
 	dxgiSwapChainDesc.Width = m_nWndClientWidth;
 	dxgiSwapChainDesc.Height = m_nWndClientHeight;
-	dxgiSwapChainDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+	dxgiSwapChainDesc.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
 	dxgiSwapChainDesc.SampleDesc.Count = 1;
 	dxgiSwapChainDesc.SampleDesc.Quality = 0;
 	dxgiSwapChainDesc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
@@ -147,7 +149,7 @@ void CGameFramework::CreateDirect3DDevice()
 	}
 
 	D3D12_FEATURE_DATA_MULTISAMPLE_QUALITY_LEVELS d3dMsaaQualityLevels;
-	d3dMsaaQualityLevels.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+	d3dMsaaQualityLevels.Format = DXGI_FORMAT_B8G8R8A8_UNORM;
 	d3dMsaaQualityLevels.SampleCount = 4;
 	d3dMsaaQualityLevels.Flags = D3D12_MULTISAMPLE_QUALITY_LEVELS_FLAG_NONE;
 	d3dMsaaQualityLevels.NumQualityLevels = 0;
@@ -363,6 +365,7 @@ void CGameFramework::OnDestroy()
 {
 	m_NetworkManager.Disconnect();
     ReleaseObjects();
+	m_D2DTextRenderer.ReleaseObjects();
 
 	::CloseHandle(m_hFenceEvent);
 
@@ -475,6 +478,12 @@ void CGameFramework::UpdateShaderVariables()
 	m_pd3dCommandList->SetGraphicsRoot32BitConstants(0, 1, &fyCursorPos, 3);
 }
 
+void CGameFramework::QueueDirectWriteText(const std::wstring& text, const XMFLOAT4& rectangle,
+	float fontSize, UINT color, bool horizontalCenter, bool verticalCenter)
+{
+	m_D2DTextRenderer.QueueText(text, rectangle, fontSize, color, horizontalCenter, verticalCenter);
+}
+
 void CGameFramework::WaitForGpuComplete()
 {
 	UINT64 nFenceValue = ++m_nFenceValues[m_nSwapChainBufferIndex];
@@ -581,10 +590,13 @@ void CGameFramework::FrameAdvance()
 	m_pd3dCommandList->ClearDepthStencilView(d3dDsvCPUDescriptorHandle, D3D12_CLEAR_FLAG_DEPTH | D3D12_CLEAR_FLAG_STENCIL, 1.0f, 0, 0, NULL);
 #endif
 
-	d3dResourceBarrier.Transition.StateBefore = D3D12_RESOURCE_STATE_RENDER_TARGET;
-	d3dResourceBarrier.Transition.StateAfter = D3D12_RESOURCE_STATE_PRESENT;
-	d3dResourceBarrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
-	m_pd3dCommandList->ResourceBarrier(1, &d3dResourceBarrier);
+	if (!m_D2DTextRenderer.IsReady())
+	{
+		d3dResourceBarrier.Transition.StateBefore = D3D12_RESOURCE_STATE_RENDER_TARGET;
+		d3dResourceBarrier.Transition.StateAfter = D3D12_RESOURCE_STATE_PRESENT;
+		d3dResourceBarrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+		m_pd3dCommandList->ResourceBarrier(1, &d3dResourceBarrier);
+	}
 
 	hResult = m_pd3dCommandList->Close();
 	
@@ -592,6 +604,11 @@ void CGameFramework::FrameAdvance()
 	m_pd3dCommandQueue->ExecuteCommandLists(1, ppd3dCommandLists);
 
 	WaitForGpuComplete();
+	if (m_D2DTextRenderer.IsReady())
+	{
+		m_D2DTextRenderer.Render(m_nSwapChainBufferIndex);
+		WaitForGpuComplete();
+	}
 
 #ifdef _WITH_PRESENT_PARAMETERS
 	DXGI_PRESENT_PARAMETERS dxgiPresentParameters;

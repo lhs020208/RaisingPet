@@ -300,7 +300,7 @@ void CLoginScene::BuildObjects(ID3D12Device* device, ID3D12GraphicsCommandList* 
 	pipeline.SampleMask = UINT_MAX;
 	pipeline.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
 	pipeline.NumRenderTargets = 1;
-	pipeline.RTVFormats[0] = DXGI_FORMAT_R8G8B8A8_UNORM;
+	pipeline.RTVFormats[0] = DXGI_FORMAT_B8G8R8A8_UNORM;
 	pipeline.DSVFormat = DXGI_FORMAT_D24_UNORM_S8_UINT;
 	pipeline.SampleDesc.Count = 1;
 	device->CreateGraphicsPipelineState(&pipeline, __uuidof(ID3D12PipelineState),
