@@ -53,6 +53,7 @@ public:
 	void SetFinancialProductActive(int nCategory, int nProductIndex, UINT nDurationSeconds);
 	void ClearFinancialProductActive(int nCategory, int nProductIndex);
 	void SetFinancialMaximumProductIndex(int nCategory, int nProductIndex);
+	void SetFinancialProgressCount(int nCategory, int nProgressCount);
 
 private:
 	struct UI_IMAGE_RESOURCE
@@ -106,6 +107,8 @@ private:
 	UI_IMAGE_RESOURCE m_InternetOffIconResource;
 	UI_IMAGE_RESOURCE m_NetworkErrorLogResource;
 	UI_IMAGE_RESOURCE m_StockSlotResources[2];
+	UI_IMAGE_RESOURCE m_StockLimitResources[2];
+	UI_IMAGE_RESOURCE m_CantCreateStockGenLogResource;
 
 	bool m_bShopActive = false;
 	SHOP_PAGE m_eShopPage = SHOP_PAGE::SLOT_MENU;
@@ -131,13 +134,14 @@ private:
 	int m_nFinancialCategory = 0;
 	int m_nFinancialProductIndices[2] = { 0, 0 };
 	int m_nFinancialMaximumProductIndices[2] = { 0, 0 };
+	int m_nFinancialProgressCounts[2] = { 0, 0 };
 	int m_nPendingFinancialCategory = -1;
 	int m_nPendingFinancialProductIndex = -1;
 	bool m_bFinancialProductActive[2] = { false, false };
 	int m_nActiveFinancialProductIndex[2] = { -1, -1 };
 	UINT m_nActiveFinancialDurationSeconds[2] = { 0, 0 };
 	float m_fActiveFinancialElapsedSeconds[2] = { 0.0f, 0.0f };
-	bool m_bStockCreationAvailable = true;
+	bool m_bStockCreationAvailable = false;
 	std::vector<SHOP_NETWORK_ERROR_LOG> m_NetworkErrorLogs;
 
 	void RenderUiImage(ID3D12GraphicsCommandList* pd3dCommandList, CCamera* pCamera,
@@ -173,6 +177,8 @@ private:
 		const SHOP_TEXT_RENDER_CONTEXT& textContext);
 	bool ProcessFinancialClick(float x, float y, float fViewportWidth, float fViewportHeight);
 	void RenderStockMenuPage(ID3D12GraphicsCommandList* pd3dCommandList, CCamera* pCamera);
+	void RenderCantCreateStockPage(ID3D12GraphicsCommandList* pd3dCommandList, CCamera* pCamera,
+		const SHOP_TEXT_RENDER_CONTEXT& textContext);
 	bool ProcessStockMenuClick(float x, float y, float fViewportWidth, float fViewportHeight);
 	XMFLOAT4 GetFinancialCategoryButtonRectangle(int nCategory, float fViewportWidth, float fViewportHeight) const;
 	XMFLOAT4 GetFinancialLeftButtonRectangle(float fViewportWidth, float fViewportHeight) const;

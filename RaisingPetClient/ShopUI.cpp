@@ -414,6 +414,9 @@ void CShopUI::BuildObjects(ID3D12Device* device, ID3D12GraphicsCommandList* comm
 	loadImage(L"Assets/Image/Shop/NetworkErrorLog.dds", m_NetworkErrorLogResource);
 	loadImage(L"Assets/Image/Shop/Stock/StockSlot1.dds", m_StockSlotResources[0]);
 	loadImage(L"Assets/Image/Shop/Stock/StockSlot2.dds", m_StockSlotResources[1]);
+	loadImage(L"Assets/Image/Shop/Stock/Limit1.dds", m_StockLimitResources[0]);
+	loadImage(L"Assets/Image/Shop/Stock/Limit2.dds", m_StockLimitResources[1]);
+	loadImage(L"Assets/Image/Shop/Stock/CantCreateStockGenLog.dds", m_CantCreateStockGenLogResource);
 	loadImage(L"Assets/Image/Common/EmptySquare.dds", m_EmptySquareResources[0]);
 	loadImage(L"Assets/Image/Common/EmptySquare.dds", m_EmptySquareResources[1]);
 	loadImage(L"Assets/Image/Shop/PetConfirmationButton.dds", m_PetConfirmationButtonResource);
@@ -463,7 +466,9 @@ void CShopUI::ReleaseObjects()
 		&m_FinancialTimerFrameResource, &m_FinancialMoneyFrameResource,
 		&m_FinancialRightPointResource, &m_InternetOnIconResource,
 		&m_InternetOffIconResource, &m_NetworkErrorLogResource,
-		&m_StockSlotResources[0], &m_StockSlotResources[1] };
+		&m_StockSlotResources[0], &m_StockSlotResources[1],
+		&m_StockLimitResources[0], &m_StockLimitResources[1],
+		&m_CantCreateStockGenLogResource };
 	for (UI_IMAGE_RESOURCE* image : images)
 	{
 		if (image->pd3dTexture) image->pd3dTexture->Release();
@@ -516,7 +521,9 @@ void CShopUI::ReleaseUploadBuffers()
 		&m_FinancialTimerFrameResource, &m_FinancialMoneyFrameResource,
 		&m_FinancialRightPointResource, &m_InternetOnIconResource,
 		&m_InternetOffIconResource, &m_NetworkErrorLogResource,
-		&m_StockSlotResources[0], &m_StockSlotResources[1] };
+		&m_StockSlotResources[0], &m_StockSlotResources[1],
+		&m_StockLimitResources[0], &m_StockLimitResources[1],
+		&m_CantCreateStockGenLogResource };
 	for (UI_IMAGE_RESOURCE* image : images)
 	{
 		if (image->pd3dTextureUploadBuffer)
@@ -1033,6 +1040,51 @@ bool CShopUI::ProcessStockMenuClick(float x, float y, float width, float height)
 	return(false);
 }
 
+void CShopUI::RenderCantCreateStockPage(ID3D12GraphicsCommandList* commandList, CCamera* camera,
+	const SHOP_TEXT_RENDER_CONTEXT& context)
+{
+	const float width = camera->m_d3dViewport.Width;
+	const float height = camera->m_d3dViewport.Height;
+	const XMFLOAT4 board = GetShopBoardRectangle(width, height,
+		m_xmf2ShopBoardOffset.x, m_xmf2ShopBoardOffset.y);
+	const float boardWidth = board.z - board.x;
+	const float boardHeight = board.w - board.y;
+
+	const float logWidth = boardWidth * 0.72f;
+	const float logHeight = logWidth * (300.0f / 2563.0f);
+	const float logLeft = (board.x + board.z - logWidth) * 0.5f;
+	const float logTop = board.y + boardHeight * 0.35f;
+	RenderUiImage(commandList, camera, m_CantCreateStockGenLogResource,
+		XMFLOAT4(logLeft, logTop, logLeft + logWidth, logTop + logHeight));
+
+	const float limitWidth = boardWidth * 0.405f;
+	const float limitHeight = limitWidth * (259.0f / 1190.0f);
+	const float limitTop = board.y + boardHeight * 0.60f;
+	const float leftLimitLeft = board.x + boardWidth * 0.05f;
+	const float rightLimitLeft = board.z - boardWidth * 0.05f - limitWidth;
+	const XMFLOAT4 limitRects[2] =
+	{
+		XMFLOAT4(leftLimitLeft, limitTop, leftLimitLeft + limitWidth, limitTop + limitHeight),
+		XMFLOAT4(rightLimitLeft, limitTop, rightLimitLeft + limitWidth, limitTop + limitHeight)
+	};
+
+	for (int category = 0; category < 2; ++category)
+	{
+		const int progress = min(m_nFinancialProgressCounts[category], 5);
+		const UINT tint = (progress >= 5) ? 0x0000B050 : 0x00FF0000;
+		RenderUiImage(commandList, camera, m_StockLimitResources[category], limitRects[category], tint);
+
+		const std::string progressText = "( " + std::to_string(progress) + " / 5 )";
+		const float scale = 0.105f;
+		const float textLeft = limitRects[category].x + (limitRects[category].z - limitRects[category].x) * 0.47f;
+		const float visibleHeight = 190.0f * scale;
+		const float textTop = limitRects[category].y
+			+ ((limitRects[category].w - limitRects[category].y - visibleHeight) * 0.5f)
+			+ 129.0f * scale - (limitRects[category].w - limitRects[category].y) * 0.32f;
+		RenderTextLine(commandList, camera, progressText, textLeft, textTop, scale, 0x00000000, context);
+	}
+}
+
 void CShopUI::Render(ID3D12GraphicsCommandList* commandList, CCamera* camera, UINT money,
 	size_t activePetIndex, const std::vector<SHOP_PET_RENDER_RESOURCE>& pets,
 	const SHOP_TEXT_RENDER_CONTEXT& context, bool networkConnected)
@@ -1115,6 +1167,10 @@ void CShopUI::Render(ID3D12GraphicsCommandList* commandList, CCamera* camera, UI
 		else if (m_eShopPage == SHOP_PAGE::SLOT_CONTENT_4)
 		{
 			RenderStockMenuPage(commandList, camera);
+		}
+		else if (m_eShopPage == SHOP_PAGE::STOCK_CONTENT_3)
+		{
+			RenderCantCreateStockPage(commandList, camera, context);
 		}
 		RenderMoneyUI(commandList, camera, money, context);
 		RenderUiImage(commandList, camera, m_ShopBackSpaceIconResource,
@@ -1229,6 +1285,18 @@ void CShopUI::SetFinancialMaximumProductIndex(int category, int productIndex)
 	m_nFinancialMaximumProductIndices[category] = productIndex;
 	if (!m_bFinancialProductActive[category] && m_nFinancialProductIndices[category] > productIndex)
 		m_nFinancialProductIndices[category] = productIndex;
+	m_bStockCreationAvailable = (m_nFinancialProgressCounts[0] >= 5
+		&& m_nFinancialProgressCounts[1] >= 5);
+}
+
+void CShopUI::SetFinancialProgressCount(int category, int progressCount)
+{
+	if (category < 0 || category >= 2) return;
+	if (progressCount < 0) progressCount = 0;
+	if (progressCount > 5) progressCount = 5;
+	m_nFinancialProgressCounts[category] = progressCount;
+	m_bStockCreationAvailable = (m_nFinancialProgressCounts[0] >= 5
+		&& m_nFinancialProgressCounts[1] >= 5);
 }
 
 bool CShopUI::IsPointOver(float x, float y, float width, float height) const

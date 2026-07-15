@@ -80,4 +80,5 @@ public:
 private:
 	UINT m_nMoney = 0;
 	UINT m_nFinancialMaximumProductIndices[2] = { 0, 0 };
+	UINT m_nFinancialProgressCounts[2] = { 0, 0 };
 };
