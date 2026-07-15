@@ -412,6 +412,8 @@ void CShopUI::BuildObjects(ID3D12Device* device, ID3D12GraphicsCommandList* comm
 	loadImage(L"Assets/Image/Shop/InternetOnIcon.dds", m_InternetOnIconResource);
 	loadImage(L"Assets/Image/Shop/InternetOffIcon.dds", m_InternetOffIconResource);
 	loadImage(L"Assets/Image/Shop/NetworkErrorLog.dds", m_NetworkErrorLogResource);
+	loadImage(L"Assets/Image/Shop/Stock/StockSlot1.dds", m_StockSlotResources[0]);
+	loadImage(L"Assets/Image/Shop/Stock/StockSlot2.dds", m_StockSlotResources[1]);
 	loadImage(L"Assets/Image/Common/EmptySquare.dds", m_EmptySquareResources[0]);
 	loadImage(L"Assets/Image/Common/EmptySquare.dds", m_EmptySquareResources[1]);
 	loadImage(L"Assets/Image/Shop/PetConfirmationButton.dds", m_PetConfirmationButtonResource);
@@ -460,7 +462,8 @@ void CShopUI::ReleaseObjects()
 		&m_FinancialLeftButtonResource, &m_FinancialRightButtonResource,
 		&m_FinancialTimerFrameResource, &m_FinancialMoneyFrameResource,
 		&m_FinancialRightPointResource, &m_InternetOnIconResource,
-		&m_InternetOffIconResource, &m_NetworkErrorLogResource };
+		&m_InternetOffIconResource, &m_NetworkErrorLogResource,
+		&m_StockSlotResources[0], &m_StockSlotResources[1] };
 	for (UI_IMAGE_RESOURCE* image : images)
 	{
 		if (image->pd3dTexture) image->pd3dTexture->Release();
@@ -512,7 +515,8 @@ void CShopUI::ReleaseUploadBuffers()
 		&m_FinancialLeftButtonResource, &m_FinancialRightButtonResource,
 		&m_FinancialTimerFrameResource, &m_FinancialMoneyFrameResource,
 		&m_FinancialRightPointResource, &m_InternetOnIconResource,
-		&m_InternetOffIconResource, &m_NetworkErrorLogResource };
+		&m_InternetOffIconResource, &m_NetworkErrorLogResource,
+		&m_StockSlotResources[0], &m_StockSlotResources[1] };
 	for (UI_IMAGE_RESOURCE* image : images)
 	{
 		if (image->pd3dTextureUploadBuffer)
@@ -818,6 +822,19 @@ XMFLOAT4 CShopUI::GetFinancialRightButtonRectangle(float width, float height) co
 	return(XMFLOAT4(right - buttonWidth, leftButton.y, right, leftButton.w));
 }
 
+XMFLOAT4 CShopUI::GetStockSlotRectangle(int index, float width, float height) const
+{
+	const XMFLOAT4 board = GetShopBoardRectangle(width, height,
+		m_xmf2ShopBoardOffset.x, m_xmf2ShopBoardOffset.y);
+	const float boardWidth = board.z - board.x;
+	const float boardHeight = board.w - board.y;
+	const float slotWidth = boardWidth * 0.46f;
+	const float slotHeight = slotWidth * (260.0f / 1190.0f);
+	const float left = board.x + boardWidth * 0.065f;
+	const float top = board.y + boardHeight * 0.28f + index * (slotHeight + boardHeight * 0.14f);
+	return(XMFLOAT4(left, top, left + slotWidth, top + slotHeight));
+}
+
 void CShopUI::RenderEnhancementPage(ID3D12GraphicsCommandList* commandList, CCamera* camera,
 	CPet* activePet, UINT money, const SHOP_TEXT_RENDER_CONTEXT& context)
 {
@@ -993,6 +1010,29 @@ void CShopUI::RenderFinancialPage(ID3D12GraphicsCommandList* commandList, CCamer
 		0.115f, secondIncome ? 0x0000B050 : 0x00FF0000);
 }
 
+void CShopUI::RenderStockMenuPage(ID3D12GraphicsCommandList* commandList, CCamera* camera)
+{
+	const float width = camera->m_d3dViewport.Width;
+	const float height = camera->m_d3dViewport.Height;
+	for (int i = 0; i < 2; ++i)
+		RenderUiImage(commandList, camera, m_StockSlotResources[i], GetStockSlotRectangle(i, width, height));
+}
+
+bool CShopUI::ProcessStockMenuClick(float x, float y, float width, float height)
+{
+	if (IsPointInRectangle(x, y, GetStockSlotRectangle(0, width, height)))
+	{
+		m_eShopPage = SHOP_PAGE::STOCK_CONTENT_1;
+		return(true);
+	}
+	if (IsPointInRectangle(x, y, GetStockSlotRectangle(1, width, height)))
+	{
+		m_eShopPage = m_bStockCreationAvailable ? SHOP_PAGE::STOCK_CONTENT_2 : SHOP_PAGE::STOCK_CONTENT_3;
+		return(true);
+	}
+	return(false);
+}
+
 void CShopUI::Render(ID3D12GraphicsCommandList* commandList, CCamera* camera, UINT money,
 	size_t activePetIndex, const std::vector<SHOP_PET_RENDER_RESOURCE>& pets,
 	const SHOP_TEXT_RENDER_CONTEXT& context, bool networkConnected)
@@ -1071,6 +1111,10 @@ void CShopUI::Render(ID3D12GraphicsCommandList* commandList, CCamera* camera, UI
 		else if (m_eShopPage == SHOP_PAGE::SLOT_CONTENT_3)
 		{
 			RenderFinancialPage(commandList, camera, context);
+		}
+		else if (m_eShopPage == SHOP_PAGE::SLOT_CONTENT_4)
+		{
+			RenderStockMenuPage(commandList, camera);
 		}
 		RenderMoneyUI(commandList, camera, money, context);
 		RenderUiImage(commandList, camera, m_ShopBackSpaceIconResource,
@@ -1287,6 +1331,13 @@ bool CShopUI::ProcessShopUIClick(float x, float y, float width, float height, UI
 		GetShopBackRectangle(width, height, m_xmf2ShopBoardOffset.x, m_xmf2ShopBoardOffset.y)))
 	{
 		if (m_eShopPage == SHOP_PAGE::SLOT_MENU) DeactivateShop(width, height, activePetIndex);
+		else if (m_eShopPage == SHOP_PAGE::STOCK_CONTENT_1
+			|| m_eShopPage == SHOP_PAGE::STOCK_CONTENT_2
+			|| m_eShopPage == SHOP_PAGE::STOCK_CONTENT_3)
+		{
+			m_eShopPage = SHOP_PAGE::SLOT_CONTENT_4;
+			m_nPressedEnhanceButton = -1;
+		}
 		else
 		{
 			m_eShopPage = SHOP_PAGE::SLOT_MENU;
@@ -1355,6 +1406,18 @@ bool CShopUI::ProcessShopUIClick(float x, float y, float width, float height, UI
 	else if (m_eShopPage == SHOP_PAGE::SLOT_CONTENT_3)
 	{
 		if (ProcessFinancialClick(x, y, width, height)) return(true);
+	}
+	else if (m_eShopPage == SHOP_PAGE::SLOT_CONTENT_4)
+	{
+		if (ProcessStockMenuClick(x, y, width, height)) return(true);
+	}
+	else if (m_eShopPage == SHOP_PAGE::STOCK_CONTENT_1
+		|| m_eShopPage == SHOP_PAGE::STOCK_CONTENT_2
+		|| m_eShopPage == SHOP_PAGE::STOCK_CONTENT_3)
+	{
+		const XMFLOAT4 board = GetShopBoardRectangle(width, height,
+			m_xmf2ShopBoardOffset.x, m_xmf2ShopBoardOffset.y);
+		if (IsPointInRectangle(x, y, board)) return(true);
 	}
 	return(false);
 }

@@ -74,7 +74,10 @@ private:
 		SLOT_CONTENT_1,
 		SLOT_CONTENT_2,
 		SLOT_CONTENT_3,
-		SLOT_CONTENT_4
+		SLOT_CONTENT_4,
+		STOCK_CONTENT_1,
+		STOCK_CONTENT_2,
+		STOCK_CONTENT_3
 	};
 
 	ID3D12PipelineState* m_pd3dUiImagePipelineState = NULL;
@@ -102,6 +105,7 @@ private:
 	UI_IMAGE_RESOURCE m_InternetOnIconResource;
 	UI_IMAGE_RESOURCE m_InternetOffIconResource;
 	UI_IMAGE_RESOURCE m_NetworkErrorLogResource;
+	UI_IMAGE_RESOURCE m_StockSlotResources[2];
 
 	bool m_bShopActive = false;
 	SHOP_PAGE m_eShopPage = SHOP_PAGE::SLOT_MENU;
@@ -133,6 +137,7 @@ private:
 	int m_nActiveFinancialProductIndex[2] = { -1, -1 };
 	UINT m_nActiveFinancialDurationSeconds[2] = { 0, 0 };
 	float m_fActiveFinancialElapsedSeconds[2] = { 0.0f, 0.0f };
+	bool m_bStockCreationAvailable = true;
 	std::vector<SHOP_NETWORK_ERROR_LOG> m_NetworkErrorLogs;
 
 	void RenderUiImage(ID3D12GraphicsCommandList* pd3dCommandList, CCamera* pCamera,
@@ -167,7 +172,10 @@ private:
 	void RenderFinancialPage(ID3D12GraphicsCommandList* pd3dCommandList, CCamera* pCamera,
 		const SHOP_TEXT_RENDER_CONTEXT& textContext);
 	bool ProcessFinancialClick(float x, float y, float fViewportWidth, float fViewportHeight);
+	void RenderStockMenuPage(ID3D12GraphicsCommandList* pd3dCommandList, CCamera* pCamera);
+	bool ProcessStockMenuClick(float x, float y, float fViewportWidth, float fViewportHeight);
 	XMFLOAT4 GetFinancialCategoryButtonRectangle(int nCategory, float fViewportWidth, float fViewportHeight) const;
 	XMFLOAT4 GetFinancialLeftButtonRectangle(float fViewportWidth, float fViewportHeight) const;
 	XMFLOAT4 GetFinancialRightButtonRectangle(float fViewportWidth, float fViewportHeight) const;
+	XMFLOAT4 GetStockSlotRectangle(int nIndex, float fViewportWidth, float fViewportHeight) const;
 };
