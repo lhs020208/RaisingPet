@@ -8,9 +8,11 @@
 #include <algorithm>
 #include <array>
 #include <chrono>
+#include <cmath>
 #include <cstdint>
 #include <iostream>
 #include <mutex>
+#include <random>
 #include <sstream>
 #include <string>
 #include <thread>
@@ -33,6 +35,7 @@ constexpr std::uint64_t kInitialStockPrice = 100;
 constexpr std::uint32_t kStockTotalQuantity = 1000;
 constexpr std::uint32_t kIssuerInitialStockQuantity = 200;
 constexpr std::uint32_t kInitialUnsoldStockQuantity = 800;
+constexpr std::uint64_t kMinimumStockPrice = 10;
 
 enum class PacketType : std::uint16_t {
 	RegisterRequest = 1,
@@ -604,6 +607,147 @@ public:
 		application.finalMoney = finalMoney;
 		application.stockId = stockId;
 		return application;
+	}
+
+	bool UpdateStockPricesAtCurrentHour(int& updatedCount, std::string& failureReason) {
+		updatedCount = 0;
+		if (mysql_query(connection_, "START TRANSACTION") != 0) {
+			failureReason = std::string("failed to start stock price transaction: ") + mysql_error(connection_);
+			return false;
+		}
+
+		const char* selectStocks =
+			"SELECT s.`StockID`, s.`CurrentPrice`, p.`IsOnline`, p.`IsActive` "
+			"FROM `Stock` s "
+			"JOIN `Player` p ON p.`PlayerID` = s.`IssuerID` "
+			"WHERE s.`PriceUpdatedTime` < DATE_FORMAT(NOW(), '%Y-%m-%d %H:00:00') "
+			"FOR UPDATE";
+		if (mysql_query(connection_, selectStocks) != 0) {
+			mysql_query(connection_, "ROLLBACK");
+			failureReason = std::string("failed to select stocks for price update: ") + mysql_error(connection_);
+			return false;
+		}
+
+		MYSQL_RES* result = mysql_store_result(connection_);
+		if (!result) {
+			mysql_query(connection_, "ROLLBACK");
+			failureReason = std::string("failed to read stocks for price update: ") + mysql_error(connection_);
+			return false;
+		}
+
+		struct StockPriceUpdateTarget {
+			std::uint32_t stockId = 0;
+			std::uint64_t currentPrice = 0;
+			bool issuerOnline = false;
+			bool issuerActive = false;
+		};
+		std::vector<StockPriceUpdateTarget> targets;
+		MYSQL_ROW row = nullptr;
+		while ((row = mysql_fetch_row(result)) != nullptr) {
+			StockPriceUpdateTarget target;
+			target.stockId = row[0] ? static_cast<std::uint32_t>(std::stoul(row[0])) : 0;
+			target.currentPrice = row[1] ? std::stoull(row[1]) : 0;
+			target.issuerOnline = row[2] && std::string(row[2]) != "0";
+			target.issuerActive = row[3] && std::string(row[3]) != "0";
+			if (target.stockId != 0 && target.currentPrice != 0)
+				targets.push_back(target);
+		}
+		mysql_free_result(result);
+
+		static thread_local std::mt19937 randomEngine{ std::random_device{}() };
+		std::uniform_real_distribution<double> baseDistribution(-2.0, 2.0);
+
+		for (const StockPriceUpdateTarget& target : targets) {
+			std::uint64_t boughtQuantity = 0;
+			const std::string boughtQuery =
+				"SELECT COALESCE(SUM(`Quantity`), 0) FROM `StockTrade` "
+				"WHERE `StockID` = " + std::to_string(target.stockId) +
+				" AND `TradeTime` >= DATE_SUB(DATE_FORMAT(NOW(), '%Y-%m-%d %H:00:00'), INTERVAL 1 HOUR) "
+				"AND `TradeTime` < DATE_FORMAT(NOW(), '%Y-%m-%d %H:00:00')";
+			if (!QueryUInt64Scalar(boughtQuery, boughtQuantity)) {
+				mysql_query(connection_, "ROLLBACK");
+				failureReason = "failed to aggregate stock bought quantity";
+				return false;
+			}
+
+			std::uint64_t soldPressureQuantity = 0;
+			const std::string soldPressureQuery =
+				"SELECT COALESCE(SUM(`Quantity`), 0) FROM `StockSale` "
+				"WHERE `StockID` = " + std::to_string(target.stockId);
+			if (!QueryUInt64Scalar(soldPressureQuery, soldPressureQuantity)) {
+				mysql_query(connection_, "ROLLBACK");
+				failureReason = "failed to aggregate stock sale pressure";
+				return false;
+			}
+
+			const double baseRate = baseDistribution(randomEngine);
+			double onlineBonusRate = 0.0;
+			if (target.issuerOnline) {
+				const double maxOnlineBonus = target.issuerActive ? 6.0 : 3.0;
+				std::uniform_real_distribution<double> onlineDistribution(0.0, maxOnlineBonus);
+				onlineBonusRate = onlineDistribution(randomEngine);
+			}
+
+			const std::uint64_t netBoughtQuantity =
+				(boughtQuantity > soldPressureQuantity) ? (boughtQuantity - soldPressureQuantity) : 0;
+			const std::uint64_t netSoldPressureQuantity =
+				(soldPressureQuantity > boughtQuantity) ? (soldPressureQuantity - boughtQuantity) : 0;
+			const double rawBuyBonusRate = static_cast<double>(netBoughtQuantity) / 20.0;
+			const double buyBonusRate = (rawBuyBonusRate > 5.0) ? 5.0 : rawBuyBonusRate;
+			const double rawSellPenaltyRate = static_cast<double>(netSoldPressureQuantity) / 50.0;
+			const double sellPenaltyRate = (rawSellPenaltyRate > 4.0) ? 4.0 : rawSellPenaltyRate;
+			double finalRate = baseRate + onlineBonusRate + buyBonusRate - sellPenaltyRate;
+			if (finalRate < -5.0) finalRate = -5.0;
+			else if (finalRate > 10.0) finalRate = 10.0;
+
+			const double changedPrice =
+				static_cast<double>(target.currentPrice) * (100.0 + finalRate) / 100.0;
+			std::uint64_t newPrice = static_cast<std::uint64_t>(std::llround(changedPrice));
+			if (newPrice < kMinimumStockPrice) newPrice = kMinimumStockPrice;
+
+			std::ostringstream reason;
+			reason.setf(std::ios::fixed);
+			reason.precision(2);
+			reason << "base=" << baseRate
+				<< ";online=" << onlineBonusRate
+				<< ";buy=" << buyBonusRate
+				<< ";sell=-" << sellPenaltyRate
+				<< ";final=" << finalRate;
+			const std::string escapedReason = Escape(reason.str());
+
+			const std::string updateStock =
+				"UPDATE `Stock` SET `CurrentPrice` = " + std::to_string(newPrice) +
+				", `PriceUpdatedTime` = DATE_FORMAT(NOW(), '%Y-%m-%d %H:00:00') "
+				"WHERE `StockID` = " + std::to_string(target.stockId);
+			if (mysql_query(connection_, updateStock.c_str()) != 0) {
+				mysql_query(connection_, "ROLLBACK");
+				failureReason = std::string("failed to update stock price: ") + mysql_error(connection_);
+				return false;
+			}
+
+			const std::string insertPrice =
+				"INSERT INTO `StockPrice` (`StockID`, `PreviousPrice`, `NewPrice`, "
+				"`BoughtQuantity`, `SoldQuantity`, `ChangeReason`, `ChangedTime`) VALUES (" +
+				std::to_string(target.stockId) + ", " +
+				std::to_string(target.currentPrice) + ", " +
+				std::to_string(newPrice) + ", " +
+				std::to_string(boughtQuantity) + ", " +
+				std::to_string(soldPressureQuantity) + ", '" +
+				escapedReason + "', DATE_FORMAT(NOW(), '%Y-%m-%d %H:00:00'))";
+			if (mysql_query(connection_, insertPrice.c_str()) != 0) {
+				mysql_query(connection_, "ROLLBACK");
+				failureReason = std::string("failed to insert stock price history: ") + mysql_error(connection_);
+				return false;
+			}
+			++updatedCount;
+		}
+
+		if (mysql_query(connection_, "COMMIT") != 0) {
+			mysql_query(connection_, "ROLLBACK");
+			failureReason = std::string("failed to commit stock price update: ") + mysql_error(connection_);
+			return false;
+		}
+		return true;
 	}
 
 	bool ProcessDueFinancialProducts(const std::string& id,
@@ -1186,6 +1330,23 @@ private:
 		const bool exists = mysql_fetch_row(result) != nullptr;
 		mysql_free_result(result);
 		return exists;
+	}
+
+	bool QueryUInt64Scalar(const std::string& query, std::uint64_t& value) {
+		value = 0;
+		if (mysql_query(connection_, query.c_str()) != 0) {
+			std::cerr << "QueryUInt64Scalar failed: " << mysql_error(connection_) << '\n';
+			return false;
+		}
+		MYSQL_RES* result = mysql_store_result(connection_);
+		if (!result) {
+			std::cerr << "QueryUInt64Scalar store result failed: " << mysql_error(connection_) << '\n';
+			return false;
+		}
+		MYSQL_ROW row = mysql_fetch_row(result);
+		if (row && row[0]) value = std::stoull(row[0]);
+		mysql_free_result(result);
+		return true;
 	}
 
 	bool LoadPlayerMoneyForUpdate(const std::string& escapedId,
@@ -2405,6 +2566,32 @@ bool ProcessReceiveBuffer(Database& database, ClientSession& session) {
 	}
 	return true;
 }
+
+void RunStockPriceUpdateServer() {
+	Database stockDatabase;
+	if (!stockDatabase.Connect()) {
+		std::cerr << "Stock price updater database connection failed.\n";
+		return;
+	}
+
+	while (true) {
+		const auto now = std::chrono::system_clock::now();
+		const auto currentHour =
+			std::chrono::time_point_cast<std::chrono::hours>(now);
+		const auto nextHour = currentHour + std::chrono::hours(1);
+		std::this_thread::sleep_until(nextHour);
+
+		int updatedCount = 0;
+		std::string failureReason;
+		if (stockDatabase.UpdateStockPricesAtCurrentHour(updatedCount, failureReason)) {
+			if (updatedCount > 0)
+				std::cout << "[StockPriceUpdate] updated=" << updatedCount << '\n';
+		}
+		else {
+			std::cerr << "[StockPriceUpdate] failed: " << failureReason << '\n';
+		}
+	}
+}
 } // namespace
 
 int main(int argc, char* argv[]) {
@@ -2469,6 +2656,7 @@ int main(int argc, char* argv[]) {
 
 	std::cout << "RaisingPet TCP server is listening on 0.0.0.0:" << port << '\n';
 	std::thread(RunAdminServer, adminPort, std::ref(sessions), std::ref(sessionsMutex)).detach();
+	std::thread(RunStockPriceUpdateServer).detach();
 	std::cout << "Press Ctrl+C to stop.\n";
 
 	while (true) {
