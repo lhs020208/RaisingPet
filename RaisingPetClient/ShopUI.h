@@ -56,7 +56,9 @@ public:
 	void ClearFinancialProductActive(int nCategory, int nProductIndex);
 	void SetFinancialMaximumProductIndex(int nCategory, int nProductIndex);
 	void SetFinancialProgressCount(int nCategory, int nProgressCount);
-	void SetStockIssued(bool bIssued);
+	void SetStockIssued(bool bIssued, const std::wstring& stockName = std::wstring());
+	bool IsStockIssued() const { return m_bStockIssued; }
+	const std::wstring& GetStockName() const { return m_wstrStockName; }
 
 private:
 	struct UI_IMAGE_RESOURCE

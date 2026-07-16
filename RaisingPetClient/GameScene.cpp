@@ -53,6 +53,18 @@ std::string WideStringToUtf8(const std::wstring& text)
 	return(utf8);
 }
 
+std::wstring Utf8ToWideString(const std::string& text)
+{
+	if (text.empty()) return(std::wstring());
+	const int requiredCharacters = MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS,
+		text.data(), static_cast<int>(text.size()), NULL, 0);
+	if (requiredCharacters <= 0) return(std::wstring());
+	std::wstring wide(static_cast<size_t>(requiredCharacters), L'\0');
+	MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, text.data(),
+		static_cast<int>(text.size()), &wide[0], requiredCharacters);
+	return(wide);
+}
+
 void AppendUInt(std::vector<unsigned char>& data, UINT value)
 {
 	for (int i = 0; i < 4; ++i)
@@ -67,6 +79,16 @@ bool ReadUInt(const std::vector<unsigned char>& data, size_t& offset, UINT& valu
 		| (static_cast<UINT>(data[offset + 2]) << 16)
 		| (static_cast<UINT>(data[offset + 3]) << 24);
 	offset += 4;
+	return(true);
+}
+
+bool ReadBytes(const std::vector<unsigned char>& data, size_t& offset, UINT length,
+	std::string& value)
+{
+	if (offset + length > data.size()) return(false);
+	value.assign(reinterpret_cast<const char*>(data.data() + offset),
+		reinterpret_cast<const char*>(data.data() + offset + length));
+	offset += length;
 	return(true);
 }
 }
@@ -773,7 +795,8 @@ bool CGameScene::LoadLocalPlayerStatus()
 	input.read(reinterpret_cast<char*>(&payloadSize), sizeof(payloadSize));
 	input.read(reinterpret_cast<char*>(&checksum), sizeof(checksum));
 	if (!input || memcmp(magic, "RPLPST01", sizeof(magic)) != 0 || version != 1 ||
-		(payloadSize != 12 && payloadSize != 20 && payloadSize != 28))
+		(payloadSize != 12 && payloadSize != 20 && payloadSize != 28
+			&& payloadSize < 36))
 		return(false);
 
 	std::vector<unsigned char> payload(payloadSize);
@@ -791,6 +814,9 @@ bool CGameScene::LoadLocalPlayerStatus()
 	UINT loanMaximumProductIndex = 0;
 	UINT savingsProgressCount = 0;
 	UINT loanProgressCount = 0;
+	UINT stockIssued = 0;
+	UINT stockNameLength = 0;
+	std::string stockNameUtf8;
 	if (!ReadUInt(payload, offset, money) || !ReadUInt(payload, offset, pay)
 		|| !ReadUInt(payload, offset, maxPossession))
 		return(false);
@@ -800,6 +826,14 @@ bool CGameScene::LoadLocalPlayerStatus()
 	if (payloadSize >= 28 && (!ReadUInt(payload, offset, savingsProgressCount)
 		|| !ReadUInt(payload, offset, loanProgressCount)))
 		return(false);
+	if (payloadSize >= 36)
+	{
+		if (!ReadUInt(payload, offset, stockIssued) || !ReadUInt(payload, offset, stockNameLength))
+			return(false);
+		if (stockNameLength > 150 || !ReadBytes(payload, offset, stockNameLength, stockNameUtf8))
+			return(false);
+		if (offset != payload.size()) return(false);
+	}
 	if (pay == 0) pay = 1;
 	if (maxPossession == 0) maxPossession = 1;
 	if (savingsMaximumProductIndex > 9) savingsMaximumProductIndex = 9;
@@ -812,6 +846,8 @@ bool CGameScene::LoadLocalPlayerStatus()
 	m_nFinancialMaximumProductIndices[1] = loanMaximumProductIndex;
 	m_nFinancialProgressCounts[0] = savingsProgressCount;
 	m_nFinancialProgressCounts[1] = loanProgressCount;
+	const std::wstring stockName = Utf8ToWideString(stockNameUtf8);
+	m_ShopUI.SetStockIssued(stockIssued != 0, stockName);
 	activePet->SetPay(pay);
 	activePet->GetMaxPossession(maxPossession);
 	if (activePet->GetNowPossession() > activePet->GetMaxPossession())
@@ -830,7 +866,8 @@ void CGameScene::SaveLocalPlayerStatus() const
 	CreateDirectoryA("Network", NULL);
 
 	std::vector<unsigned char> payload;
-	payload.reserve(28);
+	const std::string stockNameUtf8 = WideStringToUtf8(m_ShopUI.GetStockName());
+	payload.reserve(36 + stockNameUtf8.size());
 	AppendUInt(payload, m_nMoney);
 	AppendUInt(payload, activePet->GetPay());
 	AppendUInt(payload, activePet->GetMaxPossession());
@@ -838,6 +875,9 @@ void CGameScene::SaveLocalPlayerStatus() const
 	AppendUInt(payload, m_nFinancialMaximumProductIndices[1]);
 	AppendUInt(payload, m_nFinancialProgressCounts[0]);
 	AppendUInt(payload, m_nFinancialProgressCounts[1]);
+	AppendUInt(payload, m_ShopUI.IsStockIssued() ? 1 : 0);
+	AppendUInt(payload, static_cast<UINT>(stockNameUtf8.size()));
+	payload.insert(payload.end(), stockNameUtf8.begin(), stockNameUtf8.end());
 	const UINT checksum = CalculateLocalPlayerStatusChecksum(payload);
 	TransformLocalPlayerStatusPayload(payload);
 
@@ -1064,10 +1104,12 @@ void CGameScene::Animate(float fElapsedTime)
 		{
 			ApplyServerMoneyChange(stockIssueResult.nFinalMoney);
 			m_ShopUI.SetStockIssued(true);
+			SaveLocalPlayerStatus();
 		}
 		else if (stockIssueResult.eResult == CLIENT_STOCK_ISSUE_RESULT::ALREADY_ISSUED)
 		{
 			m_ShopUI.SetStockIssued(true);
+			SaveLocalPlayerStatus();
 		}
 	}
 

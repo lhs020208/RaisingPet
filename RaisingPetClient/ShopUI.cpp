@@ -1496,14 +1496,20 @@ bool CShopUI::ConsumeLoginSceneReturnRequest()
 	return(true);
 }
 
-void CShopUI::SetStockIssued(bool issued)
+void CShopUI::SetStockIssued(bool issued, const std::wstring& stockName)
 {
 	m_bStockIssued = issued;
+	if (!stockName.empty())
+	{
+		m_wstrStockName = stockName;
+		m_nStockNameCursorIndex = m_wstrStockName.size();
+	}
 	if (m_bStockIssued)
 	{
 		m_bStockIssueButtonPressed = false;
 		m_bPendingStockIssueRequest = false;
 		m_wstrPendingStockIssueName.clear();
+		m_bStockNameInputActive = false;
 	}
 }
 
@@ -1750,7 +1756,8 @@ bool CShopUI::ProcessShopUIClick(float x, float y, float width, float height, UI
 
 bool CShopUI::OnProcessingKeyboardMessage(HWND hWnd, UINT message, WPARAM wParam, LPARAM)
 {
-	if (!m_bShopActive || m_eShopPage != SHOP_PAGE::STOCK_CONTENT_2 || !m_bStockNameInputActive)
+	if (!m_bShopActive || m_eShopPage != SHOP_PAGE::STOCK_CONTENT_2 || !m_bStockNameInputActive
+		|| m_bStockIssued)
 		return(false);
 
 	RECT client;
@@ -1868,6 +1875,7 @@ bool CShopUI::OnProcessingMouseMessage(HWND hWnd, UINT message, WPARAM wParam, L
 			const XMFLOAT4 stockNameInput = GetStockNameInputRectangle(width, height);
 			if (IsPointInRectangle(x, y, stockNameInput))
 			{
+				if (m_bStockIssued) return(true);
 				m_bStockNameInputActive = true;
 				m_fStockNameCursorBlinkElapsed = 0.0f;
 				MoveStockNameCursorFromClick(x, stockNameInput,
