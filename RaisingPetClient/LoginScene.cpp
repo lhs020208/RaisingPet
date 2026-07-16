@@ -89,6 +89,17 @@ XMFLOAT4 GetCloseRectangle(float width, float height)
 	return(XMFLOAT4(right - buttonWidth, top, right, top + buttonHeight));
 }
 
+XMFLOAT4 GetPageTitleRectangle(float width, float height)
+{
+	const XMFLOAT4 board = GetBoardRectangle(width, height);
+	const XMFLOAT4 close = GetCloseRectangle(width, height);
+	const float titleHeight = close.w - close.y;
+	const float titleWidth = titleHeight * (1380.0f / 177.0f);
+	const float centerX = (board.x + board.z) * 0.5f;
+	return(XMFLOAT4(centerX - titleWidth * 0.5f, close.y,
+		centerX + titleWidth * 0.5f, close.y + titleHeight));
+}
+
 XMFLOAT4 GetLoginFrameRectangle(float width, float height)
 {
 	const XMFLOAT4 board = GetBoardRectangle(width, height);
@@ -373,6 +384,7 @@ void CLoginScene::BuildObjects(ID3D12Device* device, ID3D12GraphicsCommandList* 
 	};
 
 	loadImage(L"Assets/Image/Shop/ShopBoard.dds", m_ShopBoard);
+	loadImage(L"Assets/Image/Shop/PageTitle.dds", m_PageTitle);
 	loadImage(L"Assets/Image/Shop/ShopCloseIcon.dds", m_CloseIcon);
 	loadImage(L"Assets/Image/Login/LoginFrame.dds", m_LoginFrame);
 	loadImage(L"Assets/Image/Login/IDLog.dds", m_IdLog);
@@ -433,7 +445,7 @@ void CLoginScene::ReleaseObjects()
 	m_pd3dTextPipelineState = NULL;
 	if (m_pd3dRotatingUiPipelineState) m_pd3dRotatingUiPipelineState->Release();
 	m_pd3dRotatingUiPipelineState = NULL;
-	UI_IMAGE_RESOURCE* resources[] = { &m_ShopBoard, &m_CloseIcon, &m_LoginFrame,
+	UI_IMAGE_RESOURCE* resources[] = { &m_ShopBoard, &m_PageTitle, &m_CloseIcon, &m_LoginFrame,
 		&m_IdLog, &m_PasswordLog, &m_TextFrame, &m_LoginButton, &m_GuestButton,
 		&m_RegisterButton, &m_TextCursor, &m_LoginErrorLog, &m_LoginErrorLog2,
 		&m_RegisterSuccessLog, &m_RegisterFailLog, &m_LoginLoading, &m_LoadingTexts[0],
@@ -459,7 +471,7 @@ void CLoginScene::ReleaseObjects()
 
 void CLoginScene::ReleaseUploadBuffers()
 {
-	UI_IMAGE_RESOURCE* resources[] = { &m_ShopBoard, &m_CloseIcon, &m_LoginFrame,
+	UI_IMAGE_RESOURCE* resources[] = { &m_ShopBoard, &m_PageTitle, &m_CloseIcon, &m_LoginFrame,
 		&m_IdLog, &m_PasswordLog, &m_TextFrame, &m_LoginButton, &m_GuestButton,
 		&m_RegisterButton, &m_TextCursor, &m_LoginErrorLog, &m_LoginErrorLog2,
 		&m_RegisterSuccessLog, &m_RegisterFailLog, &m_LoginLoading, &m_LoadingTexts[0],
@@ -517,6 +529,18 @@ void CLoginScene::RenderRotatingUiImage(ID3D12GraphicsCommandList* commandList, 
 	commandList->SetPipelineState(m_pd3dRotatingUiPipelineState);
 	commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 	commandList->DrawInstanced(6, 1, 0, 0);
+}
+
+void CLoginScene::RenderPageTitle(ID3D12GraphicsCommandList* commandList, CCamera* camera,
+	float width, float height)
+{
+	const XMFLOAT4 titleRect = GetPageTitleRectangle(width, height);
+	RenderUiImage(commandList, camera, m_PageTitle, titleRect);
+	if (g_pFramework)
+	{
+		g_pFramework->QueueDirectWriteText(L"\uB85C\uADF8\uC778", titleRect,
+			(titleRect.w - titleRect.y) * 0.48f, 0xFF000000, true, true);
+	}
 }
 
 CLoginScene::GLYPH_RESOURCE* CLoginScene::FindGlyph(char ch)
@@ -807,6 +831,7 @@ void CLoginScene::Render(ID3D12GraphicsCommandList* commandList, CCamera* camera
 	m_fLastViewportWidth = width;
 	m_fLastViewportHeight = height;
 	RenderUiImage(commandList, camera, m_ShopBoard, GetBoardRectangle(width, height));
+	RenderPageTitle(commandList, camera, width, height);
 	if (m_eLoginPage == LOGIN_PAGE::REGISTER)
 		RenderRegisterPage(commandList, camera, width, height);
 	else if (m_eLoginPage == LOGIN_PAGE::LOADING)

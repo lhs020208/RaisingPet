@@ -225,6 +225,17 @@ XMFLOAT4 GetShopBackRectangle(float width, float height, float offsetX = 0.0f, f
 	return(XMFLOAT4(right - gShopUiLayout.fBackWidth, close.y, right, close.y + gShopUiLayout.fBackHeight));
 }
 
+XMFLOAT4 GetShopPageTitleRectangle(float width, float height, float offsetX = 0.0f, float offsetY = 0.0f)
+{
+	const XMFLOAT4 board = GetShopBoardRectangle(width, height, offsetX, offsetY);
+	const XMFLOAT4 close = GetShopCloseRectangle(width, height, offsetX, offsetY);
+	const float titleHeight = close.w - close.y;
+	const float titleWidth = titleHeight * (1380.0f / 177.0f);
+	const float centerX = (board.x + board.z) * 0.5f;
+	return(XMFLOAT4(centerX - titleWidth * 0.5f, close.y,
+		centerX + titleWidth * 0.5f, close.y + titleHeight));
+}
+
 XMFLOAT4 GetShopSlotRectangle(int index, float width, float height, float offsetX = 0.0f, float offsetY = 0.0f)
 {
 	const XMFLOAT4 board = GetShopBoardRectangle(width, height, offsetX, offsetY);
@@ -441,6 +452,7 @@ void CShopUI::BuildObjects(ID3D12Device* device, ID3D12GraphicsCommandList* comm
 
 	loadImage(L"Assets/Image/Shop/ShopIcon.dds", m_ShopIconResource);
 	loadImage(L"Assets/Image/Shop/ShopBoard.dds", m_ShopBoardResource);
+	loadImage(L"Assets/Image/Shop/PageTitle.dds", m_PageTitleResource);
 	loadImage(L"Assets/Image/Shop/ShopCloseIcon.dds", m_ShopCloseIconResource);
 	loadImage(L"Assets/Image/Shop/ShopBackSpaceIcon.dds", m_ShopBackSpaceIconResource);
 	loadImage(L"Assets/Image/Shop/ShopSlot1.dds", m_ShopSlotResources[0]);
@@ -500,7 +512,7 @@ void CShopUI::ReleaseObjects()
 		m_nPreviewPetIndex = static_cast<size_t>(-1);
 	}
 	if (m_pd3dUiImagePipelineState) m_pd3dUiImagePipelineState->Release();
-	UI_IMAGE_RESOURCE* images[] = { &m_ShopIconResource, &m_ShopBoardResource,
+	UI_IMAGE_RESOURCE* images[] = { &m_ShopIconResource, &m_ShopBoardResource, &m_PageTitleResource,
 		&m_ShopCloseIconResource, &m_ShopBackSpaceIconResource, &m_ShopSlotResources[0],
 		&m_ShopSlotResources[1], &m_ShopSlotResources[2], &m_ShopSlotResources[3],
 		&m_EmptySquareResources[0], &m_EmptySquareResources[1], &m_PetConfirmationButtonResource,
@@ -564,7 +576,7 @@ void CShopUI::Animate(float elapsedTime)
 
 void CShopUI::ReleaseUploadBuffers()
 {
-	UI_IMAGE_RESOURCE* images[] = { &m_ShopIconResource, &m_ShopBoardResource,
+	UI_IMAGE_RESOURCE* images[] = { &m_ShopIconResource, &m_ShopBoardResource, &m_PageTitleResource,
 		&m_ShopCloseIconResource, &m_ShopBackSpaceIconResource, &m_ShopSlotResources[0],
 		&m_ShopSlotResources[1], &m_ShopSlotResources[2], &m_ShopSlotResources[3],
 		&m_EmptySquareResources[0], &m_EmptySquareResources[1], &m_PetConfirmationButtonResource,
@@ -1435,6 +1447,35 @@ void CShopUI::RenderCantCreateStockPage(ID3D12GraphicsCommandList* commandList, 
 	}
 }
 
+void CShopUI::RenderPageTitle(ID3D12GraphicsCommandList* commandList, CCamera* camera)
+{
+	if (!camera) return;
+	const float width = camera->m_d3dViewport.Width;
+	const float height = camera->m_d3dViewport.Height;
+	const XMFLOAT4 titleRect = GetShopPageTitleRectangle(width, height,
+		m_xmf2ShopBoardOffset.x, m_xmf2ShopBoardOffset.y);
+	RenderUiImage(commandList, camera, m_PageTitleResource, titleRect);
+
+	const wchar_t* titleText = L"";
+	switch (m_eShopPage)
+	{
+	case SHOP_PAGE::SHOP_MENU: titleText = L"\uC0C1\uC810"; break;
+	case SHOP_PAGE::PET_CHANGE: titleText = L"\uD3AB \uAD50\uCCB4"; break;
+	case SHOP_PAGE::PET_ENHANCE: titleText = L"\uD3AB \uAC15\uD654"; break;
+	case SHOP_PAGE::BANK: titleText = L"\uC740\uD589"; break;
+	case SHOP_PAGE::STOCK_MENU: titleText = L"\uC8FC\uC2DD"; break;
+	case SHOP_PAGE::STOCK_TRANSACTION: titleText = L"\uC8FC\uC2DD \uAD6C\uB9E4"; break;
+	case SHOP_PAGE::STOCK_CANT_PUBLISH: titleText = L"\uC8FC\uC2DD \uAD00\uB9AC"; break;
+	case SHOP_PAGE::STOCK_MANAGEMENT: titleText = L"\uC8FC\uC2DD \uAD00\uB9AC"; break;
+	case SHOP_PAGE::STOCK_SEE_MYGRAPH: titleText = L"\uC8FC\uC2DD \uADF8\uB798\uD504"; break;
+	}
+	if (g_pFramework)
+	{
+		g_pFramework->QueueDirectWriteText(titleText, titleRect,
+			(titleRect.w - titleRect.y) * 0.48f, 0xFF000000, true, true);
+	}
+}
+
 void CShopUI::Render(ID3D12GraphicsCommandList* commandList, CCamera* camera, UINT money,
 	size_t activePetIndex, const std::vector<SHOP_PET_RENDER_RESOURCE>& pets,
 	const SHOP_TEXT_RENDER_CONTEXT& context, bool networkConnected)
@@ -1447,6 +1488,7 @@ void CShopUI::Render(ID3D12GraphicsCommandList* commandList, CCamera* camera, UI
 	{
 		RenderUiImage(commandList, camera, m_ShopBoardResource,
 			GetShopBoardRectangle(width, height, m_xmf2ShopBoardOffset.x, m_xmf2ShopBoardOffset.y));
+		RenderPageTitle(commandList, camera);
 		if (m_eShopPage == SHOP_PAGE::SHOP_MENU)
 		{
 			for (int i = 0; i < 4; ++i)

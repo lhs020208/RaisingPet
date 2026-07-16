@@ -59,6 +59,7 @@ private:
 	ID3D12PipelineState* m_pd3dTextPipelineState = NULL;
 	ID3D12PipelineState* m_pd3dRotatingUiPipelineState = NULL;
 	UI_IMAGE_RESOURCE m_ShopBoard;
+	UI_IMAGE_RESOURCE m_PageTitle;
 	UI_IMAGE_RESOURCE m_CloseIcon;
 	UI_IMAGE_RESOURCE m_LoginFrame;
 	UI_IMAGE_RESOURCE m_IdLog;
@@ -99,6 +100,8 @@ private:
 		UI_IMAGE_RESOURCE& resource, const XMFLOAT4& rectangle, UINT nColor = 0x00FFFFFF);
 	void RenderRotatingUiImage(ID3D12GraphicsCommandList* pd3dCommandList, CCamera* pCamera,
 		UI_IMAGE_RESOURCE& resource, const XMFLOAT4& rectangle, UINT nColor = 0x00FFFFFF);
+	void RenderPageTitle(ID3D12GraphicsCommandList* pd3dCommandList, CCamera* pCamera,
+		float fViewportWidth, float fViewportHeight);
 	void RenderInputPage(ID3D12GraphicsCommandList* pd3dCommandList, CCamera* pCamera,
 		float fViewportWidth, float fViewportHeight);
 	void RenderLoadingPage(ID3D12GraphicsCommandList* pd3dCommandList, CCamera* pCamera,

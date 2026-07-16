@@ -112,6 +112,7 @@ private:
 	ID3D12PipelineState* m_pd3dUiImagePipelineState = NULL;
 	UI_IMAGE_RESOURCE m_ShopIconResource;
 	UI_IMAGE_RESOURCE m_ShopBoardResource;
+	UI_IMAGE_RESOURCE m_PageTitleResource;
 	UI_IMAGE_RESOURCE m_ShopCloseIconResource;
 	UI_IMAGE_RESOURCE m_ShopBackSpaceIconResource;
 	UI_IMAGE_RESOURCE m_ShopSlotResources[4];
@@ -224,6 +225,7 @@ private:
 	bool ProcessFinancialClick(float x, float y, float fViewportWidth, float fViewportHeight);
 	void RenderStockMenuPage(ID3D12GraphicsCommandList* pd3dCommandList, CCamera* pCamera);
 	void RenderStockManagementPage(ID3D12GraphicsCommandList* pd3dCommandList, CCamera* pCamera);
+	void RenderPageTitle(ID3D12GraphicsCommandList* pd3dCommandList, CCamera* pCamera);
 	XMFLOAT4 GetStockChartRectangle(float fViewportWidth, float fViewportHeight) const;
 	XMFLOAT4 GetStockGraphButtonRectangle(float fViewportWidth, float fViewportHeight) const;
 	XMFLOAT4 GetStockNameInputRectangle(float fViewportWidth, float fViewportHeight) const;
