@@ -501,6 +501,12 @@ void CShopUI::Animate(float elapsedTime)
 {
 	if (m_bShopActive && m_eShopPage == SHOP_PAGE::SLOT_CONTENT_1 && m_pPreviewPet)
 		m_pPreviewPet->AnimateWithoutMovement(elapsedTime);
+	if (m_bStockNameInputActive)
+	{
+		m_fStockNameCursorBlinkElapsed += elapsedTime;
+		while (m_fStockNameCursorBlinkElapsed >= 1.0f)
+			m_fStockNameCursorBlinkElapsed -= 1.0f;
+	}
 	for (int category = 0; category < 2; ++category)
 	{
 		if (!m_bFinancialProductActive[category]) continue;
@@ -1055,6 +1061,33 @@ void CShopUI::RenderStockManagementPage(ID3D12GraphicsCommandList* commandList, 
 	const XMFLOAT4 stockNameRect(contentLeft, contentTop,
 		contentLeft + stockNameWidth, contentTop + stockNameHeight);
 	RenderUiImage(commandList, camera, m_StockNameResource, stockNameRect);
+	if (g_pFramework)
+	{
+		const XMFLOAT4 inputRect = GetStockNameInputRectangle(width, height);
+		const float inputHeight = inputRect.w - inputRect.y;
+		const float textPaddingX = inputHeight * 0.35f;
+		const float fontSize = GetStockNameInputFontSize(width, height);
+		const XMFLOAT4 textRect(inputRect.x + textPaddingX, inputRect.y,
+			inputRect.z - textPaddingX, inputRect.w);
+		if (!m_wstrStockName.empty())
+		{
+			g_pFramework->QueueDirectWriteText(m_wstrStockName, textRect, fontSize,
+				0xFF000000, false, true);
+		}
+		if (m_bStockNameInputActive && m_fStockNameCursorBlinkElapsed < 0.5f)
+		{
+			const std::wstring leftText = m_wstrStockName.substr(0,
+				min(m_nStockNameCursorIndex, m_wstrStockName.size()));
+			const float cursorOffset = MeasureStockNameTextWidth(leftText, fontSize,
+				textRect.z - textRect.x, textRect.w - textRect.y);
+			const float cursorX = min(textRect.x + cursorOffset + 1.0f, textRect.z);
+			const float cursorMarginY = inputHeight * 0.22f;
+			g_pFramework->QueueDirectWriteSolidRectangle(
+				XMFLOAT4(cursorX, inputRect.y + cursorMarginY,
+					cursorX + 2.0f, inputRect.w - cursorMarginY),
+				0xFF000000);
+		}
+	}
 
 	const float holdersTop = stockNameRect.w + boardHeight * 0.035f;
 	const float holdersHeight = stockNameWidth * (534.0f / 1341.0f);
@@ -1094,8 +1127,6 @@ void CShopUI::RenderStockManagementPage(ID3D12GraphicsCommandList* commandList, 
 
 	if (g_pFramework)
 	{
-		OutputDebugStringW(L"[ShopUI] Queue STOCK_CONTENT_2 DirectWrite texts.\n");
-
 		const float holderLineHeight = (holdersRect.w - holdersRect.y) * 0.225f;
 		const float holderTextLeft = holdersRect.x + (holdersRect.z - holdersRect.x) * 0.055f;
 		const float holderTextRight = holdersRect.z - (holdersRect.z - holdersRect.x) * 0.05f;
@@ -1133,16 +1164,82 @@ void CShopUI::RenderStockManagementPage(ID3D12GraphicsCommandList* commandList, 
 	}
 }
 
+XMFLOAT4 CShopUI::GetStockNameInputRectangle(float width, float height) const
+{
+	const XMFLOAT4 board = GetShopBoardRectangle(width, height,
+		m_xmf2ShopBoardOffset.x, m_xmf2ShopBoardOffset.y);
+	const float boardWidth = board.z - board.x;
+	const float boardHeight = board.w - board.y;
+	const float contentLeft = board.x + boardWidth * 0.06f;
+	const float contentTop = board.y + boardHeight * 0.16f;
+	const float leftColumnWidth = boardWidth * 0.52f;
+	const float stockNameWidth = leftColumnWidth;
+	const float stockNameHeight = stockNameWidth * (275.0f / 1341.0f);
+	const float dividerX = contentLeft + stockNameWidth * 0.30f;
+	return(XMFLOAT4(dividerX, contentTop, contentLeft + stockNameWidth,
+		contentTop + stockNameHeight));
+}
+
+float CShopUI::GetStockNameInputFontSize(float width, float height) const
+{
+	const XMFLOAT4 board = GetShopBoardRectangle(width, height,
+		m_xmf2ShopBoardOffset.x, m_xmf2ShopBoardOffset.y);
+	return((board.w - board.y) * 0.048f);
+}
+
+float CShopUI::MeasureStockNameTextWidth(const std::wstring& text, float fontSize,
+	float availableWidth, float availableHeight) const
+{
+	if (!g_pFramework || text.empty()) return(0.0f);
+	float measuredWidth = 0.0f;
+	float measuredHeight = 0.0f;
+	g_pFramework->MeasureDirectWriteText(text, fontSize,
+		max(availableWidth, 1.0f), max(availableHeight, 1.0f),
+		measuredWidth, measuredHeight);
+	return(measuredWidth);
+}
+
+void CShopUI::MoveStockNameCursorFromClick(float x, const XMFLOAT4& rectangle, float fontSize)
+{
+	const float inputHeight = rectangle.w - rectangle.y;
+	const float textPaddingX = inputHeight * 0.35f;
+	const float textLeft = rectangle.x + textPaddingX;
+	const float availableWidth = rectangle.z - rectangle.x - textPaddingX * 2.0f;
+	const float availableHeight = rectangle.w - rectangle.y;
+	if (m_wstrStockName.empty() || x <= textLeft)
+	{
+		m_nStockNameCursorIndex = 0;
+		return;
+	}
+
+	float previousBoundary = 0.0f;
+	for (size_t index = 0; index < m_wstrStockName.size(); ++index)
+	{
+		const float nextBoundary = MeasureStockNameTextWidth(
+			m_wstrStockName.substr(0, index + 1), fontSize, availableWidth, availableHeight);
+		const float middle = textLeft + (previousBoundary + nextBoundary) * 0.5f;
+		if (x < middle)
+		{
+			m_nStockNameCursorIndex = index;
+			return;
+		}
+		previousBoundary = nextBoundary;
+	}
+	m_nStockNameCursorIndex = m_wstrStockName.size();
+}
+
 bool CShopUI::ProcessStockMenuClick(float x, float y, float width, float height)
 {
 	if (IsPointInRectangle(x, y, GetStockSlotRectangle(0, width, height)))
 	{
 		m_eShopPage = SHOP_PAGE::STOCK_CONTENT_1;
+		m_bStockNameInputActive = false;
 		return(true);
 	}
 	if (IsPointInRectangle(x, y, GetStockSlotRectangle(1, width, height)))
 	{
 		m_eShopPage = m_bStockCreationAvailable ? SHOP_PAGE::STOCK_CONTENT_2 : SHOP_PAGE::STOCK_CONTENT_3;
+		m_bStockNameInputActive = false;
 		return(true);
 	}
 	return(false);
@@ -1430,6 +1527,7 @@ void CShopUI::DeactivateShop(float width, float height, size_t activePetIndex)
 	m_bShopActive = false;
 	m_bShopBoardDragging = false;
 	m_bPetScrollDragging = false;
+	m_bStockNameInputActive = false;
 	m_nPressedEnhanceButton = -1;
 	ResetSelectedPet(activePetIndex, m_nCachedPetCount);
 }
@@ -1502,6 +1600,7 @@ bool CShopUI::ProcessShopUIClick(float x, float y, float width, float height, UI
 			m_bShopActive = true;
 			m_eShopPage = SHOP_PAGE::SLOT_MENU;
 			m_nSelectedShopSlot = -1;
+			m_bStockNameInputActive = false;
 			ResetSelectedPet(activePetIndex, petCount);
 		}
 		return(true);
@@ -1517,12 +1616,14 @@ bool CShopUI::ProcessShopUIClick(float x, float y, float width, float height, UI
 		{
 			m_eShopPage = SHOP_PAGE::SLOT_CONTENT_4;
 			m_nPressedEnhanceButton = -1;
+			m_bStockNameInputActive = false;
 		}
 		else
 		{
 			m_eShopPage = SHOP_PAGE::SLOT_MENU;
 			m_nSelectedShopSlot = -1;
 			m_nPressedEnhanceButton = -1;
+			m_bStockNameInputActive = false;
 			ResetSelectedPet(activePetIndex, petCount);
 		}
 		return(true);
@@ -1546,6 +1647,7 @@ bool CShopUI::ProcessShopUIClick(float x, float y, float width, float height, UI
 			}
 			m_eShopPage = static_cast<SHOP_PAGE>(static_cast<int>(SHOP_PAGE::SLOT_CONTENT_1) + i);
 			m_nSelectedShopSlot = i;
+			m_bStockNameInputActive = false;
 			if (m_eShopPage == SHOP_PAGE::SLOT_CONTENT_1)
 				ResetSelectedPet(activePetIndex, petCount);
 			return(true);
@@ -1602,6 +1704,77 @@ bool CShopUI::ProcessShopUIClick(float x, float y, float width, float height, UI
 	return(false);
 }
 
+bool CShopUI::OnProcessingKeyboardMessage(HWND hWnd, UINT message, WPARAM wParam, LPARAM)
+{
+	if (!m_bShopActive || m_eShopPage != SHOP_PAGE::STOCK_CONTENT_2 || !m_bStockNameInputActive)
+		return(false);
+
+	RECT client;
+	GetClientRect(hWnd, &client);
+	const float width = static_cast<float>(client.right);
+	const float height = static_cast<float>(client.bottom);
+	const XMFLOAT4 inputRect = GetStockNameInputRectangle(width, height);
+	const float inputHeight = inputRect.w - inputRect.y;
+	const float textPaddingX = inputHeight * 0.35f;
+	const float availableWidth = (inputRect.z - inputRect.x) - textPaddingX * 2.0f;
+	const float availableHeight = inputRect.w - inputRect.y;
+	const float fontSize = GetStockNameInputFontSize(width, height);
+	m_nStockNameCursorIndex = min(m_nStockNameCursorIndex, m_wstrStockName.size());
+
+	if (message == WM_CHAR)
+	{
+		const wchar_t ch = static_cast<wchar_t>(wParam);
+		if (ch == L'\b')
+		{
+			if (m_nStockNameCursorIndex == 0) return(true);
+			m_wstrStockName.erase(m_nStockNameCursorIndex - 1, 1);
+			--m_nStockNameCursorIndex;
+			m_fStockNameCursorBlinkElapsed = 0.0f;
+			return(true);
+		}
+		if (ch < 0x20 || ch == 0x7F) return(true);
+
+		std::wstring candidate = m_wstrStockName;
+		candidate.insert(candidate.begin() + m_nStockNameCursorIndex, ch);
+		const float candidateWidth = MeasureStockNameTextWidth(candidate, fontSize,
+			availableWidth, availableHeight);
+		if (candidateWidth > availableWidth) return(true);
+
+		m_wstrStockName.swap(candidate);
+		++m_nStockNameCursorIndex;
+		m_fStockNameCursorBlinkElapsed = 0.0f;
+		return(true);
+	}
+
+	if (message != WM_KEYDOWN) return(false);
+	switch (wParam)
+	{
+	case VK_LEFT:
+		if (m_nStockNameCursorIndex > 0) --m_nStockNameCursorIndex;
+		break;
+	case VK_RIGHT:
+		if (m_nStockNameCursorIndex < m_wstrStockName.size()) ++m_nStockNameCursorIndex;
+		break;
+	case VK_HOME:
+		m_nStockNameCursorIndex = 0;
+		break;
+	case VK_END:
+		m_nStockNameCursorIndex = m_wstrStockName.size();
+		break;
+	case VK_DELETE:
+		if (m_nStockNameCursorIndex < m_wstrStockName.size())
+			m_wstrStockName.erase(m_nStockNameCursorIndex, 1);
+		break;
+	case VK_ESCAPE:
+		m_bStockNameInputActive = false;
+		break;
+	default:
+		return(false);
+	}
+	m_fStockNameCursorBlinkElapsed = 0.0f;
+	return(true);
+}
+
 bool CShopUI::OnProcessingMouseMessage(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam,
 	UINT money, size_t nPetCount, size_t activePetIndex, const SHOP_TEXT_RENDER_CONTEXT& context,
 	bool networkConnected)
@@ -1638,6 +1811,19 @@ bool CShopUI::OnProcessingMouseMessage(HWND hWnd, UINT message, WPARAM wParam, L
 		break;
 	case WM_LBUTTONDOWN:
 		RebuildPetScrollMetricsIfNeeded(nPetCount);
+		if (m_bShopActive && m_eShopPage == SHOP_PAGE::STOCK_CONTENT_2)
+		{
+			const XMFLOAT4 stockNameInput = GetStockNameInputRectangle(width, height);
+			if (IsPointInRectangle(x, y, stockNameInput))
+			{
+				m_bStockNameInputActive = true;
+				m_fStockNameCursorBlinkElapsed = 0.0f;
+				MoveStockNameCursorFromClick(x, stockNameInput,
+					GetStockNameInputFontSize(width, height));
+				return(true);
+			}
+			m_bStockNameInputActive = false;
+		}
 		if (m_bShopActive && m_eShopPage == SHOP_PAGE::SLOT_CONTENT_2)
 		{
 			for (int type = 0; type < 2; ++type)

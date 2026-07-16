@@ -484,6 +484,18 @@ void CGameFramework::QueueDirectWriteText(const std::wstring& text, const XMFLOA
 	m_D2DTextRenderer.QueueText(text, rectangle, fontSize, color, horizontalCenter, verticalCenter);
 }
 
+void CGameFramework::QueueDirectWriteSolidRectangle(const XMFLOAT4& rectangle, UINT color)
+{
+	m_D2DTextRenderer.QueueSolidRectangle(rectangle, color);
+}
+
+bool CGameFramework::MeasureDirectWriteText(const std::wstring& text, float fontSize,
+	float maxWidth, float maxHeight, float& measuredWidth, float& measuredHeight)
+{
+	return(m_D2DTextRenderer.MeasureText(text, fontSize, maxWidth, maxHeight,
+		measuredWidth, measuredHeight));
+}
+
 void CGameFramework::WaitForGpuComplete()
 {
 	UINT64 nFenceValue = ++m_nFenceValues[m_nSwapChainBufferIndex];

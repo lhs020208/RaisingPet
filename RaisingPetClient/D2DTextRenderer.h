@@ -8,6 +8,7 @@ struct D2D_TEXT_ITEM
 	UINT color = 0xFF000000;
 	bool horizontalCenter = false;
 	bool verticalCenter = true;
+	bool solidRectangle = false;
 };
 
 class CD2DTextRenderer
@@ -23,6 +24,9 @@ public:
 
 	void QueueText(const std::wstring& text, const XMFLOAT4& rectangle, float fontSize,
 		UINT color = 0xFF000000, bool horizontalCenter = false, bool verticalCenter = true);
+	void QueueSolidRectangle(const XMFLOAT4& rectangle, UINT color = 0xFF000000);
+	bool MeasureText(const std::wstring& text, float fontSize, float maxWidth, float maxHeight,
+		float& measuredWidth, float& measuredHeight);
 	void Render(UINT swapChainBufferIndex);
 	size_t GetQueuedTextCount() const { return m_queuedTexts.size(); }
 

@@ -56,6 +56,9 @@ public:
 	CClientNetworkManager& GetNetworkManager() { return m_NetworkManager; }
 	void QueueDirectWriteText(const std::wstring& text, const XMFLOAT4& rectangle, float fontSize,
 		UINT color = 0xFF000000, bool horizontalCenter = false, bool verticalCenter = true);
+	void QueueDirectWriteSolidRectangle(const XMFLOAT4& rectangle, UINT color = 0xFF000000);
+	bool MeasureDirectWriteText(const std::wstring& text, float fontSize, float maxWidth,
+		float maxHeight, float& measuredWidth, float& measuredHeight);
 private:
 	void ProcessSceneChange();
 	HINSTANCE					m_hInstance;

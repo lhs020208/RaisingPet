@@ -632,6 +632,8 @@ void CGameScene::RenderPetPossessionText(ID3D12GraphicsCommandList* pd3dCommandL
 void CGameScene::OnProcessingKeyboardMessage(HWND hWnd, UINT nMessageID, WPARAM wParam, LPARAM lParam)
 {
 	extern CGameFramework* g_pFramework;
+	if (m_ShopUI.OnProcessingKeyboardMessage(hWnd, nMessageID, wParam, lParam))
+		return;
 
 	switch (nMessageID)
 	{

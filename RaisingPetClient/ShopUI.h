@@ -46,6 +46,7 @@ public:
 	bool OnProcessingMouseMessage(HWND hWnd, UINT nMessageID, WPARAM wParam, LPARAM lParam,
 		UINT nMoney, size_t nPetCount, size_t nActivePetIndex,
 		const SHOP_TEXT_RENDER_CONTEXT& textContext, bool bNetworkConnected);
+	bool OnProcessingKeyboardMessage(HWND hWnd, UINT nMessageID, WPARAM wParam, LPARAM lParam);
 	bool ConsumePetConfirmationRequest(size_t& nSelectedPetIndex);
 	bool ConsumePetEnhancementRequest(int& nEnhancementType);
 	bool ConsumeFinancialProductRequest(int& nCategory, int& nProductIndex);
@@ -147,6 +148,10 @@ private:
 	UINT m_nActiveFinancialDurationSeconds[2] = { 0, 0 };
 	float m_fActiveFinancialElapsedSeconds[2] = { 0.0f, 0.0f };
 	bool m_bStockCreationAvailable = false;
+	std::wstring m_wstrStockName;
+	size_t m_nStockNameCursorIndex = 0;
+	bool m_bStockNameInputActive = false;
+	float m_fStockNameCursorBlinkElapsed = 0.0f;
 	std::vector<SHOP_NETWORK_ERROR_LOG> m_NetworkErrorLogs;
 
 	void RenderUiImage(ID3D12GraphicsCommandList* pd3dCommandList, CCamera* pCamera,
@@ -183,6 +188,11 @@ private:
 	bool ProcessFinancialClick(float x, float y, float fViewportWidth, float fViewportHeight);
 	void RenderStockMenuPage(ID3D12GraphicsCommandList* pd3dCommandList, CCamera* pCamera);
 	void RenderStockManagementPage(ID3D12GraphicsCommandList* pd3dCommandList, CCamera* pCamera);
+	XMFLOAT4 GetStockNameInputRectangle(float fViewportWidth, float fViewportHeight) const;
+	float GetStockNameInputFontSize(float fViewportWidth, float fViewportHeight) const;
+	float MeasureStockNameTextWidth(const std::wstring& text, float fFontSize, float fAvailableWidth,
+		float fAvailableHeight) const;
+	void MoveStockNameCursorFromClick(float x, const XMFLOAT4& rectangle, float fFontSize);
 	void RenderCantCreateStockPage(ID3D12GraphicsCommandList* pd3dCommandList, CCamera* pCamera,
 		const SHOP_TEXT_RENDER_CONTEXT& textContext);
 	bool ProcessStockMenuClick(float x, float y, float fViewportWidth, float fViewportHeight);

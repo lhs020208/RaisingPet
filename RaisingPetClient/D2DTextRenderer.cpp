@@ -123,16 +123,58 @@ void CD2DTextRenderer::QueueText(const std::wstring& text, const XMFLOAT4& recta
 	m_queuedTexts.push_back(item);
 }
 
+void CD2DTextRenderer::QueueSolidRectangle(const XMFLOAT4& rectangle, UINT color)
+{
+	D2D_TEXT_ITEM item;
+	item.rectangle = rectangle;
+	item.color = color;
+	item.solidRectangle = true;
+	m_queuedTexts.push_back(item);
+}
+
+bool CD2DTextRenderer::MeasureText(const std::wstring& text, float fontSize, float maxWidth,
+	float maxHeight, float& measuredWidth, float& measuredHeight)
+{
+	measuredWidth = 0.0f;
+	measuredHeight = 0.0f;
+	if (!m_dWriteFactory || text.empty()) return(true);
+
+	ComPtr<IDWriteTextFormat> textFormat;
+	HRESULT result = m_dWriteFactory->CreateTextFormat(L"Malgun Gothic", nullptr,
+		DWRITE_FONT_WEIGHT_BOLD, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL,
+		fontSize, L"ko-kr", &textFormat);
+	if (FAILED(result))
+	{
+		OutputD2DTextRendererError(L"Measure CreateTextFormat", result);
+		return(false);
+	}
+	textFormat->SetWordWrapping(DWRITE_WORD_WRAPPING_NO_WRAP);
+
+	ComPtr<IDWriteTextLayout> textLayout;
+	result = m_dWriteFactory->CreateTextLayout(text.c_str(), static_cast<UINT32>(text.length()),
+		textFormat.Get(), max(maxWidth, 1.0f), max(maxHeight, 1.0f), &textLayout);
+	if (FAILED(result))
+	{
+		OutputD2DTextRendererError(L"CreateTextLayout", result);
+		return(false);
+	}
+
+	DWRITE_TEXT_METRICS metrics = {};
+	result = textLayout->GetMetrics(&metrics);
+	if (FAILED(result))
+	{
+		OutputD2DTextRendererError(L"GetMetrics", result);
+		return(false);
+	}
+	measuredWidth = metrics.widthIncludingTrailingWhitespace;
+	measuredHeight = metrics.height;
+	return(true);
+}
+
 void CD2DTextRenderer::Render(UINT swapChainBufferIndex)
 {
 	if (!m_d3d11On12Device || !m_d3d11DeviceContext || !m_d2dDeviceContext ||
 		swapChainBufferIndex >= m_wrappedBackBuffers.size()) return;
-	if (!m_queuedTexts.empty())
-	{
-		wchar_t message[128] = {};
-		swprintf_s(message, L"[D2DTextRenderer] Render queued text count=%zu\n", m_queuedTexts.size());
-		OutputDebugStringW(message);
-	}
 
 	ID3D11Resource* resources[] = { m_wrappedBackBuffers[swapChainBufferIndex].Get() };
 	m_d3d11On12Device->AcquireWrappedResources(resources, _countof(resources));
@@ -141,6 +183,13 @@ void CD2DTextRenderer::Render(UINT swapChainBufferIndex)
 
 	for (const D2D_TEXT_ITEM& item : m_queuedTexts)
 	{
+		m_textBrush->SetColor(ToD2DColor(item.color));
+		if (item.solidRectangle)
+		{
+			m_d2dDeviceContext->FillRectangle(D2D1::RectF(item.rectangle.x, item.rectangle.y,
+				item.rectangle.z, item.rectangle.w), m_textBrush.Get());
+			continue;
+		}
 		ComPtr<IDWriteTextFormat> textFormat;
 		HRESULT result = m_dWriteFactory->CreateTextFormat(L"Malgun Gothic", nullptr,
 			DWRITE_FONT_WEIGHT_BOLD, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL,
@@ -157,7 +206,6 @@ void CD2DTextRenderer::Render(UINT swapChainBufferIndex)
 		textFormat->SetParagraphAlignment(item.verticalCenter
 			? DWRITE_PARAGRAPH_ALIGNMENT_CENTER : DWRITE_PARAGRAPH_ALIGNMENT_NEAR);
 
-		m_textBrush->SetColor(ToD2DColor(item.color));
 		const D2D1_RECT_F layoutRect = D2D1::RectF(item.rectangle.x, item.rectangle.y,
 			item.rectangle.z, item.rectangle.w);
 		m_d2dDeviceContext->DrawTextW(item.text.c_str(), static_cast<UINT32>(item.text.length()),
