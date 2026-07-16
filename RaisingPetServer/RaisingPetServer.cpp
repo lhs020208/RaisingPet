@@ -158,6 +158,30 @@ struct PlayerSeeInfo {
 	PlayerLoanSeeInfo loan;
 };
 
+struct StockPriceSeeInfo {
+	std::uint64_t previousPrice = 0;
+	std::uint64_t newPrice = 0;
+	std::uint64_t boughtQuantity = 0;
+	std::uint64_t soldQuantity = 0;
+	std::string changedTime;
+};
+
+struct StockHolderSeeInfo {
+	std::string playerId;
+	std::uint32_t quantity = 0;
+};
+
+struct StockSeeInfo {
+	std::uint32_t stockId = 0;
+	std::string stockName;
+	std::string issuerId;
+	std::uint64_t currentPrice = 0;
+	std::uint32_t totalQuantity = 0;
+	std::uint32_t unsoldQuantity = 0;
+	std::vector<StockPriceSeeInfo> recentPrices;
+	std::vector<StockHolderSeeInfo> topHolders;
+};
+
 struct PacketHeader {
 	std::uint16_t size = 0;
 	std::uint16_t type = 0;
@@ -609,20 +633,21 @@ public:
 		return application;
 	}
 
-	bool UpdateStockPricesAtCurrentHour(int& updatedCount, std::string& failureReason) {
+	bool UpdateStockPrices(bool forceUpdate, int& updatedCount, std::string& failureReason) {
 		updatedCount = 0;
 		if (mysql_query(connection_, "START TRANSACTION") != 0) {
 			failureReason = std::string("failed to start stock price transaction: ") + mysql_error(connection_);
 			return false;
 		}
 
-		const char* selectStocks =
+		std::string selectStocks =
 			"SELECT s.`StockID`, s.`CurrentPrice`, p.`IsOnline`, p.`IsActive` "
 			"FROM `Stock` s "
-			"JOIN `Player` p ON p.`PlayerID` = s.`IssuerID` "
-			"WHERE s.`PriceUpdatedTime` < DATE_FORMAT(NOW(), '%Y-%m-%d %H:00:00') "
-			"FOR UPDATE";
-		if (mysql_query(connection_, selectStocks) != 0) {
+			"JOIN `Player` p ON p.`PlayerID` = s.`IssuerID` ";
+		if (!forceUpdate)
+			selectStocks += "WHERE s.`PriceUpdatedTime` < DATE_FORMAT(NOW(), '%Y-%m-%d %H:00:00') ";
+		selectStocks += "FOR UPDATE";
+		if (mysql_query(connection_, selectStocks.c_str()) != 0) {
 			mysql_query(connection_, "ROLLBACK");
 			failureReason = std::string("failed to select stocks for price update: ") + mysql_error(connection_);
 			return false;
@@ -662,8 +687,8 @@ public:
 			const std::string boughtQuery =
 				"SELECT COALESCE(SUM(`Quantity`), 0) FROM `StockTrade` "
 				"WHERE `StockID` = " + std::to_string(target.stockId) +
-				" AND `TradeTime` >= DATE_SUB(DATE_FORMAT(NOW(), '%Y-%m-%d %H:00:00'), INTERVAL 1 HOUR) "
-				"AND `TradeTime` < DATE_FORMAT(NOW(), '%Y-%m-%d %H:00:00')";
+				" AND `TradeTime` >= DATE_SUB(NOW(), INTERVAL 1 HOUR) "
+				"AND `TradeTime` <= NOW()";
 			if (!QueryUInt64Scalar(boughtQuery, boughtQuantity)) {
 				mysql_query(connection_, "ROLLBACK");
 				failureReason = "failed to aggregate stock bought quantity";
@@ -717,7 +742,7 @@ public:
 
 			const std::string updateStock =
 				"UPDATE `Stock` SET `CurrentPrice` = " + std::to_string(newPrice) +
-				", `PriceUpdatedTime` = DATE_FORMAT(NOW(), '%Y-%m-%d %H:00:00') "
+				", `PriceUpdatedTime` = NOW() "
 				"WHERE `StockID` = " + std::to_string(target.stockId);
 			if (mysql_query(connection_, updateStock.c_str()) != 0) {
 				mysql_query(connection_, "ROLLBACK");
@@ -733,7 +758,7 @@ public:
 				std::to_string(newPrice) + ", " +
 				std::to_string(boughtQuantity) + ", " +
 				std::to_string(soldPressureQuantity) + ", '" +
-				escapedReason + "', DATE_FORMAT(NOW(), '%Y-%m-%d %H:00:00'))";
+				escapedReason + "', NOW())";
 			if (mysql_query(connection_, insertPrice.c_str()) != 0) {
 				mysql_query(connection_, "ROLLBACK");
 				failureReason = std::string("failed to insert stock price history: ") + mysql_error(connection_);
@@ -933,6 +958,51 @@ public:
 			for (PlayerSeeInfo& info : infos) {
 				const std::string escapedId = Escape(info.playerId);
 				if (!LoadSeeFinancialDetails(escapedId, info, failureReason))
+					return false;
+			}
+		}
+		return true;
+	}
+
+	bool LoadAllStockSeeInfos(bool detail, bool sortByCurrentPrice,
+		std::vector<StockSeeInfo>& infos, std::string& failureReason) {
+		infos.clear();
+		std::string query =
+			"SELECT `StockID`, `StockName`, `IssuerID`, `CurrentPrice`, "
+			"`TotalQuantity`, `UnsoldQuantity` FROM `Stock`";
+		if (sortByCurrentPrice)
+			query += " ORDER BY `CurrentPrice` DESC, `StockID` ASC";
+		else
+			query += " ORDER BY `StockID` ASC";
+
+		if (mysql_query(connection_, query.c_str()) != 0) {
+			failureReason = std::string("failed to select stocks: ") + mysql_error(connection_);
+			return false;
+		}
+		MYSQL_RES* result = mysql_store_result(connection_);
+		if (!result) {
+			failureReason = std::string("failed to read stocks: ") + mysql_error(connection_);
+			return false;
+		}
+
+		MYSQL_ROW row = nullptr;
+		while ((row = mysql_fetch_row(result)) != nullptr) {
+			StockSeeInfo info;
+			info.stockId = row[0] ? static_cast<std::uint32_t>(std::stoul(row[0])) : 0;
+			info.stockName = row[1] ? row[1] : "";
+			info.issuerId = row[2] ? row[2] : "";
+			info.currentPrice = row[3] ? std::stoull(row[3]) : 0;
+			info.totalQuantity = row[4] ? static_cast<std::uint32_t>(std::stoul(row[4])) : 0;
+			info.unsoldQuantity = row[5] ? static_cast<std::uint32_t>(std::stoul(row[5])) : 0;
+			if (info.stockId != 0) infos.push_back(info);
+		}
+		mysql_free_result(result);
+
+		if (detail) {
+			for (StockSeeInfo& info : infos) {
+				if (!LoadStockRecentPrices(info.stockId, info.recentPrices, failureReason))
+					return false;
+				if (!LoadStockTopHolders(info.stockId, info.topHolders, failureReason))
 					return false;
 			}
 		}
@@ -1345,6 +1415,64 @@ private:
 		}
 		MYSQL_ROW row = mysql_fetch_row(result);
 		if (row && row[0]) value = std::stoull(row[0]);
+		mysql_free_result(result);
+		return true;
+	}
+
+	bool LoadStockRecentPrices(std::uint32_t stockId,
+		std::vector<StockPriceSeeInfo>& prices, std::string& failureReason) {
+		prices.clear();
+		const std::string query =
+			"SELECT `PreviousPrice`, `NewPrice`, `BoughtQuantity`, `SoldQuantity`, `ChangedTime` "
+			"FROM `StockPrice` WHERE `StockID` = " + std::to_string(stockId) +
+			" ORDER BY `ChangedTime` DESC, `StockPriceID` DESC LIMIT 10";
+		if (mysql_query(connection_, query.c_str()) != 0) {
+			failureReason = std::string("failed to select stock prices: ") + mysql_error(connection_);
+			return false;
+		}
+		MYSQL_RES* result = mysql_store_result(connection_);
+		if (!result) {
+			failureReason = std::string("failed to read stock prices: ") + mysql_error(connection_);
+			return false;
+		}
+
+		MYSQL_ROW row = nullptr;
+		while ((row = mysql_fetch_row(result)) != nullptr) {
+			StockPriceSeeInfo price;
+			price.previousPrice = row[0] ? std::stoull(row[0]) : 0;
+			price.newPrice = row[1] ? std::stoull(row[1]) : 0;
+			price.boughtQuantity = row[2] ? std::stoull(row[2]) : 0;
+			price.soldQuantity = row[3] ? std::stoull(row[3]) : 0;
+			price.changedTime = row[4] ? row[4] : "";
+			prices.push_back(price);
+		}
+		mysql_free_result(result);
+		return true;
+	}
+
+	bool LoadStockTopHolders(std::uint32_t stockId,
+		std::vector<StockHolderSeeInfo>& holders, std::string& failureReason) {
+		holders.clear();
+		const std::string query =
+			"SELECT `PlayerID`, `Quantity` FROM `StockHolding` WHERE `StockID` = " +
+			std::to_string(stockId) + " ORDER BY `Quantity` DESC, `PlayerID` ASC LIMIT 3";
+		if (mysql_query(connection_, query.c_str()) != 0) {
+			failureReason = std::string("failed to select stock holders: ") + mysql_error(connection_);
+			return false;
+		}
+		MYSQL_RES* result = mysql_store_result(connection_);
+		if (!result) {
+			failureReason = std::string("failed to read stock holders: ") + mysql_error(connection_);
+			return false;
+		}
+
+		MYSQL_ROW row = nullptr;
+		while ((row = mysql_fetch_row(result)) != nullptr) {
+			StockHolderSeeInfo holder;
+			holder.playerId = row[0] ? row[0] : "";
+			holder.quantity = row[1] ? static_cast<std::uint32_t>(std::stoul(row[1])) : 0;
+			holders.push_back(holder);
+		}
 		mysql_free_result(result);
 		return true;
 	}
@@ -2102,6 +2230,59 @@ std::string FormatAllSeeResponse(const std::vector<PlayerSeeInfo>& infos,
 	return EscapeAdminLineResponse(output.str());
 }
 
+std::string FormatStockSeeResponse(const std::vector<StockSeeInfo>& infos,
+	const SeeCommandOptions& options) {
+	std::ostringstream output;
+	output << (options.detail ? "OK Stocks Detail" : "OK Stocks")
+		<< " count=" << infos.size();
+	for (std::size_t i = 0; i < infos.size(); ++i) {
+		const StockSeeInfo& info = infos[i];
+		const std::uint32_t saleableQuantity =
+			(info.totalQuantity > kIssuerInitialStockQuantity)
+			? (info.totalQuantity - kIssuerInitialStockQuantity) : info.totalQuantity;
+		const std::uint32_t soldQuantity =
+			(saleableQuantity > info.unsoldQuantity)
+			? (saleableQuantity - info.unsoldQuantity) : 0;
+
+		output << '\n' << (i + 1) << ". "
+			<< "StockID: " << info.stockId
+			<< " | Name: " << info.stockName
+			<< " | Issuer: " << info.issuerId
+			<< " | Price: " << info.currentPrice
+			<< " | Sold: " << soldQuantity << "/" << saleableQuantity;
+
+		if (!options.detail) continue;
+
+		output << '\n' << "  RecentPrices:";
+		if (info.recentPrices.empty()) {
+			output << " none";
+		}
+		else {
+			for (const StockPriceSeeInfo& price : info.recentPrices) {
+				output << '\n'
+					<< "    " << price.changedTime
+					<< " | " << price.previousPrice << " -> " << price.newPrice
+					<< " | Bought: " << price.boughtQuantity
+					<< " | SoldPressure: " << price.soldQuantity;
+			}
+		}
+
+		output << '\n' << "  TopHolders:";
+		if (info.topHolders.empty()) {
+			output << " none";
+		}
+		else {
+			for (std::size_t holderIndex = 0; holderIndex < info.topHolders.size(); ++holderIndex) {
+				const StockHolderSeeInfo& holder = info.topHolders[holderIndex];
+				output << '\n'
+					<< "    " << (holderIndex + 1) << ". "
+					<< holder.playerId << ": " << holder.quantity;
+			}
+		}
+	}
+	return EscapeAdminLineResponse(output.str());
+}
+
 bool HasAuthenticatedSessions(const std::vector<ClientSession>& sessions) {
 	for (const ClientSession& session : sessions) {
 		if (session.authenticated && session.socket != INVALID_SOCKET) return true;
@@ -2117,13 +2298,20 @@ std::string ExecuteAdminCommand(const std::string& command, Database& database,
 	if (ToUpperAscii(commandName) == "SEE") {
 		std::string playerId;
 		input >> playerId;
-		if (playerId.empty()) return "FAIL usage: see {playerId|_allplayer} [D] [I] [M]";
+		if (playerId.empty()) return "FAIL usage: see {playerId|_allplayer|_stock} [D] [I] [M]";
 
 		SeeCommandOptions options;
 		if (!ParseSeeOptions(input, options))
 			return "FAIL invalid see option";
 
 		std::string reason;
+		if (playerId == "_stock") {
+			std::vector<StockSeeInfo> infos;
+			if (!database.LoadAllStockSeeInfos(options.detail, options.sortByMoney, infos, reason))
+				return "FAIL " + reason;
+			return FormatStockSeeResponse(infos, options);
+		}
+
 		if (playerId == "_allplayer") {
 			std::vector<PlayerSeeInfo> infos;
 			if (!database.LoadAllPlayerSeeInfos(options.detail, options.onlineOnly,
@@ -2152,6 +2340,19 @@ std::string ExecuteAdminCommand(const std::string& command, Database& database,
 		if (!database.SetPlayerActive(playerId, active, reason))
 			return "FAIL " + reason;
 		return "OK active " + playerId + " " + OnlineText(active);
+	}
+	if (ToUpperAscii(commandName) == "UPDATE") {
+		std::string targetText;
+		std::string extra;
+		input >> targetText >> extra;
+		if (ToUpperAscii(targetText) != "STOCK" || !extra.empty())
+			return "FAIL usage: update stock";
+
+		int updatedCount = 0;
+		std::string reason;
+		if (!database.UpdateStockPrices(true, updatedCount, reason))
+			return "FAIL " + reason;
+		return "OK update stock updated=" + std::to_string(updatedCount);
 	}
 	if (ToUpperAscii(commandName) == "DELETEPLAYER") {
 		std::string playerId;
@@ -2583,7 +2784,7 @@ void RunStockPriceUpdateServer() {
 
 		int updatedCount = 0;
 		std::string failureReason;
-		if (stockDatabase.UpdateStockPricesAtCurrentHour(updatedCount, failureReason)) {
+		if (stockDatabase.UpdateStockPrices(false, updatedCount, failureReason)) {
 			if (updatedCount > 0)
 				std::cout << "[StockPriceUpdate] updated=" << updatedCount << '\n';
 		}
