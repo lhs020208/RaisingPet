@@ -96,14 +96,15 @@ private:
 
 	enum class SHOP_PAGE
 	{
-		SLOT_MENU,
-		SLOT_CONTENT_1,
-		SLOT_CONTENT_2,
-		SLOT_CONTENT_3,
-		SLOT_CONTENT_4,
-		STOCK_CONTENT_1,
-		STOCK_CONTENT_2,
-		STOCK_CONTENT_3
+		SHOP_MENU,
+		PET_CHANGE,
+		PET_ENHANCE,
+		BANK,
+		STOCK_MENU,
+		STOCK_TRANSACTION,
+		STOCK_CANT_PUBLISH,
+		STOCK_MANAGEMENT,
+		STOCK_SEE_MYGRAPH
 	};
 
 	ID3D12PipelineState* m_pd3dUiImagePipelineState = NULL;
@@ -141,7 +142,7 @@ private:
 	UI_IMAGE_RESOURCE m_IssuanceStockResource;
 
 	bool m_bShopActive = false;
-	SHOP_PAGE m_eShopPage = SHOP_PAGE::SLOT_MENU;
+	SHOP_PAGE m_eShopPage = SHOP_PAGE::SHOP_MENU;
 	int m_nSelectedShopSlot = -1;
 	bool m_bShopBoardDragging = false;
 	bool m_bResetShopPositionOnNextOpen = false;

@@ -519,7 +519,7 @@ void CShopUI::ReleaseObjects()
 
 void CShopUI::Animate(float elapsedTime)
 {
-	if (m_bShopActive && m_eShopPage == SHOP_PAGE::SLOT_CONTENT_1 && m_pPreviewPet)
+	if (m_bShopActive && m_eShopPage == SHOP_PAGE::PET_CHANGE && m_pPreviewPet)
 		m_pPreviewPet->AnimateWithoutMovement(elapsedTime);
 	if (m_bStockNameInputActive)
 	{
@@ -1297,15 +1297,15 @@ bool CShopUI::ProcessStockMenuClick(float x, float y, float width, float height)
 {
 	if (IsPointInRectangle(x, y, GetStockSlotRectangle(0, width, height)))
 	{
-		m_eShopPage = SHOP_PAGE::STOCK_CONTENT_1;
+		m_eShopPage = SHOP_PAGE::STOCK_TRANSACTION;
 		m_bStockNameInputActive = false;
 		return(true);
 	}
 	if (IsPointInRectangle(x, y, GetStockSlotRectangle(1, width, height)))
 	{
-		m_eShopPage = m_bStockCreationAvailable ? SHOP_PAGE::STOCK_CONTENT_2 : SHOP_PAGE::STOCK_CONTENT_3;
+		m_eShopPage = m_bStockCreationAvailable ? SHOP_PAGE::STOCK_MANAGEMENT : SHOP_PAGE::STOCK_CANT_PUBLISH;
 		m_bStockNameInputActive = false;
-		if (m_eShopPage == SHOP_PAGE::STOCK_CONTENT_2)
+		if (m_eShopPage == SHOP_PAGE::STOCK_MANAGEMENT)
 			m_bPendingStockManagementInfoRequest = true;
 		return(true);
 	}
@@ -1369,7 +1369,7 @@ void CShopUI::Render(ID3D12GraphicsCommandList* commandList, CCamera* camera, UI
 	{
 		RenderUiImage(commandList, camera, m_ShopBoardResource,
 			GetShopBoardRectangle(width, height, m_xmf2ShopBoardOffset.x, m_xmf2ShopBoardOffset.y));
-		if (m_eShopPage == SHOP_PAGE::SLOT_MENU)
+		if (m_eShopPage == SHOP_PAGE::SHOP_MENU)
 		{
 			for (int i = 0; i < 4; ++i)
 			{
@@ -1394,7 +1394,7 @@ void CShopUI::Render(ID3D12GraphicsCommandList* commandList, CCamera* camera, UI
 					(alpha << 24) | 0x00FFFFFF);
 			}
 		}
-		else if (m_eShopPage == SHOP_PAGE::SLOT_CONTENT_1)
+		else if (m_eShopPage == SHOP_PAGE::PET_CHANGE)
 		{
 			const XMFLOAT4 leftPanel = GetPetContentPanelRectangle(false, width, height,
 				m_xmf2ShopBoardOffset.x, m_xmf2ShopBoardOffset.y);
@@ -1427,24 +1427,24 @@ void CShopUI::Render(ID3D12GraphicsCommandList* commandList, CCamera* camera, UI
 					leftPanel.y + rowHeight * row + rowHeight * 0.15f, glyphScale, 0x00000000, context);
 			}
 		}
-		else if (m_eShopPage == SHOP_PAGE::SLOT_CONTENT_2)
+		else if (m_eShopPage == SHOP_PAGE::PET_ENHANCE)
 		{
 			CPet* activePet = (activePetIndex < pets.size()) ? pets[activePetIndex].pPet : NULL;
 			RenderEnhancementPage(commandList, camera, activePet, money, context);
 		}
-		else if (m_eShopPage == SHOP_PAGE::SLOT_CONTENT_3)
+		else if (m_eShopPage == SHOP_PAGE::BANK)
 		{
 			RenderFinancialPage(commandList, camera, context);
 		}
-		else if (m_eShopPage == SHOP_PAGE::SLOT_CONTENT_4)
+		else if (m_eShopPage == SHOP_PAGE::STOCK_MENU)
 		{
 			RenderStockMenuPage(commandList, camera);
 		}
-		else if (m_eShopPage == SHOP_PAGE::STOCK_CONTENT_2)
+		else if (m_eShopPage == SHOP_PAGE::STOCK_MANAGEMENT)
 		{
 			RenderStockManagementPage(commandList, camera);
 		}
-		else if (m_eShopPage == SHOP_PAGE::STOCK_CONTENT_3)
+		else if (m_eShopPage == SHOP_PAGE::STOCK_CANT_PUBLISH)
 		{
 			RenderCantCreateStockPage(commandList, camera, context);
 		}
@@ -1727,7 +1727,7 @@ bool CShopUI::ProcessShopUIClick(float x, float y, float width, float height, UI
 				m_bResetShopPositionOnNextOpen = false;
 			}
 			m_bShopActive = true;
-			m_eShopPage = SHOP_PAGE::SLOT_MENU;
+			m_eShopPage = SHOP_PAGE::SHOP_MENU;
 			m_nSelectedShopSlot = -1;
 			m_bStockNameInputActive = false;
 			ResetSelectedPet(activePetIndex, petCount);
@@ -1738,19 +1738,20 @@ bool CShopUI::ProcessShopUIClick(float x, float y, float width, float height, UI
 	if (IsPointInRectangle(x, y,
 		GetShopBackRectangle(width, height, m_xmf2ShopBoardOffset.x, m_xmf2ShopBoardOffset.y)))
 	{
-		if (m_eShopPage == SHOP_PAGE::SLOT_MENU) DeactivateShop(width, height, activePetIndex);
-		else if (m_eShopPage == SHOP_PAGE::STOCK_CONTENT_1
-			|| m_eShopPage == SHOP_PAGE::STOCK_CONTENT_2
-			|| m_eShopPage == SHOP_PAGE::STOCK_CONTENT_3)
+		if (m_eShopPage == SHOP_PAGE::SHOP_MENU) DeactivateShop(width, height, activePetIndex);
+		else if (m_eShopPage == SHOP_PAGE::STOCK_TRANSACTION
+			|| m_eShopPage == SHOP_PAGE::STOCK_MANAGEMENT
+			|| m_eShopPage == SHOP_PAGE::STOCK_CANT_PUBLISH
+			|| m_eShopPage == SHOP_PAGE::STOCK_SEE_MYGRAPH)
 		{
-			m_eShopPage = SHOP_PAGE::SLOT_CONTENT_4;
+			m_eShopPage = SHOP_PAGE::STOCK_MENU;
 			m_nPressedEnhanceButton = -1;
 			m_bStockNameInputActive = false;
 			m_bStockIssueButtonPressed = false;
 		}
 		else
 		{
-			m_eShopPage = SHOP_PAGE::SLOT_MENU;
+			m_eShopPage = SHOP_PAGE::SHOP_MENU;
 			m_nSelectedShopSlot = -1;
 			m_nPressedEnhanceButton = -1;
 			m_bStockNameInputActive = false;
@@ -1759,7 +1760,7 @@ bool CShopUI::ProcessShopUIClick(float x, float y, float width, float height, UI
 		}
 		return(true);
 	}
-	if (m_eShopPage == SHOP_PAGE::SLOT_MENU)
+	if (m_eShopPage == SHOP_PAGE::SHOP_MENU)
 	{
 		if (!networkConnected && IsPointInRectangle(x, y, GetShopNetworkIconRectangle(width, height,
 			m_xmf2ShopBoardOffset.x, m_xmf2ShopBoardOffset.y)))
@@ -1776,15 +1777,22 @@ bool CShopUI::ProcessShopUIClick(float x, float y, float width, float height, UI
 				SpawnNetworkErrorLog(width, height, i);
 				return(true);
 			}
-			m_eShopPage = static_cast<SHOP_PAGE>(static_cast<int>(SHOP_PAGE::SLOT_CONTENT_1) + i);
+			switch (i)
+			{
+			case 0: m_eShopPage = SHOP_PAGE::PET_CHANGE; break;
+			case 1: m_eShopPage = SHOP_PAGE::PET_ENHANCE; break;
+			case 2: m_eShopPage = SHOP_PAGE::BANK; break;
+			case 3: m_eShopPage = SHOP_PAGE::STOCK_MENU; break;
+			default: m_eShopPage = SHOP_PAGE::SHOP_MENU; break;
+			}
 			m_nSelectedShopSlot = i;
 			m_bStockNameInputActive = false;
-			if (m_eShopPage == SHOP_PAGE::SLOT_CONTENT_1)
+			if (m_eShopPage == SHOP_PAGE::PET_CHANGE)
 				ResetSelectedPet(activePetIndex, petCount);
 			return(true);
 		}
 	}
-	else if (m_eShopPage == SHOP_PAGE::SLOT_CONTENT_1)
+	else if (m_eShopPage == SHOP_PAGE::PET_CHANGE)
 	{
 		const XMFLOAT4 left = GetPetContentPanelRectangle(false, width, height,
 			m_xmf2ShopBoardOffset.x, m_xmf2ShopBoardOffset.y);
@@ -1808,7 +1816,7 @@ bool CShopUI::ProcessShopUIClick(float x, float y, float width, float height, UI
 		}
 		if (IsPointInRectangle(x, y, left) || IsPointInRectangle(x, y, right)) return(true);
 	}
-	else if (m_eShopPage == SHOP_PAGE::SLOT_CONTENT_2)
+	else if (m_eShopPage == SHOP_PAGE::PET_ENHANCE)
 	{
 		const XMFLOAT4 left = GetPetContentPanelRectangle(false, width, height,
 			m_xmf2ShopBoardOffset.x, m_xmf2ShopBoardOffset.y);
@@ -1816,11 +1824,11 @@ bool CShopUI::ProcessShopUIClick(float x, float y, float width, float height, UI
 			m_xmf2ShopBoardOffset.x, m_xmf2ShopBoardOffset.y);
 		if (IsPointInRectangle(x, y, left) || IsPointInRectangle(x, y, right)) return(true);
 	}
-	else if (m_eShopPage == SHOP_PAGE::SLOT_CONTENT_3)
+	else if (m_eShopPage == SHOP_PAGE::BANK)
 	{
 		if (ProcessFinancialClick(x, y, width, height)) return(true);
 	}
-	else if (m_eShopPage == SHOP_PAGE::SLOT_CONTENT_4)
+	else if (m_eShopPage == SHOP_PAGE::STOCK_MENU)
 	{
 		if (ProcessStockMenuClick(x, y, width, height)) return(true);
 	}
@@ -1829,7 +1837,7 @@ bool CShopUI::ProcessShopUIClick(float x, float y, float width, float height, UI
 
 bool CShopUI::OnProcessingKeyboardMessage(HWND hWnd, UINT message, WPARAM wParam, LPARAM)
 {
-	if (!m_bShopActive || m_eShopPage != SHOP_PAGE::STOCK_CONTENT_2 || !m_bStockNameInputActive
+	if (!m_bShopActive || m_eShopPage != SHOP_PAGE::STOCK_MANAGEMENT || !m_bStockNameInputActive
 		|| m_bStockIssued)
 		return(false);
 
@@ -1914,7 +1922,7 @@ bool CShopUI::OnProcessingMouseMessage(HWND hWnd, UINT message, WPARAM wParam, L
 	switch (message)
 	{
 	case WM_MOUSEWHEEL:
-		if (m_bShopActive && m_eShopPage == SHOP_PAGE::SLOT_CONTENT_1)
+		if (m_bShopActive && m_eShopPage == SHOP_PAGE::PET_CHANGE)
 		{
 			const XMFLOAT4 panel = GetPetContentPanelRectangle(false, width, height,
 				m_xmf2ShopBoardOffset.x, m_xmf2ShopBoardOffset.y);
@@ -1935,7 +1943,7 @@ bool CShopUI::OnProcessingMouseMessage(HWND hWnd, UINT message, WPARAM wParam, L
 		break;
 	case WM_LBUTTONDOWN:
 		RebuildPetScrollMetricsIfNeeded(nPetCount);
-		if (m_bShopActive && m_eShopPage == SHOP_PAGE::STOCK_CONTENT_2)
+		if (m_bShopActive && m_eShopPage == SHOP_PAGE::STOCK_MANAGEMENT)
 		{
 			if (!m_bStockIssued &&
 				IsPointInRectangle(x, y, GetStockIssuanceButtonRectangle(width, height)))
@@ -1957,7 +1965,7 @@ bool CShopUI::OnProcessingMouseMessage(HWND hWnd, UINT message, WPARAM wParam, L
 			}
 			m_bStockNameInputActive = false;
 		}
-		if (m_bShopActive && m_eShopPage == SHOP_PAGE::SLOT_CONTENT_2)
+		if (m_bShopActive && m_eShopPage == SHOP_PAGE::PET_ENHANCE)
 		{
 			for (int type = 0; type < 2; ++type)
 			{
@@ -1967,7 +1975,7 @@ bool CShopUI::OnProcessingMouseMessage(HWND hWnd, UINT message, WPARAM wParam, L
 				return(true);
 			}
 		}
-		if (m_bShopActive && m_eShopPage == SHOP_PAGE::SLOT_CONTENT_1
+		if (m_bShopActive && m_eShopPage == SHOP_PAGE::PET_CHANGE
 			&& m_nMaximumPetScrollOffset > 0
 			&& IsPointInRectangle(x, y, GetPetScrollThumbRectangle(width, height)))
 		{
@@ -2046,7 +2054,7 @@ bool CShopUI::OnProcessingMouseMessage(HWND hWnd, UINT message, WPARAM wParam, L
 		if (m_bStockIssueButtonPressed)
 		{
 			m_bStockIssueButtonPressed = false;
-			if (m_bShopActive && m_eShopPage == SHOP_PAGE::STOCK_CONTENT_2
+			if (m_bShopActive && m_eShopPage == SHOP_PAGE::STOCK_MANAGEMENT
 				&& IsPointInRectangle(x, y, GetStockIssuanceButtonRectangle(width, height))
 				&& !m_wstrStockName.empty())
 			{
@@ -2060,7 +2068,7 @@ bool CShopUI::OnProcessingMouseMessage(HWND hWnd, UINT message, WPARAM wParam, L
 		{
 			const int pressedButton = m_nPressedEnhanceButton;
 			m_nPressedEnhanceButton = -1;
-			if (m_bShopActive && m_eShopPage == SHOP_PAGE::SLOT_CONTENT_2
+			if (m_bShopActive && m_eShopPage == SHOP_PAGE::PET_ENHANCE
 				&& IsPointInRectangle(x, y, GetEnhanceButtonRectangle(pressedButton, width, height)))
 				m_nPendingEnhancementType = pressedButton;
 			if (GetCapture() == hWnd) ReleaseCapture();
