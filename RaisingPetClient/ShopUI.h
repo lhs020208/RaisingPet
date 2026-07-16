@@ -50,11 +50,13 @@ public:
 	bool ConsumePetConfirmationRequest(size_t& nSelectedPetIndex);
 	bool ConsumePetEnhancementRequest(int& nEnhancementType);
 	bool ConsumeFinancialProductRequest(int& nCategory, int& nProductIndex);
+	bool ConsumeStockIssueRequest(std::wstring& stockName);
 	bool ConsumeLoginSceneReturnRequest();
 	void SetFinancialProductActive(int nCategory, int nProductIndex, UINT nDurationSeconds);
 	void ClearFinancialProductActive(int nCategory, int nProductIndex);
 	void SetFinancialMaximumProductIndex(int nCategory, int nProductIndex);
 	void SetFinancialProgressCount(int nCategory, int nProgressCount);
+	void SetStockIssued(bool bIssued);
 
 private:
 	struct UI_IMAGE_RESOURCE
@@ -152,6 +154,10 @@ private:
 	size_t m_nStockNameCursorIndex = 0;
 	bool m_bStockNameInputActive = false;
 	float m_fStockNameCursorBlinkElapsed = 0.0f;
+	bool m_bStockIssueButtonPressed = false;
+	bool m_bStockIssued = false;
+	bool m_bPendingStockIssueRequest = false;
+	std::wstring m_wstrPendingStockIssueName;
 	std::vector<SHOP_NETWORK_ERROR_LOG> m_NetworkErrorLogs;
 
 	void RenderUiImage(ID3D12GraphicsCommandList* pd3dCommandList, CCamera* pCamera,
@@ -189,6 +195,7 @@ private:
 	void RenderStockMenuPage(ID3D12GraphicsCommandList* pd3dCommandList, CCamera* pCamera);
 	void RenderStockManagementPage(ID3D12GraphicsCommandList* pd3dCommandList, CCamera* pCamera);
 	XMFLOAT4 GetStockNameInputRectangle(float fViewportWidth, float fViewportHeight) const;
+	XMFLOAT4 GetStockIssuanceButtonRectangle(float fViewportWidth, float fViewportHeight) const;
 	float GetStockNameInputFontSize(float fViewportWidth, float fViewportHeight) const;
 	float MeasureStockNameTextWidth(const std::wstring& text, float fFontSize, float fAvailableWidth,
 		float fAvailableHeight) const;

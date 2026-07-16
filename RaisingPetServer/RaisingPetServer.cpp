@@ -1,5 +1,6 @@
 #include <WinSock2.h>
 #include <WS2tcpip.h>
+#include <Windows.h>
 #include <mysql.h>
 #include <errmsg.h>
 #include <mysqld_error.h>
@@ -27,6 +28,11 @@ constexpr const char* kDbUser = "raisingpet_server";
 constexpr const char* kDbPassword = "12345678";
 constexpr const char* kDbName = "RaisingPet";
 constexpr unsigned int kDbPort = 3306;
+constexpr std::uint64_t kStockIssuancePrice = 50000;
+constexpr std::uint64_t kInitialStockPrice = 100;
+constexpr std::uint32_t kStockTotalQuantity = 1000;
+constexpr std::uint32_t kIssuerInitialStockQuantity = 200;
+constexpr std::uint32_t kInitialUnsoldStockQuantity = 800;
 
 enum class PacketType : std::uint16_t {
 	RegisterRequest = 1,
@@ -41,6 +47,8 @@ enum class PacketType : std::uint16_t {
 	LoanApplyResponse = 10,
 	FinancialProductCompleted = 11,
 	FinancialProductActive = 12,
+	StockIssueRequest = 13,
+	StockIssueResponse = 14,
 	AdminLoginRequest = 100,
 	AdminLoginResponse = 101,
 };
@@ -71,6 +79,15 @@ enum class FinancialCategory : std::uint8_t {
 	Loan = 1,
 };
 
+enum class StockIssueResult : std::uint8_t {
+	Success = 0,
+	InvalidRequest = 1,
+	NotAuthenticated = 2,
+	AlreadyIssued = 3,
+	NotEnoughMoney = 4,
+	DatabaseError = 5,
+};
+
 struct FinancialApplicationResult {
 	FinancialResult result = FinancialResult::DatabaseError;
 	std::uint32_t productId = 0;
@@ -91,6 +108,12 @@ struct FinancialActiveStatus {
 	FinancialCategory category = FinancialCategory::Savings;
 	std::uint32_t productId = 0;
 	std::uint32_t remainingSeconds = 0;
+};
+
+struct StockIssueApplicationResult {
+	StockIssueResult result = StockIssueResult::DatabaseError;
+	std::uint64_t finalMoney = 0;
+	std::uint32_t stockId = 0;
 };
 
 struct FinancialClearResult {
@@ -179,6 +202,11 @@ public:
 		if (!mysql_real_connect(connection_, kDbHost, kDbUser, kDbPassword, kDbName,
 			kDbPort, nullptr, 0)) {
 			std::cerr << "MySQL connection failed: " << mysql_error(connection_) << '\n';
+			Disconnect();
+			return false;
+		}
+		if (mysql_set_character_set(connection_, "utf8mb4") != 0) {
+			std::cerr << "mysql_set_character_set failed: " << mysql_error(connection_) << '\n';
 			Disconnect();
 			return false;
 		}
@@ -486,6 +514,94 @@ public:
 		application.durationSeconds = duration;
 		application.moneyDelta = static_cast<std::int64_t>(borrowMoney);
 		application.finalMoney = finalMoney;
+		return application;
+	}
+
+	StockIssueApplicationResult IssueStock(const std::string& id,
+		const std::string& stockName) {
+		StockIssueApplicationResult application;
+		if (!IsAccountTextValid(id, 32) || !IsStockNameTextValid(stockName))
+			return WithStockIssueResult(application, StockIssueResult::InvalidRequest);
+
+		const std::string escapedId = Escape(id);
+		const std::string escapedStockName = Escape(stockName);
+		if (mysql_query(connection_, "START TRANSACTION") != 0)
+			return WithStockDatabaseError(application, "IssueStock start transaction");
+
+		std::uint64_t currentMoney = 0;
+		bool isOnline = false;
+		if (!LoadPlayerMoneyForUpdate(escapedId, currentMoney, isOnline)) {
+			mysql_query(connection_, "ROLLBACK");
+			return WithStockDatabaseError(application, "IssueStock select player");
+		}
+		application.finalMoney = currentMoney;
+		if (!isOnline) {
+			mysql_query(connection_, "ROLLBACK");
+			return WithStockIssueResult(application, StockIssueResult::NotAuthenticated);
+		}
+
+		if (HasIssuedStockForUpdate(escapedId)) {
+			mysql_query(connection_, "ROLLBACK");
+			return WithStockIssueResult(application, StockIssueResult::AlreadyIssued);
+		}
+
+		if (currentMoney < kStockIssuancePrice) {
+			mysql_query(connection_, "ROLLBACK");
+			return WithStockIssueResult(application, StockIssueResult::NotEnoughMoney);
+		}
+
+		const std::uint64_t finalMoney = currentMoney - kStockIssuancePrice;
+		const std::string updateMoney =
+			"UPDATE `Player` SET `Money` = " + std::to_string(finalMoney) +
+			" WHERE `PlayerID` = '" + escapedId + "'";
+		if (mysql_query(connection_, updateMoney.c_str()) != 0) {
+			mysql_query(connection_, "ROLLBACK");
+			return WithStockDatabaseError(application, "IssueStock update money");
+		}
+
+		const std::string insertStock =
+			"INSERT INTO `Stock` (`StockName`, `IssuerID`, `CurrentPrice`, `TotalQuantity`, "
+			"`UnsoldQuantity`, `PriceUpdatedTime`) VALUES ('" +
+			escapedStockName + "', '" + escapedId + "', " +
+			std::to_string(kInitialStockPrice) + ", " +
+			std::to_string(kStockTotalQuantity) + ", " +
+			std::to_string(kInitialUnsoldStockQuantity) + ", NOW())";
+		if (mysql_query(connection_, insertStock.c_str()) != 0) {
+			const unsigned int error = mysql_errno(connection_);
+			mysql_query(connection_, "ROLLBACK");
+			if (error == ER_DUP_ENTRY)
+				return WithStockIssueResult(application, StockIssueResult::AlreadyIssued);
+			return WithStockDatabaseError(application, "IssueStock insert stock");
+		}
+
+		const std::uint32_t stockId = static_cast<std::uint32_t>(mysql_insert_id(connection_));
+		const std::string insertHolding =
+			"INSERT INTO `StockHolding` (`PlayerID`, `StockID`, `Quantity`) VALUES ('" +
+			escapedId + "', " + std::to_string(stockId) + ", " +
+			std::to_string(kIssuerInitialStockQuantity) + ")";
+		if (mysql_query(connection_, insertHolding.c_str()) != 0) {
+			mysql_query(connection_, "ROLLBACK");
+			return WithStockDatabaseError(application, "IssueStock insert holding");
+		}
+
+		const std::string insertPrice =
+			"INSERT INTO `StockPrice` (`StockID`, `PreviousPrice`, `NewPrice`, "
+			"`BoughtQuantity`, `SoldQuantity`, `ChangeReason`, `ChangedTime`) VALUES (" +
+			std::to_string(stockId) + ", " + std::to_string(kInitialStockPrice) + ", " +
+			std::to_string(kInitialStockPrice) + ", 0, 0, 'ISSUANCE', NOW())";
+		if (mysql_query(connection_, insertPrice.c_str()) != 0) {
+			mysql_query(connection_, "ROLLBACK");
+			return WithStockDatabaseError(application, "IssueStock insert price");
+		}
+
+		if (mysql_query(connection_, "COMMIT") != 0) {
+			mysql_query(connection_, "ROLLBACK");
+			return WithStockDatabaseError(application, "IssueStock commit");
+		}
+
+		application.result = StockIssueResult::Success;
+		application.finalMoney = finalMoney;
+		application.stockId = stockId;
 		return application;
 	}
 
@@ -974,11 +1090,32 @@ private:
 		return result;
 	}
 
+	static StockIssueApplicationResult WithStockIssueResult(
+		StockIssueApplicationResult result, StockIssueResult stockResult) {
+		result.result = stockResult;
+		return result;
+	}
+
+	StockIssueApplicationResult WithStockDatabaseError(StockIssueApplicationResult result,
+		const char* context) {
+		std::cerr << context << " failed: " << mysql_error(connection_) << '\n';
+		result.result = StockIssueResult::DatabaseError;
+		return result;
+	}
+
 	static bool IsAccountTextValid(const std::string& text, std::size_t maxLength) {
 		if (text.empty() || text.size() > maxLength) return false;
 		for (const char ch : text) {
 			if (!((ch >= 'A' && ch <= 'Z') || (ch >= 'a' && ch <= 'z') ||
 				(ch >= '0' && ch <= '9'))) return false;
+		}
+		return true;
+	}
+
+	static bool IsStockNameTextValid(const std::string& text) {
+		if (text.empty() || text.size() > 150) return false;
+		for (unsigned char ch : text) {
+			if (ch < 0x20 || ch == 0x7F) return false;
 		}
 		return true;
 	}
@@ -989,6 +1126,21 @@ private:
 			escapedId + "' LIMIT 1 FOR UPDATE";
 		if (mysql_query(connection_, query.c_str()) != 0) {
 			std::cerr << "HasActiveRow failed: " << mysql_error(connection_) << '\n';
+			return true;
+		}
+		MYSQL_RES* result = mysql_store_result(connection_);
+		if (!result) return true;
+		const bool exists = mysql_fetch_row(result) != nullptr;
+		mysql_free_result(result);
+		return exists;
+	}
+
+	bool HasIssuedStockForUpdate(const std::string& escapedId) {
+		const std::string query =
+			"SELECT `StockID` FROM `Stock` WHERE `IssuerID` = '" + escapedId +
+			"' LIMIT 1 FOR UPDATE";
+		if (mysql_query(connection_, query.c_str()) != 0) {
+			std::cerr << "HasIssuedStockForUpdate failed: " << mysql_error(connection_) << '\n';
 			return true;
 		}
 		MYSQL_RES* result = mysql_store_result(connection_);
@@ -1433,6 +1585,19 @@ bool ParseAuthRequest(const std::vector<char>& payload, AuthRequest& request) {
 	return true;
 }
 
+bool ParseStockIssueRequest(const std::vector<char>& payload, std::string& stockName) {
+	if (payload.size() < sizeof(std::uint16_t)) return false;
+	const std::uint16_t stockNameLength = ReadUInt16(payload.data());
+	if (stockNameLength == 0 || stockNameLength > 150) return false;
+	if (payload.size() != sizeof(std::uint16_t) + stockNameLength) return false;
+	stockName.assign(payload.data() + sizeof(std::uint16_t),
+		payload.data() + sizeof(std::uint16_t) + stockNameLength);
+	for (unsigned char ch : stockName) {
+		if (ch < 0x20 || ch == 0x7F) return false;
+	}
+	return true;
+}
+
 std::vector<char> MakePacketWithResult(PacketType type, AuthResult result) {
 	std::vector<char> packet;
 	packet.reserve(sizeof(PacketHeader) + 1);
@@ -1498,6 +1663,19 @@ std::vector<char> MakeFinancialProductActivePacket(const FinancialActiveStatus& 
 	packet.push_back(static_cast<char>(status.category));
 	WriteUInt32(packet, status.productId);
 	WriteUInt32(packet, status.remainingSeconds);
+	return packet;
+}
+
+std::vector<char> MakeStockIssueResponse(const StockIssueApplicationResult& result) {
+	std::vector<char> packet;
+	const std::uint16_t packetSize = static_cast<std::uint16_t>(
+		sizeof(PacketHeader) + 1 + sizeof(std::uint64_t) + sizeof(std::uint32_t));
+	packet.reserve(packetSize);
+	WriteUInt16(packet, packetSize);
+	WriteUInt16(packet, static_cast<std::uint16_t>(PacketType::StockIssueResponse));
+	packet.push_back(static_cast<char>(result.result));
+	WriteUInt64(packet, result.finalMoney);
+	WriteUInt32(packet, result.stockId);
 	return packet;
 }
 
@@ -2075,6 +2253,31 @@ void ProcessPacket(Database& database, ClientSession& session,
 		return;
 	}
 
+	if (packetType == PacketType::StockIssueRequest) {
+		if (!session.authenticated) {
+			StockIssueApplicationResult result;
+			result.result = StockIssueResult::NotAuthenticated;
+			QueuePacket(session, MakeStockIssueResponse(result));
+			return;
+		}
+		std::string stockName;
+		if (!ParseStockIssueRequest(payload, stockName)) {
+			StockIssueApplicationResult result;
+			result.result = StockIssueResult::InvalidRequest;
+			QueuePacket(session, MakeStockIssueResponse(result));
+			return;
+		}
+		const StockIssueApplicationResult result =
+			database.IssueStock(session.playerId, stockName);
+		QueuePacket(session, MakeStockIssueResponse(result));
+		std::cout << "[StockIssue] " << session.playerId
+			<< " stockName=" << stockName
+			<< " result=" << static_cast<int>(result.result)
+			<< " stockId=" << result.stockId
+			<< " money=" << result.finalMoney << '\n';
+		return;
+	}
+
 	AuthRequest request;
 	if (!ParseAuthRequest(payload, request)) {
 		const PacketType responseType = (packetType == PacketType::RegisterRequest)
@@ -2126,7 +2329,8 @@ bool ProcessReceiveBuffer(Database& database, ClientSession& session) {
 		if (packetType != PacketType::RegisterRequest && packetType != PacketType::LoginRequest &&
 			packetType != PacketType::MoneyUpdate &&
 			packetType != PacketType::SavingsJoinRequest &&
-			packetType != PacketType::LoanApplyRequest)
+			packetType != PacketType::LoanApplyRequest &&
+			packetType != PacketType::StockIssueRequest)
 			return false;
 		ProcessPacket(database, session, packetType, payload);
 	}
@@ -2135,6 +2339,9 @@ bool ProcessReceiveBuffer(Database& database, ClientSession& session) {
 } // namespace
 
 int main(int argc, char* argv[]) {
+	SetConsoleOutputCP(CP_UTF8);
+	SetConsoleCP(CP_UTF8);
+
 	unsigned short port = kDefaultPort;
 	if (argc > 2 || (argc == 2 && !TryParsePort(argv[1], port))) {
 		std::cerr << "Usage: RaisingPetServer.exe [port]\n";

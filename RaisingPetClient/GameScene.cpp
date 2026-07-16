@@ -41,6 +41,18 @@ void TransformLocalPlayerStatusPayload(std::vector<unsigned char>& data)
 	}
 }
 
+std::string WideStringToUtf8(const std::wstring& text)
+{
+	if (text.empty()) return(std::string());
+	const int requiredBytes = WideCharToMultiByte(CP_UTF8, 0, text.c_str(),
+		static_cast<int>(text.size()), NULL, 0, NULL, NULL);
+	if (requiredBytes <= 0) return(std::string());
+	std::string utf8(static_cast<size_t>(requiredBytes), '\0');
+	WideCharToMultiByte(CP_UTF8, 0, text.c_str(), static_cast<int>(text.size()),
+		&utf8[0], requiredBytes, NULL, NULL);
+	return(utf8);
+}
+
 void AppendUInt(std::vector<unsigned char>& data, UINT value)
 {
 	for (int i = 0; i < 4; ++i)
@@ -942,6 +954,12 @@ void CGameScene::OnProcessingMouseMessage(HWND hWnd, UINT nMessageID, WPARAM wPa
 		else if (nFinancialCategory == 1)
 			g_pFramework->GetNetworkManager().SendLoanApplyRequest(nProductId);
 	}
+	std::wstring wstrStockName;
+	if (m_ShopUI.ConsumeStockIssueRequest(wstrStockName))
+	{
+		const std::string stockNameUtf8 = WideStringToUtf8(wstrStockName);
+		g_pFramework->GetNetworkManager().SendStockIssueRequest(stockNameUtf8);
+	}
 	if (bShopMessageProcessed)
 		return;
 
@@ -1037,6 +1055,20 @@ void CGameScene::Animate(float fElapsedTime)
 		if (financialCompletion.nProductId >= 1 && financialCompletion.nProductId <= 10)
 			m_ShopUI.ClearFinancialProductActive(nCategory,
 				static_cast<int>(financialCompletion.nProductId - 1));
+	}
+
+	CLIENT_STOCK_ISSUE_APPLICATION_RESULT stockIssueResult;
+	while (g_pFramework->GetNetworkManager().ConsumeStockIssueResult(stockIssueResult))
+	{
+		if (stockIssueResult.eResult == CLIENT_STOCK_ISSUE_RESULT::SUCCESS)
+		{
+			ApplyServerMoneyChange(stockIssueResult.nFinalMoney);
+			m_ShopUI.SetStockIssued(true);
+		}
+		else if (stockIssueResult.eResult == CLIENT_STOCK_ISSUE_RESULT::ALREADY_ISSUED)
+		{
+			m_ShopUI.SetStockIssued(true);
+		}
 	}
 
 	std::int64_t nServerMoneyDelta = 0;

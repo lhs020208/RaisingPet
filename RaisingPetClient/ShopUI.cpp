@@ -1116,8 +1116,10 @@ void CShopUI::RenderStockManagementPage(ID3D12GraphicsCommandList* commandList, 
 	const float issuanceWidth = rightColumnWidth * 0.64f;
 	const float issuanceHeight = issuanceWidth * (275.0f / 500.0f);
 	const float issuanceLeft = rightColumnLeft + (rightColumnWidth - issuanceWidth) * 0.5f;
-	RenderUiImage(commandList, camera, m_IssuanceStockResource,
-		XMFLOAT4(issuanceLeft, contentTop, issuanceLeft + issuanceWidth, contentTop + issuanceHeight));
+	const XMFLOAT4 issuanceRect(issuanceLeft, contentTop,
+		issuanceLeft + issuanceWidth, contentTop + issuanceHeight);
+	RenderUiImage(commandList, camera, m_IssuanceStockResource, issuanceRect,
+		(m_bStockIssued || m_bStockIssueButtonPressed) ? 0x00BFBFBF : 0x00FFFFFF);
 
 	const float chartWidth = rightColumnWidth;
 	const float chartHeight = chartWidth * (673.0f / 774.0f);
@@ -1178,6 +1180,25 @@ XMFLOAT4 CShopUI::GetStockNameInputRectangle(float width, float height) const
 	const float dividerX = contentLeft + stockNameWidth * 0.30f;
 	return(XMFLOAT4(dividerX, contentTop, contentLeft + stockNameWidth,
 		contentTop + stockNameHeight));
+}
+
+XMFLOAT4 CShopUI::GetStockIssuanceButtonRectangle(float width, float height) const
+{
+	const XMFLOAT4 board = GetShopBoardRectangle(width, height,
+		m_xmf2ShopBoardOffset.x, m_xmf2ShopBoardOffset.y);
+	const float boardWidth = board.z - board.x;
+	const float boardHeight = board.w - board.y;
+	const float contentLeft = board.x + boardWidth * 0.06f;
+	const float contentTop = board.y + boardHeight * 0.16f;
+	const float leftColumnWidth = boardWidth * 0.52f;
+	const float rightColumnWidth = boardWidth * 0.30f;
+	const float columnGap = boardWidth * 0.055f;
+	const float rightColumnLeft = contentLeft + leftColumnWidth + columnGap;
+	const float issuanceWidth = rightColumnWidth * 0.64f;
+	const float issuanceHeight = issuanceWidth * (275.0f / 500.0f);
+	const float issuanceLeft = rightColumnLeft + (rightColumnWidth - issuanceWidth) * 0.5f;
+	return(XMFLOAT4(issuanceLeft, contentTop,
+		issuanceLeft + issuanceWidth, contentTop + issuanceHeight));
 }
 
 float CShopUI::GetStockNameInputFontSize(float width, float height) const
@@ -1459,11 +1480,31 @@ bool CShopUI::ConsumeFinancialProductRequest(int& category, int& productIndex)
 	return(true);
 }
 
+bool CShopUI::ConsumeStockIssueRequest(std::wstring& stockName)
+{
+	if (!m_bPendingStockIssueRequest) return(false);
+	stockName = m_wstrPendingStockIssueName;
+	m_wstrPendingStockIssueName.clear();
+	m_bPendingStockIssueRequest = false;
+	return(true);
+}
+
 bool CShopUI::ConsumeLoginSceneReturnRequest()
 {
 	if (!m_bPendingLoginSceneReturnRequest) return(false);
 	m_bPendingLoginSceneReturnRequest = false;
 	return(true);
+}
+
+void CShopUI::SetStockIssued(bool issued)
+{
+	m_bStockIssued = issued;
+	if (m_bStockIssued)
+	{
+		m_bStockIssueButtonPressed = false;
+		m_bPendingStockIssueRequest = false;
+		m_wstrPendingStockIssueName.clear();
+	}
 }
 
 void CShopUI::SetFinancialProductActive(int category, int productIndex, UINT durationSeconds)
@@ -1528,6 +1569,7 @@ void CShopUI::DeactivateShop(float width, float height, size_t activePetIndex)
 	m_bShopBoardDragging = false;
 	m_bPetScrollDragging = false;
 	m_bStockNameInputActive = false;
+	m_bStockIssueButtonPressed = false;
 	m_nPressedEnhanceButton = -1;
 	ResetSelectedPet(activePetIndex, m_nCachedPetCount);
 }
@@ -1617,6 +1659,7 @@ bool CShopUI::ProcessShopUIClick(float x, float y, float width, float height, UI
 			m_eShopPage = SHOP_PAGE::SLOT_CONTENT_4;
 			m_nPressedEnhanceButton = -1;
 			m_bStockNameInputActive = false;
+			m_bStockIssueButtonPressed = false;
 		}
 		else
 		{
@@ -1624,6 +1667,7 @@ bool CShopUI::ProcessShopUIClick(float x, float y, float width, float height, UI
 			m_nSelectedShopSlot = -1;
 			m_nPressedEnhanceButton = -1;
 			m_bStockNameInputActive = false;
+			m_bStockIssueButtonPressed = false;
 			ResetSelectedPet(activePetIndex, petCount);
 		}
 		return(true);
@@ -1813,6 +1857,14 @@ bool CShopUI::OnProcessingMouseMessage(HWND hWnd, UINT message, WPARAM wParam, L
 		RebuildPetScrollMetricsIfNeeded(nPetCount);
 		if (m_bShopActive && m_eShopPage == SHOP_PAGE::STOCK_CONTENT_2)
 		{
+			if (!m_bStockIssued &&
+				IsPointInRectangle(x, y, GetStockIssuanceButtonRectangle(width, height)))
+			{
+				m_bStockIssueButtonPressed = true;
+				m_bStockNameInputActive = false;
+				SetCapture(hWnd);
+				return(true);
+			}
 			const XMFLOAT4 stockNameInput = GetStockNameInputRectangle(width, height);
 			if (IsPointInRectangle(x, y, stockNameInput))
 			{
@@ -1910,6 +1962,19 @@ bool CShopUI::OnProcessingMouseMessage(HWND hWnd, UINT message, WPARAM wParam, L
 		}
 		break;
 	case WM_LBUTTONUP:
+		if (m_bStockIssueButtonPressed)
+		{
+			m_bStockIssueButtonPressed = false;
+			if (m_bShopActive && m_eShopPage == SHOP_PAGE::STOCK_CONTENT_2
+				&& IsPointInRectangle(x, y, GetStockIssuanceButtonRectangle(width, height))
+				&& !m_wstrStockName.empty())
+			{
+				m_wstrPendingStockIssueName = m_wstrStockName;
+				m_bPendingStockIssueRequest = true;
+			}
+			if (GetCapture() == hWnd) ReleaseCapture();
+			return(true);
+		}
 		if (m_nPressedEnhanceButton >= 0)
 		{
 			const int pressedButton = m_nPressedEnhanceButton;

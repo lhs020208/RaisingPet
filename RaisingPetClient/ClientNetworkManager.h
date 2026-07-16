@@ -47,6 +47,17 @@ enum class CLIENT_FINANCIAL_RESULT
 	MONEY_LIMIT_EXCEEDED = 7
 };
 
+enum class CLIENT_STOCK_ISSUE_RESULT
+{
+	SUCCESS = 0,
+	INVALID_REQUEST = 1,
+	NOT_AUTHENTICATED = 2,
+	ALREADY_ISSUED = 3,
+	NOT_ENOUGH_MONEY = 4,
+	DATABASE_ERROR = 5,
+	NETWORK_ERROR = 6
+};
+
 struct CLIENT_FINANCIAL_APPLICATION_RESULT
 {
 	CLIENT_FINANCIAL_CATEGORY eCategory = CLIENT_FINANCIAL_CATEGORY::SAVINGS;
@@ -70,6 +81,13 @@ struct CLIENT_FINANCIAL_ACTIVE_STATUS
 	unsigned int nRemainingSeconds = 0;
 };
 
+struct CLIENT_STOCK_ISSUE_APPLICATION_RESULT
+{
+	CLIENT_STOCK_ISSUE_RESULT eResult = CLIENT_STOCK_ISSUE_RESULT::DATABASE_ERROR;
+	unsigned int nFinalMoney = 0;
+	unsigned int nStockId = 0;
+};
+
 class CClientNetworkManager
 {
 public:
@@ -81,6 +99,7 @@ public:
 	bool SendMoneyUpdate(unsigned int money);
 	bool SendSavingsJoinRequest(unsigned int nProductId);
 	bool SendLoanApplyRequest(unsigned int nProductId);
+	bool SendStockIssueRequest(const std::string& stockNameUtf8);
 	void Disconnect();
 
 	bool ConsumeAuthResult(CLIENT_AUTH_REQUEST& request, CLIENT_AUTH_RESULT& result);
@@ -88,6 +107,7 @@ public:
 	bool ConsumeFinancialApplicationResult(CLIENT_FINANCIAL_APPLICATION_RESULT& result);
 	bool ConsumeFinancialCompletion(CLIENT_FINANCIAL_COMPLETION& completion);
 	bool ConsumeFinancialActiveStatus(CLIENT_FINANCIAL_ACTIVE_STATUS& status);
+	bool ConsumeStockIssueResult(CLIENT_STOCK_ISSUE_APPLICATION_RESULT& result);
 	bool IsBusy() const { return m_bBusy.load(); }
 	bool IsConnected() const;
 
@@ -115,6 +135,7 @@ private:
 	std::vector<CLIENT_FINANCIAL_APPLICATION_RESULT> m_FinancialApplicationResults;
 	std::vector<CLIENT_FINANCIAL_COMPLETION> m_FinancialCompletions;
 	std::vector<CLIENT_FINANCIAL_ACTIVE_STATUS> m_FinancialActiveStatuses;
+	std::vector<CLIENT_STOCK_ISSUE_APPLICATION_RESULT> m_StockIssueResults;
 	std::atomic_bool m_bStopRequested = false;
 	std::atomic_bool m_bBusy = false;
 	std::atomic_bool m_bConnected = false;

@@ -1,5 +1,6 @@
 #include <WinSock2.h>
 #include <WS2tcpip.h>
+#include <Windows.h>
 
 #include <cstdint>
 #include <iostream>
@@ -144,6 +145,9 @@ std::string DecodeServerConsoleText(const std::string& text) {
 } // namespace
 
 int main(int argc, char* argv[]) {
+	SetConsoleOutputCP(CP_UTF8);
+	SetConsoleCP(CP_UTF8);
+
 	std::string serverIp = kDefaultServerIp;
 	unsigned short adminPort = kDefaultAdminPort;
 	if (argc >= 2) serverIp = argv[1];
@@ -227,7 +231,7 @@ int main(int argc, char* argv[]) {
 	std::cout << "  clearIL {playerId|_allplayer} {I|L|IL}\n";
 	std::cout << "  deleteplayer {playerId|_allplayer}\n";
 	std::cout << "  see {playerId|_allplayer} [D] [I] [M]\n";
-	std::cout << "  DB CLEAR\n";
+	std::cout << "  DB CLEAR (money/financial products/stocks reset, accounts preserved)\n";
 	std::cout << "Type quit/exit to close.\n";
 
 	std::string line;

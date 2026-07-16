@@ -82,7 +82,7 @@ CREATE TABLE `PlayerLoan` (
 
 CREATE TABLE `Stock` (
     `StockID` INT UNSIGNED NOT NULL AUTO_INCREMENT,
-    `StockName` VARCHAR(50) NOT NULL,
+    `StockName` VARCHAR(50) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NOT NULL,
     `IssuerID` VARCHAR(32) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
     `CurrentPrice` BIGINT UNSIGNED NOT NULL,
     `TotalQuantity` INT UNSIGNED NOT NULL DEFAULT 1000,
@@ -175,7 +175,7 @@ CREATE TABLE `StockPrice` (
     `NewPrice` BIGINT UNSIGNED NOT NULL,
     `BoughtQuantity` INT UNSIGNED NOT NULL DEFAULT 0,
     `SoldQuantity` INT UNSIGNED NOT NULL DEFAULT 0,
-    `ChangeReason` VARCHAR(255) NULL COMMENT 'Optional display text for price change reason',
+    `ChangeReason` VARCHAR(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NULL COMMENT 'Optional display text for price change reason',
     `ChangedTime` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (`StockPriceID`),
     KEY `IX_StockPrice_StockTime` (`StockID`, `ChangedTime`),
