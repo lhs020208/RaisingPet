@@ -8,6 +8,13 @@ extern CGameFramework* g_pFramework;
 
 namespace
 {
+XMFLOAT2 g_xmf2LoginBoardOffset = XMFLOAT2(0.0f, 0.0f);
+
+void SetLoginBoardOffset(const XMFLOAT2& offset)
+{
+	g_xmf2LoginBoardOffset = offset;
+}
+
 bool PointInRectangle(float x, float y, const XMFLOAT4& rectangle)
 {
 	return(x >= rectangle.x && x <= rectangle.z && y >= rectangle.y && y <= rectangle.w);
@@ -67,7 +74,9 @@ XMFLOAT4 GetBoardRectangle(float width, float height)
 	}
 	const float left = (width - boardWidth) * 0.5f;
 	const float top = (height - boardHeight) * 0.5f;
-	return(XMFLOAT4(left, top, left + boardWidth, top + boardHeight));
+	return(XMFLOAT4(left + g_xmf2LoginBoardOffset.x, top + g_xmf2LoginBoardOffset.y,
+		left + boardWidth + g_xmf2LoginBoardOffset.x,
+		top + boardHeight + g_xmf2LoginBoardOffset.y));
 }
 
 XMFLOAT4 GetCloseRectangle(float width, float height)
@@ -790,6 +799,7 @@ void CLoginScene::RenderRegisterPage(ID3D12GraphicsCommandList* commandList, CCa
 void CLoginScene::Render(ID3D12GraphicsCommandList* commandList, CCamera* camera)
 {
 	if (!camera) return;
+	SetLoginBoardOffset(m_xmf2BoardOffset);
 	camera->SetViewportsAndScissorRects(commandList);
 	camera->UpdateShaderVariables(commandList);
 	const float width = camera->m_d3dViewport.Width;
@@ -805,15 +815,50 @@ void CLoginScene::Render(ID3D12GraphicsCommandList* commandList, CCamera* camera
 		RenderInputPage(commandList, camera, width, height);
 }
 
-void CLoginScene::OnProcessingMouseMessage(HWND hWnd, UINT message, WPARAM, LPARAM lParam)
+void CLoginScene::OnProcessingMouseMessage(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 {
-	if (message != WM_LBUTTONDOWN) return;
 	RECT client;
 	GetClientRect(hWnd, &client);
 	const float width = static_cast<float>(client.right);
 	const float height = static_cast<float>(client.bottom);
+	SetLoginBoardOffset(m_xmf2BoardOffset);
 	const float x = static_cast<float>(static_cast<short>(LOWORD(lParam)));
 	const float y = static_cast<float>(static_cast<short>(HIWORD(lParam)));
+	if (message == WM_MOUSEMOVE)
+	{
+		if (!m_bBoardDragging) return;
+		const bool outside = x < 0.0f || y < 0.0f || x >= width || y >= height;
+		if (!(wParam & MK_LBUTTON) || outside)
+		{
+			m_bBoardDragging = false;
+			if (GetCapture() == hWnd) ReleaseCapture();
+			return;
+		}
+		const float deltaX = x - m_xmf2BoardDragLastCursor.x;
+		const float deltaY = y - m_xmf2BoardDragLastCursor.y;
+		m_xmf2BoardOffset.x += deltaX;
+		m_xmf2BoardOffset.y += deltaY;
+		m_xmf2BoardDragLastCursor = XMFLOAT2(x, y);
+		for (LOGIN_ERROR_LOG& log : m_LoginErrorLogs)
+		{
+			log.rectangle.x += deltaX;
+			log.rectangle.z += deltaX;
+			log.rectangle.y += deltaY;
+			log.rectangle.w += deltaY;
+		}
+		SetLoginBoardOffset(m_xmf2BoardOffset);
+		return;
+	}
+	if (message == WM_LBUTTONUP)
+	{
+		if (m_bBoardDragging)
+		{
+			m_bBoardDragging = false;
+			if (GetCapture() == hWnd) ReleaseCapture();
+		}
+		return;
+	}
+	if (message != WM_LBUTTONDOWN) return;
 	if (PointInRectangle(x, y, GetCloseRectangle(width, height)))
 	{
 		PostMessage(hWnd, WM_CLOSE, 0, 0);
@@ -826,6 +871,12 @@ void CLoginScene::OnProcessingMouseMessage(HWND hWnd, UINT message, WPARAM, LPAR
 			g_pFramework->GetNetworkManager().Disconnect();
 			g_pFramework->RequestSceneChange(SCENE_TYPE::GAME);
 		}
+		else if (PointInRectangle(x, y, GetBoardRectangle(width, height)))
+		{
+			m_bBoardDragging = true;
+			m_xmf2BoardDragLastCursor = XMFLOAT2(x, y);
+			SetCapture(hWnd);
+		}
 		return;
 	}
 	if (m_eLoginPage == LOGIN_PAGE::REGISTER)
@@ -835,6 +886,12 @@ void CLoginScene::OnProcessingMouseMessage(HWND hWnd, UINT message, WPARAM, LPAR
 			g_pFramework->GetNetworkManager().Disconnect();
 			m_eLoginPage = LOGIN_PAGE::INPUT;
 			m_fLoadingElapsedTime = 0.0f;
+		}
+		else if (PointInRectangle(x, y, GetBoardRectangle(width, height)))
+		{
+			m_bBoardDragging = true;
+			m_xmf2BoardDragLastCursor = XMFLOAT2(x, y);
+			SetCapture(hWnd);
 		}
 		return;
 	}
@@ -877,6 +934,12 @@ void CLoginScene::OnProcessingMouseMessage(HWND hWnd, UINT message, WPARAM, LPAR
 	{
 		g_pFramework->GetNetworkManager().Disconnect();
 		g_pFramework->RequestSceneChange(SCENE_TYPE::GAME);
+	}
+	else if (PointInRectangle(x, y, GetBoardRectangle(width, height)))
+	{
+		m_bBoardDragging = true;
+		m_xmf2BoardDragLastCursor = XMFLOAT2(x, y);
+		SetCapture(hWnd);
 	}
 }
 
@@ -1019,6 +1082,7 @@ void CLoginScene::Animate(float elapsedTime)
 CGameObject* CLoginScene::PickObjectPointedByCursor(int x, int y, CCamera* camera)
 {
 	if (!camera) return(NULL);
+	SetLoginBoardOffset(m_xmf2BoardOffset);
 	return PointInRectangle(static_cast<float>(x), static_cast<float>(y),
 		GetBoardRectangle(camera->m_d3dViewport.Width, camera->m_d3dViewport.Height))
 		? &m_UiHitObject : NULL;

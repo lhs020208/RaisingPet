@@ -1755,14 +1755,6 @@ bool CShopUI::ProcessShopUIClick(float x, float y, float width, float height, UI
 	{
 		if (ProcessStockMenuClick(x, y, width, height)) return(true);
 	}
-	else if (m_eShopPage == SHOP_PAGE::STOCK_CONTENT_1
-		|| m_eShopPage == SHOP_PAGE::STOCK_CONTENT_2
-		|| m_eShopPage == SHOP_PAGE::STOCK_CONTENT_3)
-	{
-		const XMFLOAT4 board = GetShopBoardRectangle(width, height,
-			m_xmf2ShopBoardOffset.x, m_xmf2ShopBoardOffset.y);
-		if (IsPointInRectangle(x, y, board)) return(true);
-	}
 	return(false);
 }
 

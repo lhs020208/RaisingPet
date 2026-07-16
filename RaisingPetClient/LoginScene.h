@@ -89,6 +89,9 @@ private:
 	float m_fLastViewportWidth = FRAME_BUFFER_WIDTH;
 	float m_fLastViewportHeight = FRAME_BUFFER_HEIGHT;
 	bool m_bPasswordVisible = false;
+	bool m_bBoardDragging = false;
+	XMFLOAT2 m_xmf2BoardOffset = XMFLOAT2(0.0f, 0.0f);
+	XMFLOAT2 m_xmf2BoardDragLastCursor = XMFLOAT2(0.0f, 0.0f);
 	LOGIN_PAGE m_eLoginPage = LOGIN_PAGE::INPUT;
 	CGameObject m_UiHitObject;
 
