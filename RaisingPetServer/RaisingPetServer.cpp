@@ -195,6 +195,7 @@ struct StockManagementInfo {
 	std::uint32_t recentTradeQuantity = 0;
 	std::uint64_t currentPrice = kInitialStockPrice;
 	std::uint64_t previousPrice = kInitialStockPrice;
+	std::vector<StockPriceSeeInfo> recentPrices;
 	StockHolderSeeInfo topHolders[3];
 };
 
@@ -1142,6 +1143,9 @@ public:
 			return false;
 		for (size_t i = 0; i < holders.size() && i < 3; ++i)
 			info.topHolders[i] = holders[i];
+
+		if (!LoadStockRecentPrices(stockId, info.recentPrices, failureReason))
+			return false;
 		return true;
 	}
 
@@ -2198,13 +2202,23 @@ std::vector<char> MakeStockManagementInfoResponse(const StockManagementInfo& inf
 		holderNameLengths[i] = static_cast<std::uint16_t>(info.topHolders[i].playerId.size());
 		variableSize = static_cast<std::uint16_t>(variableSize + holderNameLengths[i]);
 	}
+	const std::uint8_t recentPriceCount =
+		static_cast<std::uint8_t>(std::min<size_t>(info.recentPrices.size(), 10));
+	std::uint16_t recentTimeLengths[10] = {};
+	for (std::uint8_t i = 0; i < recentPriceCount; ++i) {
+		recentTimeLengths[i] = static_cast<std::uint16_t>(
+			std::min<size_t>(info.recentPrices[i].changedTime.size(), 32));
+		variableSize = static_cast<std::uint16_t>(variableSize + recentTimeLengths[i]);
+	}
 
 	std::vector<char> packet;
 	const std::uint16_t packetSize = static_cast<std::uint16_t>(
 		sizeof(PacketHeader) + 1 + sizeof(std::uint16_t) + stockNameLength +
 		sizeof(std::uint32_t) * 3 + sizeof(std::uint64_t) + sizeof(std::uint32_t) +
 		sizeof(std::uint64_t) * 2 +
-		(sizeof(std::uint16_t) + sizeof(std::uint32_t)) * 3 + variableSize - stockNameLength);
+		(sizeof(std::uint16_t) + sizeof(std::uint32_t)) * 3 +
+		1 + recentPriceCount * (sizeof(std::uint64_t) * 4 + sizeof(std::uint16_t)) +
+		variableSize - stockNameLength);
 	packet.reserve(packetSize);
 	WriteUInt16(packet, packetSize);
 	WriteUInt16(packet, static_cast<std::uint16_t>(PacketType::StockManagementInfoResponse));
@@ -2223,6 +2237,17 @@ std::vector<char> MakeStockManagementInfoResponse(const StockManagementInfo& inf
 		packet.insert(packet.end(), info.topHolders[i].playerId.begin(),
 			info.topHolders[i].playerId.begin() + holderNameLengths[i]);
 		WriteUInt32(packet, info.topHolders[i].quantity);
+	}
+	packet.push_back(static_cast<char>(recentPriceCount));
+	for (std::uint8_t i = 0; i < recentPriceCount; ++i) {
+		const StockPriceSeeInfo& price = info.recentPrices[i];
+		WriteUInt64(packet, price.previousPrice);
+		WriteUInt64(packet, price.newPrice);
+		WriteUInt64(packet, price.boughtQuantity);
+		WriteUInt64(packet, price.soldQuantity);
+		WriteUInt16(packet, recentTimeLengths[i]);
+		packet.insert(packet.end(), price.changedTime.begin(),
+			price.changedTime.begin() + recentTimeLengths[i]);
 	}
 	return packet;
 }

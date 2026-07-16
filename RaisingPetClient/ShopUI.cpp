@@ -149,6 +149,23 @@ std::wstring FormatStockPriceChangeText(UINT currentPrice, UINT previousPrice)
 	return(std::wstring(buffer));
 }
 
+std::wstring FormatStockPercentChange(UINT fromPrice, UINT toPrice)
+{
+	const INT64 change = static_cast<INT64>(toPrice) - static_cast<INT64>(fromPrice);
+	const double percent = (fromPrice > 0)
+		? (static_cast<double>(change) * 100.0 / static_cast<double>(fromPrice)) : 0.0;
+	wchar_t buffer[64] = {};
+	swprintf_s(buffer, L"%+.2f%%", percent);
+	return(std::wstring(buffer));
+}
+
+std::wstring FormatGraphTimeLabel(const std::wstring& changedTime)
+{
+	if (changedTime.size() >= 16) return(changedTime.substr(11, 5));
+	if (changedTime.size() >= 5) return(changedTime.substr(changedTime.size() - 5, 5));
+	return(changedTime);
+}
+
 std::string FormatFinancialDuration(UINT seconds)
 {
 	const UINT hours = seconds / 3600;
@@ -471,6 +488,7 @@ void CShopUI::BuildObjects(ID3D12Device* device, ID3D12GraphicsCommandList* comm
 	loadImage(L"Assets/Image/Shop/Stock/StockHolders.dds", m_StockHoldersResource);
 	loadImage(L"Assets/Image/Shop/Stock/StockManagementTable.dds", m_StockManagementTableResource);
 	loadImage(L"Assets/Image/Shop/Stock/StockChart.dds", m_StockChartResource);
+	loadImage(L"Assets/Image/Shop/Stock/MyGraph.dds", m_MyGraphResource);
 	loadImage(L"Assets/Image/Shop/Stock/SeeGraph.dds", m_SeeGraphResource);
 	loadImage(L"Assets/Image/Shop/Stock/StockUpMark.dds", m_StockUpMarkResource);
 	loadImage(L"Assets/Image/Shop/Stock/StockDownMark.dds", m_StockDownMarkResource);
@@ -528,7 +546,7 @@ void CShopUI::ReleaseObjects()
 		&m_StockLimitResources[0], &m_StockLimitResources[1],
 		&m_CantCreateStockGenLogResource, &m_StockNameResource,
 		&m_StockHoldersResource, &m_StockManagementTableResource,
-		&m_StockChartResource, &m_SeeGraphResource, &m_StockUpMarkResource,
+		&m_StockChartResource, &m_MyGraphResource, &m_SeeGraphResource, &m_StockUpMarkResource,
 		&m_StockDownMarkResource, &m_IssuanceStockResource };
 	for (UI_IMAGE_RESOURCE* image : images)
 	{
@@ -592,7 +610,7 @@ void CShopUI::ReleaseUploadBuffers()
 		&m_StockLimitResources[0], &m_StockLimitResources[1],
 		&m_CantCreateStockGenLogResource, &m_StockNameResource,
 		&m_StockHoldersResource, &m_StockManagementTableResource,
-		&m_StockChartResource, &m_SeeGraphResource, &m_StockUpMarkResource,
+		&m_StockChartResource, &m_MyGraphResource, &m_SeeGraphResource, &m_StockUpMarkResource,
 		&m_StockDownMarkResource, &m_IssuanceStockResource };
 	for (UI_IMAGE_RESOURCE* image : images)
 	{
@@ -1447,6 +1465,141 @@ void CShopUI::RenderCantCreateStockPage(ID3D12GraphicsCommandList* commandList, 
 	}
 }
 
+void CShopUI::RenderStockGraphPage(ID3D12GraphicsCommandList* commandList, CCamera* camera,
+	const SHOP_TEXT_RENDER_CONTEXT& context)
+{
+	if (!camera) return;
+	const float width = camera->m_d3dViewport.Width;
+	const float height = camera->m_d3dViewport.Height;
+	const XMFLOAT4 board = GetShopBoardRectangle(width, height,
+		m_xmf2ShopBoardOffset.x, m_xmf2ShopBoardOffset.y);
+	const float boardWidth = board.z - board.x;
+	const float boardHeight = board.w - board.y;
+	const float graphWidth = boardWidth * 0.86f;
+	const float graphHeight = graphWidth * (1354.0f / 2553.0f);
+	const float graphLeft = (board.x + board.z - graphWidth) * 0.5f;
+	const float graphTop = board.y + boardHeight * 0.17f;
+	const XMFLOAT4 graphRect(graphLeft, graphTop, graphLeft + graphWidth, graphTop + graphHeight);
+	RenderUiImage(commandList, camera, m_MyGraphResource, graphRect);
+
+	if (!g_pFramework) return;
+
+	std::vector<SHOP_STOCK_PRICE_INFO> prices;
+	for (auto it = m_StockManagementInfo.RecentPrices.rbegin();
+		it != m_StockManagementInfo.RecentPrices.rend() && prices.size() < 10; ++it)
+		prices.push_back(*it);
+
+	UINT minimumPrice = 0;
+	UINT maximumPrice = 100;
+	if (!prices.empty())
+	{
+		minimumPrice = UINT_MAX;
+		maximumPrice = 0;
+		for (const SHOP_STOCK_PRICE_INFO& price : prices)
+		{
+			minimumPrice = min(minimumPrice, min(price.nPreviousPrice, price.nNewPrice));
+			maximumPrice = max(maximumPrice, max(price.nPreviousPrice, price.nNewPrice));
+		}
+		if (minimumPrice == UINT_MAX) minimumPrice = 0;
+		if (maximumPrice <= minimumPrice) maximumPrice = minimumPrice + 100;
+	}
+
+	const float graphRectWidth = graphRect.z - graphRect.x;
+	const float graphRectHeight = graphRect.w - graphRect.y;
+	const float plotLeft = graphRect.x + graphRectWidth * (1.59f / 19.60f);
+	const float plotRight = plotLeft + graphRectWidth * (12.23f / 19.60f);
+	const float infoLeft = plotRight + graphRectWidth * 0.018f;
+	const float plotTop = graphRect.y + graphRectHeight * 0.070f;
+	const float plotBottom = graphRect.y + graphRectHeight * (8.65f / 10.37f);
+	const float timeTop = plotBottom + graphRectHeight * 0.020f;
+	const float labelLeft = graphRect.x + graphRectWidth * 0.012f;
+	const float labelRight = plotLeft - graphRectWidth * 0.030f;
+	const float plotHeight = plotBottom - plotTop;
+	const float priceRange = static_cast<float>(maximumPrice - minimumPrice);
+	auto priceToY = [&](UINT price) -> float
+	{
+		const float ratio = (priceRange > 0.0f)
+			? (static_cast<float>(price - minimumPrice) / priceRange) : 0.0f;
+		return(plotBottom - ratio * plotHeight);
+	};
+
+	const float axisFontSize = boardHeight * 0.025f;
+	for (int i = 0; i < 5; ++i)
+	{
+		const float ratio = static_cast<float>(i) / 4.0f;
+		const UINT value = static_cast<UINT>(minimumPrice
+			+ static_cast<UINT64>(maximumPrice - minimumPrice) * i / 4);
+		const float y = plotBottom - plotHeight * ratio;
+		g_pFramework->QueueDirectWriteText(FormatStockPrice(value),
+			XMFLOAT4(labelLeft, y - axisFontSize, labelRight, y + axisFontSize),
+			axisFontSize, 0xFFFFFFFF, false, true);
+	}
+
+	const float slotWidth = (plotRight - plotLeft) / 10.0f;
+	const float barWidth = slotWidth * 0.62f;
+	for (size_t i = 0; i < prices.size(); ++i)
+	{
+		const SHOP_STOCK_PRICE_INFO& price = prices[i];
+		const float centerX = plotLeft + slotWidth * (static_cast<float>(i) + 0.5f);
+		const float barLeft = centerX - barWidth * 0.5f;
+		const float barRight = centerX + barWidth * 0.5f;
+		const float previousY = priceToY(price.nPreviousPrice);
+		const float newY = priceToY(price.nNewPrice);
+		const float top = min(previousY, newY);
+		const float bottom = max(previousY, newY);
+		const UINT barColor = (price.nNewPrice >= price.nPreviousPrice) ? 0x00FF0000 : 0x000070C0;
+		RenderSolidUiRectangle(commandList, camera, barLeft, top,
+			barRight, max(bottom, top + 2.0f), barColor, context);
+		g_pFramework->QueueDirectWriteText(FormatGraphTimeLabel(price.wstrChangedTime),
+			XMFLOAT4(centerX - slotWidth * 0.5f, timeTop,
+				centerX + slotWidth * 0.5f, timeTop + boardHeight * 0.04f),
+			boardHeight * 0.020f, 0xFFFFFFFF, true, true);
+	}
+
+	UINT highestPrice = maximumPrice;
+	UINT lowestPrice = minimumPrice;
+	UINT averagePrice = 0;
+	if (!prices.empty())
+	{
+		UINT64 sum = 0;
+		for (const SHOP_STOCK_PRICE_INFO& price : prices) sum += price.nNewPrice;
+		averagePrice = static_cast<UINT>(sum / prices.size());
+	}
+	const SHOP_STOCK_PRICE_INFO latestPrice = prices.empty() ? SHOP_STOCK_PRICE_INFO() : prices.back();
+	const UINT basePrice = prices.empty() ? 100 : max(1u, prices.front().nPreviousPrice);
+	const UINT latestNewPrice = prices.empty() ? 100 : latestPrice.nNewPrice;
+	const UINT latestPreviousPrice = prices.empty() ? 100 : latestPrice.nPreviousPrice;
+	const INT64 latestDelta = static_cast<INT64>(latestNewPrice) - static_cast<INT64>(latestPreviousPrice);
+	const double latestPercent = (latestPreviousPrice > 0)
+		? (static_cast<double>(latestDelta) * 100.0 / static_cast<double>(latestPreviousPrice)) : 0.0;
+	wchar_t latestDeltaText[80] = {};
+	swprintf_s(latestDeltaText, L"%+lld (%+.2f%%)", latestDelta, latestPercent);
+
+	const float infoTop = graphRect.y + graphRectHeight * 0.10f;
+	const float infoRight = graphRect.z - graphRectWidth * 0.02f;
+	const float infoFont = boardHeight * 0.031f;
+	const float infoLine = infoFont * 1.18f;
+	auto drawInfo = [&](const std::wstring& text, int line, bool center = false)
+	{
+		const float y = infoTop + infoLine * line;
+		g_pFramework->QueueDirectWriteText(text,
+			XMFLOAT4(infoLeft, y, infoRight, y + infoLine),
+			infoFont, 0xFFFFFFFF, center, true);
+	};
+
+	drawInfo(L"[주가 요약]", 0, true);
+	drawInfo(L"최고가:     " + FormatStockPrice(highestPrice), 1);
+	drawInfo(L"최저가:     " + FormatStockPrice(lowestPrice), 2);
+	drawInfo(L"평균가:     " + FormatStockPrice(averagePrice), 3);
+	drawInfo(L"변동률:     " + FormatStockPercentChange(basePrice, latestNewPrice), 4);
+	drawInfo(L"[최근 갱신]", 7, true);
+	drawInfo(prices.empty() ? L"--:--" : FormatGraphTimeLabel(latestPrice.wstrChangedTime), 8);
+	drawInfo(FormatStockPrice(latestPreviousPrice) + L" → " + FormatStockPrice(latestNewPrice), 9);
+	drawInfo(latestDeltaText, 10);
+	drawInfo(L"매수 " + std::to_wstring(prices.empty() ? 0 : latestPrice.nBoughtQuantity) + L"주", 11);
+	drawInfo(L"매도 " + std::to_wstring(prices.empty() ? 0 : latestPrice.nSoldQuantity) + L"주", 12);
+}
+
 void CShopUI::RenderPageTitle(ID3D12GraphicsCommandList* commandList, CCamera* camera)
 {
 	if (!camera) return;
@@ -1567,6 +1720,10 @@ void CShopUI::Render(ID3D12GraphicsCommandList* commandList, CCamera* camera, UI
 		else if (m_eShopPage == SHOP_PAGE::STOCK_CANT_PUBLISH)
 		{
 			RenderCantCreateStockPage(commandList, camera, context);
+		}
+		else if (m_eShopPage == SHOP_PAGE::STOCK_SEE_MYGRAPH)
+		{
+			RenderStockGraphPage(commandList, camera, context);
 		}
 		RenderMoneyUI(commandList, camera, money, context);
 		RenderUiImage(commandList, camera, m_ShopBackSpaceIconResource,

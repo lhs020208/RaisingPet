@@ -328,6 +328,36 @@ bool ProcessPersistentPacketBuffer(std::vector<char>& receiveBuffer,
 				info.TopHolders[i].nQuantity = static_cast<unsigned int>(ReadUInt32(cursor));
 				cursor += sizeof(std::uint32_t);
 			}
+			if (cursor + 1 > end) return(false);
+			const unsigned char recentPriceCount = static_cast<unsigned char>(*cursor++);
+			if (recentPriceCount > 10) return(false);
+			for (unsigned char i = 0; i < recentPriceCount; ++i)
+			{
+				if (cursor + sizeof(std::uint64_t) * 4 + sizeof(std::uint16_t) > end) return(false);
+				CLIENT_STOCK_PRICE_INFO price;
+				const std::uint64_t previousPrice = ReadUInt64(cursor);
+				if (previousPrice > UINT_MAX) return(false);
+				price.nPreviousPrice = static_cast<unsigned int>(previousPrice);
+				cursor += sizeof(std::uint64_t);
+				const std::uint64_t newPrice = ReadUInt64(cursor);
+				if (newPrice > UINT_MAX) return(false);
+				price.nNewPrice = static_cast<unsigned int>(newPrice);
+				cursor += sizeof(std::uint64_t);
+				const std::uint64_t boughtQuantity = ReadUInt64(cursor);
+				if (boughtQuantity > UINT_MAX) return(false);
+				price.nBoughtQuantity = static_cast<unsigned int>(boughtQuantity);
+				cursor += sizeof(std::uint64_t);
+				const std::uint64_t soldQuantity = ReadUInt64(cursor);
+				if (soldQuantity > UINT_MAX) return(false);
+				price.nSoldQuantity = static_cast<unsigned int>(soldQuantity);
+				cursor += sizeof(std::uint64_t);
+				const std::uint16_t changedTimeLength = ReadUInt16(cursor);
+				cursor += sizeof(std::uint16_t);
+				if (changedTimeLength > 32 || cursor + changedTimeLength > end) return(false);
+				price.strChangedTime.assign(cursor, cursor + changedTimeLength);
+				cursor += changedTimeLength;
+				info.RecentPrices.push_back(price);
+			}
 			if (cursor != end) return(false);
 			stockManagementInfos.push_back(info);
 		}

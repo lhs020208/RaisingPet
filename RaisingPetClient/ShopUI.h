@@ -36,6 +36,15 @@ struct SHOP_STOCK_HOLDER_INFO
 	UINT nQuantity = 0;
 };
 
+struct SHOP_STOCK_PRICE_INFO
+{
+	UINT nPreviousPrice = 0;
+	UINT nNewPrice = 0;
+	UINT nBoughtQuantity = 0;
+	UINT nSoldQuantity = 0;
+	std::wstring wstrChangedTime;
+};
+
 struct SHOP_STOCK_MANAGEMENT_INFO
 {
 	bool bIssued = false;
@@ -48,6 +57,7 @@ struct SHOP_STOCK_MANAGEMENT_INFO
 	UINT nCurrentPrice = 100;
 	UINT nPreviousPrice = 100;
 	SHOP_STOCK_HOLDER_INFO TopHolders[3];
+	std::vector<SHOP_STOCK_PRICE_INFO> RecentPrices;
 };
 
 class CShopUI
@@ -142,6 +152,7 @@ private:
 	UI_IMAGE_RESOURCE m_StockHoldersResource;
 	UI_IMAGE_RESOURCE m_StockManagementTableResource;
 	UI_IMAGE_RESOURCE m_StockChartResource;
+	UI_IMAGE_RESOURCE m_MyGraphResource;
 	UI_IMAGE_RESOURCE m_SeeGraphResource;
 	UI_IMAGE_RESOURCE m_StockUpMarkResource;
 	UI_IMAGE_RESOURCE m_StockDownMarkResource;
@@ -225,6 +236,8 @@ private:
 	bool ProcessFinancialClick(float x, float y, float fViewportWidth, float fViewportHeight);
 	void RenderStockMenuPage(ID3D12GraphicsCommandList* pd3dCommandList, CCamera* pCamera);
 	void RenderStockManagementPage(ID3D12GraphicsCommandList* pd3dCommandList, CCamera* pCamera);
+	void RenderStockGraphPage(ID3D12GraphicsCommandList* pd3dCommandList, CCamera* pCamera,
+		const SHOP_TEXT_RENDER_CONTEXT& textContext);
 	void RenderPageTitle(ID3D12GraphicsCommandList* pd3dCommandList, CCamera* pCamera);
 	XMFLOAT4 GetStockChartRectangle(float fViewportWidth, float fViewportHeight) const;
 	XMFLOAT4 GetStockGraphButtonRectangle(float fViewportWidth, float fViewportHeight) const;

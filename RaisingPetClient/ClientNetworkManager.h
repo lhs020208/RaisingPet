@@ -100,6 +100,15 @@ struct CLIENT_STOCK_HOLDER_INFO
 	unsigned int nQuantity = 0;
 };
 
+struct CLIENT_STOCK_PRICE_INFO
+{
+	unsigned int nPreviousPrice = 0;
+	unsigned int nNewPrice = 0;
+	unsigned int nBoughtQuantity = 0;
+	unsigned int nSoldQuantity = 0;
+	std::string strChangedTime;
+};
+
 struct CLIENT_STOCK_MANAGEMENT_INFO
 {
 	bool bIssued = false;
@@ -112,6 +121,7 @@ struct CLIENT_STOCK_MANAGEMENT_INFO
 	unsigned int nCurrentPrice = 100;
 	unsigned int nPreviousPrice = 100;
 	CLIENT_STOCK_HOLDER_INFO TopHolders[3];
+	std::vector<CLIENT_STOCK_PRICE_INFO> RecentPrices;
 };
 
 class CClientNetworkManager

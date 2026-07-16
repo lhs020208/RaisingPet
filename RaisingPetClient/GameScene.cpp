@@ -1175,6 +1175,16 @@ void CGameScene::Animate(float fElapsedTime)
 			shopStockInfo.TopHolders[i].nQuantity =
 				stockManagementInfo.TopHolders[i].nQuantity;
 		}
+		for (const CLIENT_STOCK_PRICE_INFO& price : stockManagementInfo.RecentPrices)
+		{
+			SHOP_STOCK_PRICE_INFO shopPrice;
+			shopPrice.nPreviousPrice = price.nPreviousPrice;
+			shopPrice.nNewPrice = price.nNewPrice;
+			shopPrice.nBoughtQuantity = price.nBoughtQuantity;
+			shopPrice.nSoldQuantity = price.nSoldQuantity;
+			shopPrice.wstrChangedTime = Utf8ToWideString(price.strChangedTime);
+			shopStockInfo.RecentPrices.push_back(shopPrice);
+		}
 		m_ShopUI.SetStockManagementInfo(shopStockInfo);
 	}
 
