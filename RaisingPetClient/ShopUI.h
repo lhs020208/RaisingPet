@@ -45,6 +45,8 @@ struct SHOP_STOCK_MANAGEMENT_INFO
 	UINT nSaleableQuantity = 800;
 	UINT nIssuanceRevenue = 0;
 	UINT nRecentTradeQuantity = 0;
+	UINT nCurrentPrice = 100;
+	UINT nPreviousPrice = 100;
 	SHOP_STOCK_HOLDER_INFO TopHolders[3];
 };
 
@@ -139,6 +141,9 @@ private:
 	UI_IMAGE_RESOURCE m_StockHoldersResource;
 	UI_IMAGE_RESOURCE m_StockManagementTableResource;
 	UI_IMAGE_RESOURCE m_StockChartResource;
+	UI_IMAGE_RESOURCE m_SeeGraphResource;
+	UI_IMAGE_RESOURCE m_StockUpMarkResource;
+	UI_IMAGE_RESOURCE m_StockDownMarkResource;
 	UI_IMAGE_RESOURCE m_IssuanceStockResource;
 
 	bool m_bShopActive = false;
@@ -219,6 +224,8 @@ private:
 	bool ProcessFinancialClick(float x, float y, float fViewportWidth, float fViewportHeight);
 	void RenderStockMenuPage(ID3D12GraphicsCommandList* pd3dCommandList, CCamera* pCamera);
 	void RenderStockManagementPage(ID3D12GraphicsCommandList* pd3dCommandList, CCamera* pCamera);
+	XMFLOAT4 GetStockChartRectangle(float fViewportWidth, float fViewportHeight) const;
+	XMFLOAT4 GetStockGraphButtonRectangle(float fViewportWidth, float fViewportHeight) const;
 	XMFLOAT4 GetStockNameInputRectangle(float fViewportWidth, float fViewportHeight) const;
 	XMFLOAT4 GetStockIssuanceButtonRectangle(float fViewportWidth, float fViewportHeight) const;
 	float GetStockNameInputFontSize(float fViewportWidth, float fViewportHeight) const;

@@ -109,6 +109,8 @@ struct CLIENT_STOCK_MANAGEMENT_INFO
 	unsigned int nSaleableQuantity = 800;
 	unsigned int nIssuanceRevenue = 0;
 	unsigned int nRecentTradeQuantity = 0;
+	unsigned int nCurrentPrice = 100;
+	unsigned int nPreviousPrice = 100;
 	CLIENT_STOCK_HOLDER_INFO TopHolders[3];
 };
 

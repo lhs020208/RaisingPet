@@ -193,6 +193,8 @@ struct StockManagementInfo {
 	std::uint32_t saleableQuantity = kInitialUnsoldStockQuantity;
 	std::uint64_t issuanceRevenue = 0;
 	std::uint32_t recentTradeQuantity = 0;
+	std::uint64_t currentPrice = kInitialStockPrice;
+	std::uint64_t previousPrice = kInitialStockPrice;
 	StockHolderSeeInfo topHolders[3];
 };
 
@@ -1114,6 +1116,26 @@ public:
 		}
 		info.recentTradeQuantity = static_cast<std::uint32_t>(
 			(recentQuantity > UINT_MAX) ? UINT_MAX : recentQuantity);
+
+		const std::string priceQuery =
+			"SELECT `PreviousPrice`, `NewPrice` FROM `StockPrice` "
+			"WHERE `StockID` = " + std::to_string(stockId) +
+			" ORDER BY `ChangedTime` DESC, `StockPriceID` DESC LIMIT 1";
+		if (mysql_query(connection_, priceQuery.c_str()) != 0) {
+			failureReason = std::string("failed to select stock price summary: ") + mysql_error(connection_);
+			return false;
+		}
+		MYSQL_RES* priceResult = mysql_store_result(connection_);
+		if (!priceResult) {
+			failureReason = std::string("failed to read stock price summary: ") + mysql_error(connection_);
+			return false;
+		}
+		MYSQL_ROW priceRow = mysql_fetch_row(priceResult);
+		if (priceRow) {
+			info.previousPrice = priceRow[0] ? std::stoull(priceRow[0]) : kInitialStockPrice;
+			info.currentPrice = priceRow[1] ? std::stoull(priceRow[1]) : kInitialStockPrice;
+		}
+		mysql_free_result(priceResult);
 
 		std::vector<StockHolderSeeInfo> holders;
 		if (!LoadStockTopHoldersIncludingSales(stockId, holders, failureReason))
@@ -2181,6 +2203,7 @@ std::vector<char> MakeStockManagementInfoResponse(const StockManagementInfo& inf
 	const std::uint16_t packetSize = static_cast<std::uint16_t>(
 		sizeof(PacketHeader) + 1 + sizeof(std::uint16_t) + stockNameLength +
 		sizeof(std::uint32_t) * 3 + sizeof(std::uint64_t) + sizeof(std::uint32_t) +
+		sizeof(std::uint64_t) * 2 +
 		(sizeof(std::uint16_t) + sizeof(std::uint32_t)) * 3 + variableSize - stockNameLength);
 	packet.reserve(packetSize);
 	WriteUInt16(packet, packetSize);
@@ -2193,6 +2216,8 @@ std::vector<char> MakeStockManagementInfoResponse(const StockManagementInfo& inf
 	WriteUInt32(packet, info.saleableQuantity);
 	WriteUInt64(packet, info.issuanceRevenue);
 	WriteUInt32(packet, info.recentTradeQuantity);
+	WriteUInt64(packet, info.currentPrice);
+	WriteUInt64(packet, info.previousPrice);
 	for (int i = 0; i < 3; ++i) {
 		WriteUInt16(packet, holderNameLengths[i]);
 		packet.insert(packet.end(), info.topHolders[i].playerId.begin(),

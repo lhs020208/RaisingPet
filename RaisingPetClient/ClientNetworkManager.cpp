@@ -295,7 +295,7 @@ bool ProcessPersistentPacketBuffer(std::vector<char>& receiveBuffer,
 			info.strStockNameUtf8.assign(cursor, cursor + stockNameLength);
 			cursor += stockNameLength;
 			if (cursor + sizeof(std::uint32_t) * 3 + sizeof(std::uint64_t) +
-				sizeof(std::uint32_t) > end) return(false);
+				sizeof(std::uint32_t) + sizeof(std::uint64_t) * 2 > end) return(false);
 			info.nSoldQuantity = static_cast<unsigned int>(ReadUInt32(cursor));
 			cursor += sizeof(std::uint32_t);
 			info.nUnsoldQuantity = static_cast<unsigned int>(ReadUInt32(cursor));
@@ -308,6 +308,14 @@ bool ProcessPersistentPacketBuffer(std::vector<char>& receiveBuffer,
 			cursor += sizeof(std::uint64_t);
 			info.nRecentTradeQuantity = static_cast<unsigned int>(ReadUInt32(cursor));
 			cursor += sizeof(std::uint32_t);
+			const std::uint64_t currentPrice = ReadUInt64(cursor);
+			if (currentPrice > UINT_MAX) return(false);
+			info.nCurrentPrice = static_cast<unsigned int>(currentPrice);
+			cursor += sizeof(std::uint64_t);
+			const std::uint64_t previousPrice = ReadUInt64(cursor);
+			if (previousPrice > UINT_MAX) return(false);
+			info.nPreviousPrice = static_cast<unsigned int>(previousPrice);
+			cursor += sizeof(std::uint64_t);
 			for (int i = 0; i < 3; ++i)
 			{
 				if (cursor + sizeof(std::uint16_t) > end) return(false);

@@ -134,6 +134,21 @@ std::wstring FormatStockRevenue(UINT value)
 	return(ToWideString(FormatPossessionTwoDecimals(value)));
 }
 
+std::wstring FormatStockPrice(UINT value)
+{
+	return(ToWideString(FormatPossessionTwoDecimals(value)));
+}
+
+std::wstring FormatStockPriceChangeText(UINT currentPrice, UINT previousPrice)
+{
+	const INT64 change = static_cast<INT64>(currentPrice) - static_cast<INT64>(previousPrice);
+	const double percent = (previousPrice > 0)
+		? (static_cast<double>(change) * 100.0 / static_cast<double>(previousPrice)) : 0.0;
+	wchar_t buffer[64] = {};
+	swprintf_s(buffer, L"%+lld(%.2f%%)", change, percent);
+	return(std::wstring(buffer));
+}
+
 std::string FormatFinancialDuration(UINT seconds)
 {
 	const UINT hours = seconds / 3600;
@@ -444,6 +459,9 @@ void CShopUI::BuildObjects(ID3D12Device* device, ID3D12GraphicsCommandList* comm
 	loadImage(L"Assets/Image/Shop/Stock/StockHolders.dds", m_StockHoldersResource);
 	loadImage(L"Assets/Image/Shop/Stock/StockManagementTable.dds", m_StockManagementTableResource);
 	loadImage(L"Assets/Image/Shop/Stock/StockChart.dds", m_StockChartResource);
+	loadImage(L"Assets/Image/Shop/Stock/SeeGraph.dds", m_SeeGraphResource);
+	loadImage(L"Assets/Image/Shop/Stock/StockUpMark.dds", m_StockUpMarkResource);
+	loadImage(L"Assets/Image/Shop/Stock/StockDownMark.dds", m_StockDownMarkResource);
 	loadImage(L"Assets/Image/Shop/Stock/IssuanceStock.dds", m_IssuanceStockResource);
 	loadImage(L"Assets/Image/Common/EmptySquare.dds", m_EmptySquareResources[0]);
 	loadImage(L"Assets/Image/Common/EmptySquare.dds", m_EmptySquareResources[1]);
@@ -498,7 +516,8 @@ void CShopUI::ReleaseObjects()
 		&m_StockLimitResources[0], &m_StockLimitResources[1],
 		&m_CantCreateStockGenLogResource, &m_StockNameResource,
 		&m_StockHoldersResource, &m_StockManagementTableResource,
-		&m_StockChartResource, &m_IssuanceStockResource };
+		&m_StockChartResource, &m_SeeGraphResource, &m_StockUpMarkResource,
+		&m_StockDownMarkResource, &m_IssuanceStockResource };
 	for (UI_IMAGE_RESOURCE* image : images)
 	{
 		if (image->pd3dTexture) image->pd3dTexture->Release();
@@ -561,7 +580,8 @@ void CShopUI::ReleaseUploadBuffers()
 		&m_StockLimitResources[0], &m_StockLimitResources[1],
 		&m_CantCreateStockGenLogResource, &m_StockNameResource,
 		&m_StockHoldersResource, &m_StockManagementTableResource,
-		&m_StockChartResource, &m_IssuanceStockResource };
+		&m_StockChartResource, &m_SeeGraphResource, &m_StockUpMarkResource,
+		&m_StockDownMarkResource, &m_IssuanceStockResource };
 	for (UI_IMAGE_RESOURCE* image : images)
 	{
 		if (image->pd3dTextureUploadBuffer)
@@ -1141,14 +1161,37 @@ void CShopUI::RenderStockManagementPage(ID3D12GraphicsCommandList* commandList, 
 	RenderUiImage(commandList, camera, m_IssuanceStockResource, issuanceRect,
 		(m_bStockIssued || m_bStockIssueButtonPressed) ? 0x00BFBFBF : 0x00FFFFFF);
 
-	const float chartWidth = rightColumnWidth;
-	const float chartHeight = chartWidth * (673.0f / 774.0f);
-	const float chartTop = contentTop + issuanceHeight + boardHeight * 0.035f;
-	RenderUiImage(commandList, camera, m_StockChartResource,
-		XMFLOAT4(rightColumnLeft, chartTop, rightColumnLeft + chartWidth, chartTop + chartHeight));
+	const XMFLOAT4 chartRect = GetStockChartRectangle(width, height);
+	RenderUiImage(commandList, camera, m_StockChartResource, chartRect);
+	RenderUiImage(commandList, camera, m_SeeGraphResource,
+		GetStockGraphButtonRectangle(camera->m_d3dViewport.Width, camera->m_d3dViewport.Height));
 
 	if (g_pFramework)
 	{
+		const UINT currentPrice = (m_StockManagementInfo.nCurrentPrice > 0)
+			? m_StockManagementInfo.nCurrentPrice : 100;
+		const UINT previousPrice = (m_StockManagementInfo.nPreviousPrice > 0)
+			? m_StockManagementInfo.nPreviousPrice : currentPrice;
+		const bool priceUpOrSame = (currentPrice >= previousPrice);
+		const UINT priceTextColor = priceUpOrSame ? 0xFFFF0000 : 0xFF0070C0;
+		const float priceTop = chartRect.y + (chartRect.w - chartRect.y) * 0.805f;
+		const float priceBottom = chartRect.w - (chartRect.w - chartRect.y) * 0.035f;
+		const float priceFontSize = boardHeight * 0.041f;
+		const float currentPriceLeft = chartRect.x + (chartRect.z - chartRect.x) * 0.17f;
+		const float currentPriceRight = chartRect.x + (chartRect.z - chartRect.x) * 0.44f;
+		g_pFramework->QueueDirectWriteText(FormatStockPrice(currentPrice),
+			XMFLOAT4(currentPriceLeft, priceTop, currentPriceRight, priceBottom),
+			priceFontSize, priceTextColor, false, true);
+		const float markSize = (priceBottom - priceTop) * 0.62f;
+		const float markLeft = chartRect.x + (chartRect.z - chartRect.x) * 0.48f;
+		const float markTop = priceTop + (priceBottom - priceTop - markSize) * 0.5f;
+		RenderUiImage(commandList, camera,
+			priceUpOrSame ? m_StockUpMarkResource : m_StockDownMarkResource,
+			XMFLOAT4(markLeft, markTop, markLeft + markSize, markTop + markSize));
+		g_pFramework->QueueDirectWriteText(FormatStockPriceChangeText(currentPrice, previousPrice),
+			XMFLOAT4(markLeft + markSize + 3.0f, priceTop, chartRect.z - 3.0f, priceBottom),
+			boardHeight * 0.0245f, priceTextColor, false, true);
+
 		const float holderLineHeight = (holdersRect.w - holdersRect.y) * 0.225f;
 		const float holderTextLeft = holdersRect.x + (holdersRect.z - holdersRect.x) * 0.055f;
 		const float holderTextRight = holdersRect.z - (holdersRect.z - holdersRect.x) * 0.05f;
@@ -1208,6 +1251,41 @@ void CShopUI::RenderStockManagementPage(ID3D12GraphicsCommandList* commandList, 
 	{
 		OutputDebugStringW(L"[ShopUI] g_pFramework is null. Cannot queue DirectWrite texts.\n");
 	}
+}
+
+XMFLOAT4 CShopUI::GetStockChartRectangle(float width, float height) const
+{
+	const XMFLOAT4 board = GetShopBoardRectangle(width, height,
+		m_xmf2ShopBoardOffset.x, m_xmf2ShopBoardOffset.y);
+	const float boardWidth = board.z - board.x;
+	const float boardHeight = board.w - board.y;
+	const float contentLeft = board.x + boardWidth * 0.06f;
+	const float contentTop = board.y + boardHeight * 0.16f;
+	const float leftColumnWidth = boardWidth * 0.52f;
+	const float rightColumnWidth = boardWidth * 0.30f;
+	const float columnGap = boardWidth * 0.055f;
+	const float rightColumnLeft = contentLeft + leftColumnWidth + columnGap;
+	const float issuanceWidth = rightColumnWidth * 0.64f;
+	const float issuanceHeight = issuanceWidth * (275.0f / 500.0f);
+	const float chartWidth = rightColumnWidth;
+	const float chartHeight = chartWidth * (673.0f / 774.0f);
+	const float chartTop = contentTop + issuanceHeight + boardHeight * 0.035f;
+	return(XMFLOAT4(rightColumnLeft, chartTop, rightColumnLeft + chartWidth, chartTop + chartHeight));
+}
+
+XMFLOAT4 CShopUI::GetStockGraphButtonRectangle(float width, float height) const
+{
+	const XMFLOAT4 chartRect = GetStockChartRectangle(width, height);
+	const float chartWidth = chartRect.z - chartRect.x;
+	const float chartHeight = chartRect.w - chartRect.y;
+	const float graphAreaTop = chartRect.y + chartHeight * 0.10f;
+	const float graphAreaBottom = chartRect.y + chartHeight * 0.70f;
+	const float graphAreaCenterX = (chartRect.x + chartRect.z) * 0.5f;
+	const float buttonWidth = chartWidth * 0.86f;
+	const float buttonHeight = (graphAreaBottom - graphAreaTop) * 0.88f;
+	const float buttonLeft = graphAreaCenterX - buttonWidth * 0.5f;
+	const float buttonTop = graphAreaTop + (graphAreaBottom - graphAreaTop - buttonHeight) * 0.5f;
+	return(XMFLOAT4(buttonLeft, buttonTop, buttonLeft + buttonWidth, buttonTop + buttonHeight));
 }
 
 XMFLOAT4 CShopUI::GetStockNameInputRectangle(float width, float height) const
@@ -1739,10 +1817,16 @@ bool CShopUI::ProcessShopUIClick(float x, float y, float width, float height, UI
 		GetShopBackRectangle(width, height, m_xmf2ShopBoardOffset.x, m_xmf2ShopBoardOffset.y)))
 	{
 		if (m_eShopPage == SHOP_PAGE::SHOP_MENU) DeactivateShop(width, height, activePetIndex);
+		else if (m_eShopPage == SHOP_PAGE::STOCK_SEE_MYGRAPH)
+		{
+			m_eShopPage = SHOP_PAGE::STOCK_MANAGEMENT;
+			m_nPressedEnhanceButton = -1;
+			m_bStockNameInputActive = false;
+			m_bStockIssueButtonPressed = false;
+		}
 		else if (m_eShopPage == SHOP_PAGE::STOCK_TRANSACTION
 			|| m_eShopPage == SHOP_PAGE::STOCK_MANAGEMENT
-			|| m_eShopPage == SHOP_PAGE::STOCK_CANT_PUBLISH
-			|| m_eShopPage == SHOP_PAGE::STOCK_SEE_MYGRAPH)
+			|| m_eShopPage == SHOP_PAGE::STOCK_CANT_PUBLISH)
 		{
 			m_eShopPage = SHOP_PAGE::STOCK_MENU;
 			m_nPressedEnhanceButton = -1;
@@ -1831,6 +1915,16 @@ bool CShopUI::ProcessShopUIClick(float x, float y, float width, float height, UI
 	else if (m_eShopPage == SHOP_PAGE::STOCK_MENU)
 	{
 		if (ProcessStockMenuClick(x, y, width, height)) return(true);
+	}
+	else if (m_eShopPage == SHOP_PAGE::STOCK_MANAGEMENT)
+	{
+		if (IsPointInRectangle(x, y, GetStockGraphButtonRectangle(width, height)))
+		{
+			m_eShopPage = SHOP_PAGE::STOCK_SEE_MYGRAPH;
+			m_bStockNameInputActive = false;
+			m_bStockIssueButtonPressed = false;
+			return(true);
+		}
 	}
 	return(false);
 }

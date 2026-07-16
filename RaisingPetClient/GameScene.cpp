@@ -1166,6 +1166,8 @@ void CGameScene::Animate(float fElapsedTime)
 		shopStockInfo.nSaleableQuantity = stockManagementInfo.nSaleableQuantity;
 		shopStockInfo.nIssuanceRevenue = stockManagementInfo.nIssuanceRevenue;
 		shopStockInfo.nRecentTradeQuantity = stockManagementInfo.nRecentTradeQuantity;
+		shopStockInfo.nCurrentPrice = stockManagementInfo.nCurrentPrice;
+		shopStockInfo.nPreviousPrice = stockManagementInfo.nPreviousPrice;
 		for (int i = 0; i < 3; ++i)
 		{
 			shopStockInfo.TopHolders[i].wstrPlayerId =
