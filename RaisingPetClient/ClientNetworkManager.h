@@ -94,6 +94,24 @@ struct CLIENT_STOCK_ISSUE_STATUS
 	std::string strStockNameUtf8;
 };
 
+struct CLIENT_STOCK_HOLDER_INFO
+{
+	std::string strPlayerId;
+	unsigned int nQuantity = 0;
+};
+
+struct CLIENT_STOCK_MANAGEMENT_INFO
+{
+	bool bIssued = false;
+	std::string strStockNameUtf8;
+	unsigned int nSoldQuantity = 0;
+	unsigned int nUnsoldQuantity = 0;
+	unsigned int nSaleableQuantity = 800;
+	unsigned int nIssuanceRevenue = 0;
+	unsigned int nRecentTradeQuantity = 0;
+	CLIENT_STOCK_HOLDER_INFO TopHolders[3];
+};
+
 class CClientNetworkManager
 {
 public:
@@ -106,6 +124,7 @@ public:
 	bool SendSavingsJoinRequest(unsigned int nProductId);
 	bool SendLoanApplyRequest(unsigned int nProductId);
 	bool SendStockIssueRequest(const std::string& stockNameUtf8);
+	bool SendStockManagementInfoRequest();
 	void Disconnect();
 
 	bool ConsumeAuthResult(CLIENT_AUTH_REQUEST& request, CLIENT_AUTH_RESULT& result);
@@ -115,6 +134,7 @@ public:
 	bool ConsumeFinancialActiveStatus(CLIENT_FINANCIAL_ACTIVE_STATUS& status);
 	bool ConsumeStockIssueResult(CLIENT_STOCK_ISSUE_APPLICATION_RESULT& result);
 	bool ConsumeStockIssueStatus(CLIENT_STOCK_ISSUE_STATUS& status);
+	bool ConsumeStockManagementInfo(CLIENT_STOCK_MANAGEMENT_INFO& info);
 	bool IsBusy() const { return m_bBusy.load(); }
 	bool IsConnected() const;
 
@@ -144,6 +164,7 @@ private:
 	std::vector<CLIENT_FINANCIAL_ACTIVE_STATUS> m_FinancialActiveStatuses;
 	std::vector<CLIENT_STOCK_ISSUE_APPLICATION_RESULT> m_StockIssueResults;
 	std::vector<CLIENT_STOCK_ISSUE_STATUS> m_StockIssueStatuses;
+	std::vector<CLIENT_STOCK_MANAGEMENT_INFO> m_StockManagementInfos;
 	std::atomic_bool m_bStopRequested = false;
 	std::atomic_bool m_bBusy = false;
 	std::atomic_bool m_bConnected = false;

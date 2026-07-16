@@ -29,6 +29,8 @@ enum class PacketType : std::uint16_t
 	StockIssueRequest = 13,
 	StockIssueResponse = 14,
 	StockIssueStatus = 15,
+	StockManagementInfoRequest = 16,
+	StockManagementInfoResponse = 17,
 };
 
 std::uint16_t ReadUInt16(const char* data)
@@ -144,6 +146,16 @@ std::vector<char> MakeStockIssueRequestPacket(const std::string& stockNameUtf8)
 	return(packet);
 }
 
+std::vector<char> MakeStockManagementInfoRequestPacket()
+{
+	std::vector<char> packet;
+	const std::uint16_t packetSize = 4;
+	packet.reserve(packetSize);
+	WriteUInt16(packet, packetSize);
+	WriteUInt16(packet, static_cast<std::uint16_t>(PacketType::StockManagementInfoRequest));
+	return(packet);
+}
+
 bool SendAll(SOCKET socket, const std::vector<char>& packet)
 {
 	int sentBytes = 0;
@@ -175,7 +187,8 @@ bool ProcessPersistentPacketBuffer(std::vector<char>& receiveBuffer,
 	std::vector<CLIENT_FINANCIAL_COMPLETION>& financialCompletions,
 	std::vector<CLIENT_FINANCIAL_ACTIVE_STATUS>& financialActiveStatuses,
 	std::vector<CLIENT_STOCK_ISSUE_APPLICATION_RESULT>& stockIssueResults,
-	std::vector<CLIENT_STOCK_ISSUE_STATUS>& stockIssueStatuses)
+	std::vector<CLIENT_STOCK_ISSUE_STATUS>& stockIssueStatuses,
+	std::vector<CLIENT_STOCK_MANAGEMENT_INFO>& stockManagementInfos)
 {
 	while (receiveBuffer.size() >= 4)
 	{
@@ -269,6 +282,47 @@ bool ProcessPersistentPacketBuffer(std::vector<char>& receiveBuffer,
 				payload + 1 + sizeof(std::uint16_t) + stockNameLength);
 			stockIssueStatuses.push_back(status);
 		}
+		else if (packetType == static_cast<std::uint16_t>(PacketType::StockManagementInfoResponse))
+		{
+			const char* cursor = payload;
+			const char* end = payload + payloadSize;
+			if (cursor + 1 + sizeof(std::uint16_t) > end) return(false);
+			CLIENT_STOCK_MANAGEMENT_INFO info;
+			info.bIssued = (*cursor++ != 0);
+			const std::uint16_t stockNameLength = ReadUInt16(cursor);
+			cursor += sizeof(std::uint16_t);
+			if (stockNameLength > 150 || cursor + stockNameLength > end) return(false);
+			info.strStockNameUtf8.assign(cursor, cursor + stockNameLength);
+			cursor += stockNameLength;
+			if (cursor + sizeof(std::uint32_t) * 3 + sizeof(std::uint64_t) +
+				sizeof(std::uint32_t) > end) return(false);
+			info.nSoldQuantity = static_cast<unsigned int>(ReadUInt32(cursor));
+			cursor += sizeof(std::uint32_t);
+			info.nUnsoldQuantity = static_cast<unsigned int>(ReadUInt32(cursor));
+			cursor += sizeof(std::uint32_t);
+			info.nSaleableQuantity = static_cast<unsigned int>(ReadUInt32(cursor));
+			cursor += sizeof(std::uint32_t);
+			const std::uint64_t revenue = ReadUInt64(cursor);
+			if (revenue > UINT_MAX) return(false);
+			info.nIssuanceRevenue = static_cast<unsigned int>(revenue);
+			cursor += sizeof(std::uint64_t);
+			info.nRecentTradeQuantity = static_cast<unsigned int>(ReadUInt32(cursor));
+			cursor += sizeof(std::uint32_t);
+			for (int i = 0; i < 3; ++i)
+			{
+				if (cursor + sizeof(std::uint16_t) > end) return(false);
+				const std::uint16_t holderNameLength = ReadUInt16(cursor);
+				cursor += sizeof(std::uint16_t);
+				if (holderNameLength > 32 || cursor + holderNameLength + sizeof(std::uint32_t) > end)
+					return(false);
+				info.TopHolders[i].strPlayerId.assign(cursor, cursor + holderNameLength);
+				cursor += holderNameLength;
+				info.TopHolders[i].nQuantity = static_cast<unsigned int>(ReadUInt32(cursor));
+				cursor += sizeof(std::uint32_t);
+			}
+			if (cursor != end) return(false);
+			stockManagementInfos.push_back(info);
+		}
 
 		receiveBuffer.erase(receiveBuffer.begin(), receiveBuffer.begin() + packetSize);
 	}
@@ -341,6 +395,16 @@ bool CClientNetworkManager::SendStockIssueRequest(const std::string& stockNameUt
 	return(SendAll(m_Socket, packet));
 }
 
+bool CClientNetworkManager::SendStockManagementInfoRequest()
+{
+	if (!m_bConnected.load()) return(false);
+	const std::vector<char> packet = MakeStockManagementInfoRequestPacket();
+
+	std::lock_guard<std::mutex> lock(m_Mutex);
+	if (m_Socket == INVALID_SOCKET) return(false);
+	return(SendAll(m_Socket, packet));
+}
+
 bool CClientNetworkManager::StartAuthRequest(CLIENT_AUTH_REQUEST request,
 	const std::string& id, const std::string& password)
 {
@@ -357,6 +421,7 @@ bool CClientNetworkManager::StartAuthRequest(CLIENT_AUTH_REQUEST request,
 		m_FinancialActiveStatuses.clear();
 		m_StockIssueResults.clear();
 		m_StockIssueStatuses.clear();
+		m_StockManagementInfos.clear();
 	}
 
 	m_bStopRequested.store(false);
@@ -442,6 +507,15 @@ bool CClientNetworkManager::ConsumeStockIssueStatus(CLIENT_STOCK_ISSUE_STATUS& s
 	if (m_StockIssueStatuses.empty()) return(false);
 	status = m_StockIssueStatuses.front();
 	m_StockIssueStatuses.erase(m_StockIssueStatuses.begin());
+	return(true);
+}
+
+bool CClientNetworkManager::ConsumeStockManagementInfo(CLIENT_STOCK_MANAGEMENT_INFO& info)
+{
+	std::lock_guard<std::mutex> lock(m_Mutex);
+	if (m_StockManagementInfos.empty()) return(false);
+	info = m_StockManagementInfos.front();
+	m_StockManagementInfos.erase(m_StockManagementInfos.begin());
 	return(true);
 }
 
@@ -615,12 +689,14 @@ void CClientNetworkManager::AuthThread(CLIENT_AUTH_REQUEST request,
 			std::vector<CLIENT_FINANCIAL_ACTIVE_STATUS> financialActiveStatuses;
 			std::vector<CLIENT_STOCK_ISSUE_APPLICATION_RESULT> stockIssueResults;
 			std::vector<CLIENT_STOCK_ISSUE_STATUS> stockIssueStatuses;
+			std::vector<CLIENT_STOCK_MANAGEMENT_INFO> stockManagementInfos;
 			if (!ProcessPersistentPacketBuffer(persistentReceiveBuffer,
 				moneyChanges, financialResults, financialCompletions, financialActiveStatuses,
-				stockIssueResults, stockIssueStatuses)) break;
+				stockIssueResults, stockIssueStatuses, stockManagementInfos)) break;
 			if (!moneyChanges.empty() || !financialResults.empty() ||
 				!financialCompletions.empty() || !financialActiveStatuses.empty() ||
-				!stockIssueResults.empty() || !stockIssueStatuses.empty())
+				!stockIssueResults.empty() || !stockIssueStatuses.empty() ||
+				!stockManagementInfos.empty())
 			{
 				std::lock_guard<std::mutex> lock(m_Mutex);
 				m_ServerMoneyChanges.insert(m_ServerMoneyChanges.end(),
@@ -635,6 +711,8 @@ void CClientNetworkManager::AuthThread(CLIENT_AUTH_REQUEST request,
 					stockIssueResults.begin(), stockIssueResults.end());
 				m_StockIssueStatuses.insert(m_StockIssueStatuses.end(),
 					stockIssueStatuses.begin(), stockIssueStatuses.end());
+				m_StockManagementInfos.insert(m_StockManagementInfos.end(),
+					stockManagementInfos.begin(), stockManagementInfos.end());
 			}
 		}
 	}

@@ -114,6 +114,26 @@ std::string FormatFinancialMoney(UINT value, bool income)
 	return(std::string(income ? "+" : "-") + FormatPossessionTwoDecimals(value) + "$");
 }
 
+std::wstring ToWideString(const std::string& text)
+{
+	return(std::wstring(text.begin(), text.end()));
+}
+
+std::wstring FormatStockQuantity(UINT value, UINT total)
+{
+	return(std::to_wstring(value) + L"/" + std::to_wstring(total) + L"\uC8FC");
+}
+
+std::wstring FormatStockTradeQuantity(UINT value)
+{
+	return(std::to_wstring(value) + L"\uC8FC");
+}
+
+std::wstring FormatStockRevenue(UINT value)
+{
+	return(ToWideString(FormatPossessionTwoDecimals(value)));
+}
+
 std::string FormatFinancialDuration(UINT seconds)
 {
 	const UINT hours = seconds / 3600;
@@ -1133,13 +1153,23 @@ void CShopUI::RenderStockManagementPage(ID3D12GraphicsCommandList* commandList, 
 		const float holderTextLeft = holdersRect.x + (holdersRect.z - holdersRect.x) * 0.055f;
 		const float holderTextRight = holdersRect.z - (holdersRect.z - holdersRect.x) * 0.05f;
 		const float holderTextTop = holdersRect.y + (holdersRect.w - holdersRect.y) * 0.285f;
-		const wchar_t* holderTexts[3] = { L"1. -", L"2. -", L"3. -" };
+		const float holderQuantityLeft = holdersRect.x + (holdersRect.z - holdersRect.x) * 0.58f;
+		const UINT holderColors[3] = { 0xFFFFC000, 0xFF7F7F7F, 0xFFA64D00 };
 		for (int i = 0; i < 3; ++i)
 		{
-			g_pFramework->QueueDirectWriteText(holderTexts[i],
+			const SHOP_STOCK_HOLDER_INFO& holder = m_StockManagementInfo.TopHolders[i];
+			const std::wstring holderName = holder.wstrPlayerId.empty() ? L"-" : holder.wstrPlayerId;
+			const std::wstring holderRankText = std::to_wstring(i + 1) + L". " + holderName;
+			const std::wstring holderQuantityText = L":" + std::to_wstring(holder.nQuantity) + L"\uC8FC";
+			const float holderFontSize = boardHeight * ((i == 0) ? 0.044f : 0.037f);
+			g_pFramework->QueueDirectWriteText(holderRankText,
 				XMFLOAT4(holderTextLeft, holderTextTop + holderLineHeight * i,
+					holderQuantityLeft, holderTextTop + holderLineHeight * (i + 1)),
+				holderFontSize, holderColors[i], false, true);
+			g_pFramework->QueueDirectWriteText(holderQuantityText,
+				XMFLOAT4(holderQuantityLeft, holderTextTop + holderLineHeight * i,
 					holderTextRight, holderTextTop + holderLineHeight * (i + 1)),
-				boardHeight * 0.037f, 0xFF000000, false, true);
+				holderFontSize, holderColors[i], false, true);
 		}
 
 		const wchar_t* tableLabels[4] =
@@ -1149,12 +1179,14 @@ void CShopUI::RenderStockManagementPage(ID3D12GraphicsCommandList* commandList, 
 			L"\uBBF8\uD310\uB9E4",
 			L"\uCD5C\uADFC\uAC70\uB798"
 		};
-		const wchar_t* tableValues[4] =
+		const UINT saleableQuantity = (m_StockManagementInfo.nSaleableQuantity > 0)
+			? m_StockManagementInfo.nSaleableQuantity : 800;
+		const std::wstring tableValues[4] =
 		{
-			L"-",
-			L"-",
-			L"-",
-			L"-"
+			FormatStockQuantity(m_StockManagementInfo.nSoldQuantity, saleableQuantity),
+			FormatStockRevenue(m_StockManagementInfo.nIssuanceRevenue),
+			FormatStockQuantity(m_StockManagementInfo.nUnsoldQuantity, saleableQuantity),
+			FormatStockTradeQuantity(m_StockManagementInfo.nRecentTradeQuantity)
 		};
 		for (int i = 0; i < 4; ++i)
 		{
@@ -1169,7 +1201,7 @@ void CShopUI::RenderStockManagementPage(ID3D12GraphicsCommandList* commandList, 
 			g_pFramework->QueueDirectWriteText(tableLabels[i], labelRect,
 				boardHeight * 0.030f, 0xFF000000, true, true);
 			g_pFramework->QueueDirectWriteText(tableValues[i], valueRect,
-				boardHeight * 0.030f, 0xFF000000, true, true);
+				boardHeight * 0.027f, 0xFF000000, true, true);
 		}
 	}
 	else
@@ -1273,6 +1305,8 @@ bool CShopUI::ProcessStockMenuClick(float x, float y, float width, float height)
 	{
 		m_eShopPage = m_bStockCreationAvailable ? SHOP_PAGE::STOCK_CONTENT_2 : SHOP_PAGE::STOCK_CONTENT_3;
 		m_bStockNameInputActive = false;
+		if (m_eShopPage == SHOP_PAGE::STOCK_CONTENT_2)
+			m_bPendingStockManagementInfoRequest = true;
 		return(true);
 	}
 	return(false);
@@ -1501,6 +1535,13 @@ bool CShopUI::ConsumeStockIssueRequest(std::wstring& stockName)
 	return(true);
 }
 
+bool CShopUI::ConsumeStockManagementInfoRequest()
+{
+	if (!m_bPendingStockManagementInfoRequest) return(false);
+	m_bPendingStockManagementInfoRequest = false;
+	return(true);
+}
+
 bool CShopUI::ConsumeLoginSceneReturnRequest()
 {
 	if (!m_bPendingLoginSceneReturnRequest) return(false);
@@ -1517,7 +1558,9 @@ void CShopUI::SetStockIssued(bool issued, const std::wstring& stockName)
 		m_nStockNameCursorIndex = 0;
 		m_bStockIssueButtonPressed = false;
 		m_bPendingStockIssueRequest = false;
+		m_bPendingStockManagementInfoRequest = false;
 		m_wstrPendingStockIssueName.clear();
+		m_StockManagementInfo = SHOP_STOCK_MANAGEMENT_INFO();
 		return;
 	}
 	if (!stockName.empty())
@@ -1529,6 +1572,26 @@ void CShopUI::SetStockIssued(bool issued, const std::wstring& stockName)
 	m_bPendingStockIssueRequest = false;
 	m_wstrPendingStockIssueName.clear();
 	m_bStockNameInputActive = false;
+	m_bPendingStockManagementInfoRequest = true;
+}
+
+void CShopUI::SetStockManagementInfo(const SHOP_STOCK_MANAGEMENT_INFO& info)
+{
+	m_StockManagementInfo = info;
+	m_bStockIssued = info.bIssued;
+	if (!info.wstrStockName.empty())
+	{
+		m_wstrStockName = info.wstrStockName;
+		m_nStockNameCursorIndex = m_wstrStockName.size();
+	}
+	if (!m_bStockIssued)
+	{
+		m_wstrStockName.clear();
+		m_nStockNameCursorIndex = 0;
+	}
+	m_bStockIssueButtonPressed = false;
+	m_bPendingStockIssueRequest = false;
+	m_wstrPendingStockIssueName.clear();
 }
 
 void CShopUI::SetFinancialProductActive(int category, int productIndex, UINT durationSeconds)

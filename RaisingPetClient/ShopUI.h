@@ -30,6 +30,24 @@ struct SHOP_PET_RENDER_RESOURCE
 	ID3D12DescriptorHeap* pd3dSrvDescriptorHeap = NULL;
 };
 
+struct SHOP_STOCK_HOLDER_INFO
+{
+	std::wstring wstrPlayerId;
+	UINT nQuantity = 0;
+};
+
+struct SHOP_STOCK_MANAGEMENT_INFO
+{
+	bool bIssued = false;
+	std::wstring wstrStockName;
+	UINT nSoldQuantity = 0;
+	UINT nUnsoldQuantity = 0;
+	UINT nSaleableQuantity = 800;
+	UINT nIssuanceRevenue = 0;
+	UINT nRecentTradeQuantity = 0;
+	SHOP_STOCK_HOLDER_INFO TopHolders[3];
+};
+
 class CShopUI
 {
 public:
@@ -51,12 +69,14 @@ public:
 	bool ConsumePetEnhancementRequest(int& nEnhancementType);
 	bool ConsumeFinancialProductRequest(int& nCategory, int& nProductIndex);
 	bool ConsumeStockIssueRequest(std::wstring& stockName);
+	bool ConsumeStockManagementInfoRequest();
 	bool ConsumeLoginSceneReturnRequest();
 	void SetFinancialProductActive(int nCategory, int nProductIndex, UINT nDurationSeconds);
 	void ClearFinancialProductActive(int nCategory, int nProductIndex);
 	void SetFinancialMaximumProductIndex(int nCategory, int nProductIndex);
 	void SetFinancialProgressCount(int nCategory, int nProgressCount);
 	void SetStockIssued(bool bIssued, const std::wstring& stockName = std::wstring());
+	void SetStockManagementInfo(const SHOP_STOCK_MANAGEMENT_INFO& info);
 	bool IsStockIssued() const { return m_bStockIssued; }
 	const std::wstring& GetStockName() const { return m_wstrStockName; }
 
@@ -159,7 +179,9 @@ private:
 	bool m_bStockIssueButtonPressed = false;
 	bool m_bStockIssued = false;
 	bool m_bPendingStockIssueRequest = false;
+	bool m_bPendingStockManagementInfoRequest = false;
 	std::wstring m_wstrPendingStockIssueName;
+	SHOP_STOCK_MANAGEMENT_INFO m_StockManagementInfo;
 	std::vector<SHOP_NETWORK_ERROR_LOG> m_NetworkErrorLogs;
 
 	void RenderUiImage(ID3D12GraphicsCommandList* pd3dCommandList, CCamera* pCamera,

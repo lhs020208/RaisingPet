@@ -53,6 +53,8 @@ enum class PacketType : std::uint16_t {
 	StockIssueRequest = 13,
 	StockIssueResponse = 14,
 	StockIssueStatus = 15,
+	StockManagementInfoRequest = 16,
+	StockManagementInfoResponse = 17,
 	AdminLoginRequest = 100,
 	AdminLoginResponse = 101,
 };
@@ -181,6 +183,17 @@ struct StockSeeInfo {
 	std::uint32_t unsoldQuantity = 0;
 	std::vector<StockPriceSeeInfo> recentPrices;
 	std::vector<StockHolderSeeInfo> topHolders;
+};
+
+struct StockManagementInfo {
+	bool issued = false;
+	std::string stockName;
+	std::uint32_t soldQuantity = 0;
+	std::uint32_t unsoldQuantity = 0;
+	std::uint32_t saleableQuantity = kInitialUnsoldStockQuantity;
+	std::uint64_t issuanceRevenue = 0;
+	std::uint32_t recentTradeQuantity = 0;
+	StockHolderSeeInfo topHolders[3];
 };
 
 struct PacketHeader {
@@ -1040,6 +1053,76 @@ public:
 		return true;
 	}
 
+	bool LoadStockManagementInfo(const std::string& id,
+		StockManagementInfo& info, std::string& failureReason) {
+		info = {};
+		info.saleableQuantity = kInitialUnsoldStockQuantity;
+		if (!IsAccountTextValid(id, 32)) {
+			failureReason = "invalid player id";
+			return false;
+		}
+
+		const std::string escapedId = Escape(id);
+		const std::string query =
+			"SELECT `StockID`, `StockName`, `TotalQuantity`, `UnsoldQuantity` "
+			"FROM `Stock` WHERE `IssuerID` = '" + escapedId + "' LIMIT 1";
+		if (mysql_query(connection_, query.c_str()) != 0) {
+			failureReason = std::string("failed to select stock management info: ") + mysql_error(connection_);
+			return false;
+		}
+		MYSQL_RES* result = mysql_store_result(connection_);
+		if (!result) {
+			failureReason = std::string("failed to read stock management info: ") + mysql_error(connection_);
+			return false;
+		}
+		MYSQL_ROW row = mysql_fetch_row(result);
+		if (!row) {
+			mysql_free_result(result);
+			return true;
+		}
+
+		info.issued = true;
+		const std::uint32_t stockId = row[0] ? static_cast<std::uint32_t>(std::stoul(row[0])) : 0;
+		info.stockName = row[1] ? row[1] : "";
+		const std::uint32_t totalQuantity = row[2] ? static_cast<std::uint32_t>(std::stoul(row[2])) : kStockTotalQuantity;
+		info.unsoldQuantity = row[3] ? static_cast<std::uint32_t>(std::stoul(row[3])) : 0;
+		mysql_free_result(result);
+
+		info.saleableQuantity = (totalQuantity > kIssuerInitialStockQuantity)
+			? (totalQuantity - kIssuerInitialStockQuantity) : totalQuantity;
+		info.soldQuantity = (info.saleableQuantity > info.unsoldQuantity)
+			? (info.saleableQuantity - info.unsoldQuantity) : 0;
+
+		std::uint64_t revenue = 0;
+		const std::string revenueQuery =
+			"SELECT COALESCE(SUM(`Quantity` * `Price`), 0) FROM `StockTrade` "
+			"WHERE `StockID` = " + std::to_string(stockId) + " AND `SellerID` IS NULL";
+		if (!QueryUInt64Scalar(revenueQuery, revenue)) {
+			failureReason = "failed to aggregate stock issuance revenue";
+			return false;
+		}
+		info.issuanceRevenue = revenue;
+
+		std::uint64_t recentQuantity = 0;
+		const std::string recentQuery =
+			"SELECT `Quantity` FROM `StockTrade` "
+			"WHERE `StockID` = " + std::to_string(stockId) +
+			" ORDER BY `TradeTime` DESC, `TradeID` DESC LIMIT 1";
+		if (!QueryUInt64Scalar(recentQuery, recentQuantity)) {
+			failureReason = "failed to load recent stock trade quantity";
+			return false;
+		}
+		info.recentTradeQuantity = static_cast<std::uint32_t>(
+			(recentQuantity > UINT_MAX) ? UINT_MAX : recentQuantity);
+
+		std::vector<StockHolderSeeInfo> holders;
+		if (!LoadStockTopHoldersIncludingSales(stockId, holders, failureReason))
+			return false;
+		for (size_t i = 0; i < holders.size() && i < 3; ++i)
+			info.topHolders[i] = holders[i];
+		return true;
+	}
+
 	bool ClearFinancialProducts(const std::string& id, bool clearSavings, bool clearLoan,
 		FinancialClearResult& clearResult, std::string& failureReason) {
 		clearResult = {};
@@ -1494,6 +1577,38 @@ private:
 		MYSQL_RES* result = mysql_store_result(connection_);
 		if (!result) {
 			failureReason = std::string("failed to read stock holders: ") + mysql_error(connection_);
+			return false;
+		}
+
+		MYSQL_ROW row = nullptr;
+		while ((row = mysql_fetch_row(result)) != nullptr) {
+			StockHolderSeeInfo holder;
+			holder.playerId = row[0] ? row[0] : "";
+			holder.quantity = row[1] ? static_cast<std::uint32_t>(std::stoul(row[1])) : 0;
+			holders.push_back(holder);
+		}
+		mysql_free_result(result);
+		return true;
+	}
+
+	bool LoadStockTopHoldersIncludingSales(std::uint32_t stockId,
+		std::vector<StockHolderSeeInfo>& holders, std::string& failureReason) {
+		holders.clear();
+		const std::string query =
+			"SELECT `PlayerID`, SUM(`Quantity`) AS `TotalQuantity` FROM ("
+			"SELECT `PlayerID`, `Quantity` FROM `StockHolding` WHERE `StockID` = " +
+			std::to_string(stockId) +
+			" UNION ALL "
+			"SELECT `SellerID` AS `PlayerID`, `Quantity` FROM `StockSale` WHERE `StockID` = " +
+			std::to_string(stockId) +
+			") holder GROUP BY `PlayerID` ORDER BY `TotalQuantity` DESC, `PlayerID` ASC LIMIT 3";
+		if (mysql_query(connection_, query.c_str()) != 0) {
+			failureReason = std::string("failed to select stock holders including sales: ") + mysql_error(connection_);
+			return false;
+		}
+		MYSQL_RES* result = mysql_store_result(connection_);
+		if (!result) {
+			failureReason = std::string("failed to read stock holders including sales: ") + mysql_error(connection_);
 			return false;
 		}
 
@@ -2049,6 +2164,41 @@ std::vector<char> MakeStockIssueStatusPacket(bool issued, const std::string& sto
 	packet.push_back(issued ? 1 : 0);
 	WriteUInt16(packet, stockNameLength);
 	packet.insert(packet.end(), stockName.begin(), stockName.begin() + stockNameLength);
+	return packet;
+}
+
+std::vector<char> MakeStockManagementInfoResponse(const StockManagementInfo& info) {
+	const std::uint16_t stockNameLength = info.issued
+		? static_cast<std::uint16_t>(info.stockName.size()) : 0;
+	std::uint16_t holderNameLengths[3] = {};
+	std::uint16_t variableSize = stockNameLength;
+	for (int i = 0; i < 3; ++i) {
+		holderNameLengths[i] = static_cast<std::uint16_t>(info.topHolders[i].playerId.size());
+		variableSize = static_cast<std::uint16_t>(variableSize + holderNameLengths[i]);
+	}
+
+	std::vector<char> packet;
+	const std::uint16_t packetSize = static_cast<std::uint16_t>(
+		sizeof(PacketHeader) + 1 + sizeof(std::uint16_t) + stockNameLength +
+		sizeof(std::uint32_t) * 3 + sizeof(std::uint64_t) + sizeof(std::uint32_t) +
+		(sizeof(std::uint16_t) + sizeof(std::uint32_t)) * 3 + variableSize - stockNameLength);
+	packet.reserve(packetSize);
+	WriteUInt16(packet, packetSize);
+	WriteUInt16(packet, static_cast<std::uint16_t>(PacketType::StockManagementInfoResponse));
+	packet.push_back(info.issued ? 1 : 0);
+	WriteUInt16(packet, stockNameLength);
+	packet.insert(packet.end(), info.stockName.begin(), info.stockName.begin() + stockNameLength);
+	WriteUInt32(packet, info.soldQuantity);
+	WriteUInt32(packet, info.unsoldQuantity);
+	WriteUInt32(packet, info.saleableQuantity);
+	WriteUInt64(packet, info.issuanceRevenue);
+	WriteUInt32(packet, info.recentTradeQuantity);
+	for (int i = 0; i < 3; ++i) {
+		WriteUInt16(packet, holderNameLengths[i]);
+		packet.insert(packet.end(), info.topHolders[i].playerId.begin(),
+			info.topHolders[i].playerId.begin() + holderNameLengths[i]);
+		WriteUInt32(packet, info.topHolders[i].quantity);
+	}
 	return packet;
 }
 
@@ -2747,11 +2897,33 @@ void ProcessPacket(Database& database, ClientSession& session,
 		const StockIssueApplicationResult result =
 			database.IssueStock(session.playerId, stockName);
 		QueuePacket(session, MakeStockIssueResponse(result));
+		if (result.result == StockIssueResult::Success ||
+			result.result == StockIssueResult::AlreadyIssued) {
+			StockManagementInfo stockInfo;
+			std::string stockInfoFailureReason;
+			if (database.LoadStockManagementInfo(session.playerId, stockInfo, stockInfoFailureReason))
+				QueuePacket(session, MakeStockManagementInfoResponse(stockInfo));
+			else
+				std::cerr << "[StockManagementInfo] " << session.playerId
+					<< " failed: " << stockInfoFailureReason << '\n';
+		}
 		std::cout << "[StockIssue] " << session.playerId
 			<< " stockName=" << stockName
 			<< " result=" << static_cast<int>(result.result)
 			<< " stockId=" << result.stockId
 			<< " money=" << result.finalMoney << '\n';
+		return;
+	}
+
+	if (packetType == PacketType::StockManagementInfoRequest) {
+		StockManagementInfo info;
+		if (session.authenticated) {
+			std::string reason;
+			if (!database.LoadStockManagementInfo(session.playerId, info, reason))
+				std::cerr << "[StockManagementInfo] " << session.playerId
+					<< " failed: " << reason << '\n';
+		}
+		QueuePacket(session, MakeStockManagementInfoResponse(info));
 		return;
 	}
 
@@ -2793,6 +2965,13 @@ void ProcessPacket(Database& database, ClientSession& session,
 			else
 				std::cerr << "[StockIssueStatus] " << session.playerId
 					<< " failed: " << stockStatusFailureReason << '\n';
+			StockManagementInfo stockInfo;
+			std::string stockInfoFailureReason;
+			if (database.LoadStockManagementInfo(session.playerId, stockInfo, stockInfoFailureReason))
+				QueuePacket(session, MakeStockManagementInfoResponse(stockInfo));
+			else
+				std::cerr << "[StockManagementInfo] " << session.playerId
+					<< " failed: " << stockInfoFailureReason << '\n';
 		}
 		std::cout << "[Login] " << request.id << " result=" << static_cast<int>(result) << '\n';
 		return;
@@ -2816,7 +2995,8 @@ bool ProcessReceiveBuffer(Database& database, ClientSession& session) {
 			packetType != PacketType::MoneyUpdate &&
 			packetType != PacketType::SavingsJoinRequest &&
 			packetType != PacketType::LoanApplyRequest &&
-			packetType != PacketType::StockIssueRequest)
+			packetType != PacketType::StockIssueRequest &&
+			packetType != PacketType::StockManagementInfoRequest)
 			return false;
 		ProcessPacket(database, session, packetType, payload);
 	}

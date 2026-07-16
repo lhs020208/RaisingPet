@@ -1029,6 +1029,10 @@ void CGameScene::OnProcessingMouseMessage(HWND hWnd, UINT nMessageID, WPARAM wPa
 		const std::string stockNameUtf8 = WideStringToUtf8(wstrStockName);
 		g_pFramework->GetNetworkManager().SendStockIssueRequest(stockNameUtf8);
 	}
+	if (m_ShopUI.ConsumeStockManagementInfoRequest())
+	{
+		g_pFramework->GetNetworkManager().SendStockManagementInfoRequest();
+	}
 	if (bShopMessageProcessed)
 		return;
 
@@ -1149,6 +1153,27 @@ void CGameScene::Animate(float fElapsedTime)
 		m_ShopUI.SetStockIssued(stockIssueStatus.bIssued,
 			Utf8ToWideString(stockIssueStatus.strStockNameUtf8));
 		SaveLocalPlayerStatus();
+	}
+
+	CLIENT_STOCK_MANAGEMENT_INFO stockManagementInfo;
+	while (g_pFramework->GetNetworkManager().ConsumeStockManagementInfo(stockManagementInfo))
+	{
+		SHOP_STOCK_MANAGEMENT_INFO shopStockInfo;
+		shopStockInfo.bIssued = stockManagementInfo.bIssued;
+		shopStockInfo.wstrStockName = Utf8ToWideString(stockManagementInfo.strStockNameUtf8);
+		shopStockInfo.nSoldQuantity = stockManagementInfo.nSoldQuantity;
+		shopStockInfo.nUnsoldQuantity = stockManagementInfo.nUnsoldQuantity;
+		shopStockInfo.nSaleableQuantity = stockManagementInfo.nSaleableQuantity;
+		shopStockInfo.nIssuanceRevenue = stockManagementInfo.nIssuanceRevenue;
+		shopStockInfo.nRecentTradeQuantity = stockManagementInfo.nRecentTradeQuantity;
+		for (int i = 0; i < 3; ++i)
+		{
+			shopStockInfo.TopHolders[i].wstrPlayerId =
+				Utf8ToWideString(stockManagementInfo.TopHolders[i].strPlayerId);
+			shopStockInfo.TopHolders[i].nQuantity =
+				stockManagementInfo.TopHolders[i].nQuantity;
+		}
+		m_ShopUI.SetStockManagementInfo(shopStockInfo);
 	}
 
 	std::int64_t nServerMoneyDelta = 0;
