@@ -779,9 +779,7 @@ void CGameScene::LoadOrCreateLocalPlayerStatus()
 
 bool CGameScene::LoadLocalPlayerStatus()
 {
-	if (m_nActivePetIndex >= m_vPetResources.size()) return(false);
-	CPet* activePet = m_vPetResources[m_nActivePetIndex].pPet;
-	if (!activePet) return(false);
+	if (m_vPetResources.empty()) return(false);
 
 	std::ifstream input(GetLocalPlayerStatusFilePath(), std::ios::binary);
 	if (!input) return(false);
@@ -817,6 +815,8 @@ bool CGameScene::LoadLocalPlayerStatus()
 	UINT stockIssued = 0;
 	UINT stockNameLength = 0;
 	std::string stockNameUtf8;
+	UINT activePetNameLength = 0;
+	std::string activePetName;
 	if (!ReadUInt(payload, offset, money) || !ReadUInt(payload, offset, pay)
 		|| !ReadUInt(payload, offset, maxPossession))
 		return(false);
@@ -832,6 +832,13 @@ bool CGameScene::LoadLocalPlayerStatus()
 			return(false);
 		if (stockNameLength > 150 || !ReadBytes(payload, offset, stockNameLength, stockNameUtf8))
 			return(false);
+		if (offset < payload.size())
+		{
+			if (!ReadUInt(payload, offset, activePetNameLength))
+				return(false);
+			if (activePetNameLength > 150 || !ReadBytes(payload, offset, activePetNameLength, activePetName))
+				return(false);
+		}
 		if (offset != payload.size()) return(false);
 	}
 	if (pay == 0) pay = 1;
@@ -848,6 +855,25 @@ bool CGameScene::LoadLocalPlayerStatus()
 	m_nFinancialProgressCounts[1] = loanProgressCount;
 	const std::wstring stockName = Utf8ToWideString(stockNameUtf8);
 	m_ShopUI.SetStockIssued(stockIssued != 0, stockName);
+
+	UINT activePetIndex = 0;
+	if (!activePetName.empty())
+	{
+		for (size_t i = 0; i < m_vPetResources.size(); ++i)
+		{
+			CPet* pet = m_vPetResources[i].pPet;
+			if (pet && pet->GetName() == activePetName)
+			{
+				activePetIndex = static_cast<UINT>(i);
+				break;
+			}
+		}
+	}
+	m_nActivePetIndex = activePetIndex;
+	m_pPointedPet = NULL;
+
+	CPet* activePet = m_vPetResources[m_nActivePetIndex].pPet;
+	if (!activePet) return(false);
 	activePet->SetPay(pay);
 	activePet->GetMaxPossession(maxPossession);
 	if (activePet->GetNowPossession() > activePet->GetMaxPossession())
@@ -867,7 +893,8 @@ void CGameScene::SaveLocalPlayerStatus() const
 
 	std::vector<unsigned char> payload;
 	const std::string stockNameUtf8 = WideStringToUtf8(m_ShopUI.GetStockName());
-	payload.reserve(36 + stockNameUtf8.size());
+	const std::string activePetName = activePet->GetName();
+	payload.reserve(40 + stockNameUtf8.size() + activePetName.size());
 	AppendUInt(payload, m_nMoney);
 	AppendUInt(payload, activePet->GetPay());
 	AppendUInt(payload, activePet->GetMaxPossession());
@@ -878,6 +905,8 @@ void CGameScene::SaveLocalPlayerStatus() const
 	AppendUInt(payload, m_ShopUI.IsStockIssued() ? 1 : 0);
 	AppendUInt(payload, static_cast<UINT>(stockNameUtf8.size()));
 	payload.insert(payload.end(), stockNameUtf8.begin(), stockNameUtf8.end());
+	AppendUInt(payload, static_cast<UINT>(activePetName.size()));
+	payload.insert(payload.end(), activePetName.begin(), activePetName.end());
 	const UINT checksum = CalculateLocalPlayerStatusChecksum(payload);
 	TransformLocalPlayerStatusPayload(payload);
 
@@ -1018,6 +1047,7 @@ void CGameScene::ChangeActivePet(size_t petIndex)
 	selectedResource.pPet->CopyRuntimeStateFrom(*currentResource.pPet);
 	m_nActivePetIndex = static_cast<UINT>(petIndex);
 	m_pPointedPet = NULL;
+	SaveLocalPlayerStatus();
 }
 
 void CGameScene::EnhanceActivePet(int enhancementType)
