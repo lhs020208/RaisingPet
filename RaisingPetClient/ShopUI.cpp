@@ -1142,21 +1142,33 @@ void CShopUI::RenderStockManagementPage(ID3D12GraphicsCommandList* commandList, 
 				boardHeight * 0.037f, 0xFF000000, false, true);
 		}
 
-		const wchar_t* tableTexts[4] =
+		const wchar_t* tableLabels[4] =
 		{
-			L"\uD310\uB9E4\uB428 -",
-			L"\uBC1C\uD589\uC218\uC775 -",
-			L"\uBBF8\uD310\uB9E4 -",
-			L"\uCD5C\uADFC\uAC70\uB798 -"
+			L"\uD310\uB9E4\uB428",
+			L"\uBC1C\uD589\uC218\uC775",
+			L"\uBBF8\uD310\uB9E4",
+			L"\uCD5C\uADFC\uAC70\uB798"
+		};
+		const wchar_t* tableValues[4] =
+		{
+			L"-",
+			L"-",
+			L"-",
+			L"-"
 		};
 		for (int i = 0; i < 4; ++i)
 		{
 			const XMFLOAT4& table = tableRects[i];
-			const bool leftColumnTable = ((i % 2) == 0);
-			const float tableLabelWidth = (table.z - table.x) * (leftColumnTable ? 0.50f : 0.405f);
-			const float tablePaddingX = (table.z - table.x) * 0.055f;
-			g_pFramework->QueueDirectWriteText(tableTexts[i],
-				XMFLOAT4(table.x + tablePaddingX, table.y, table.x + tableLabelWidth, table.w),
+			const float tableWidth = table.z - table.x;
+			const float splitX = table.x + tableWidth * 0.38f;
+			const float cellPaddingX = tableWidth * 0.025f;
+			const XMFLOAT4 labelRect(table.x + cellPaddingX, table.y,
+				splitX - cellPaddingX, table.w);
+			const XMFLOAT4 valueRect(splitX + cellPaddingX, table.y,
+				table.z - cellPaddingX, table.w);
+			g_pFramework->QueueDirectWriteText(tableLabels[i], labelRect,
+				boardHeight * 0.030f, 0xFF000000, true, true);
+			g_pFramework->QueueDirectWriteText(tableValues[i], valueRect,
 				boardHeight * 0.030f, 0xFF000000, true, true);
 		}
 	}
