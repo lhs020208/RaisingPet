@@ -15,4 +15,5 @@ DELETE FROM PlayerSavings;
 UPDATE Player
 SET
     Money = 0,
-    IsOnline = FALSE;
+    IsOnline = FALSE,
+    IsActive = FALSE;

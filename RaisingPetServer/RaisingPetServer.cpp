@@ -150,6 +150,7 @@ struct PlayerSeeInfo {
 	std::string playerId;
 	std::uint64_t money = 0;
 	bool isOnline = false;
+	bool isActive = false;
 	PlayerSavingsSeeInfo savings;
 	PlayerLoanSeeInfo loan;
 };
@@ -236,8 +237,8 @@ public:
 		const std::string escapedId = Escape(id);
 		const std::string escapedPassword = Escape(password);
 		const std::string query =
-			"INSERT INTO `Player` (`PlayerID`, `Password`, `IsOnline`, `Money`) VALUES ('" +
-			escapedId + "', '" + escapedPassword + "', FALSE, 0)";
+			"INSERT INTO `Player` (`PlayerID`, `Password`, `IsOnline`, `IsActive`, `Money`) VALUES ('" +
+			escapedId + "', '" + escapedPassword + "', FALSE, FALSE, 0)";
 
 		if (mysql_query(connection_, query.c_str()) == 0) return AuthResult::Success;
 		if (mysql_errno(connection_) == ER_DUP_ENTRY) return AuthResult::AlreadyExists;
@@ -727,7 +728,7 @@ public:
 
 		const std::string escapedId = Escape(id);
 		const std::string query =
-			"SELECT `PlayerID`, `Money`, `IsOnline` FROM `Player` WHERE `PlayerID` = '" +
+			"SELECT `PlayerID`, `Money`, `IsOnline`, `IsActive` FROM `Player` WHERE `PlayerID` = '" +
 			escapedId + "' LIMIT 1";
 		if (mysql_query(connection_, query.c_str()) != 0) {
 			failureReason = std::string("failed to select player: ") + mysql_error(connection_);
@@ -748,6 +749,7 @@ public:
 		info.playerId = row[0] ? row[0] : "";
 		info.money = row[1] ? std::stoull(row[1]) : 0;
 		info.isOnline = row[2] && std::string(row[2]) != "0";
+		info.isActive = row[3] && std::string(row[3]) != "0";
 		mysql_free_result(result);
 
 		if (detail && !LoadSeeFinancialDetails(escapedId, info, failureReason))
@@ -758,7 +760,7 @@ public:
 	bool LoadAllPlayerSeeInfos(bool detail, bool onlineOnly, bool sortByMoney,
 		std::vector<PlayerSeeInfo>& infos, std::string& failureReason) {
 		infos.clear();
-		std::string query = "SELECT `PlayerID`, `Money`, `IsOnline` FROM `Player`";
+		std::string query = "SELECT `PlayerID`, `Money`, `IsOnline`, `IsActive` FROM `Player`";
 		if (onlineOnly) query += " WHERE `IsOnline` = TRUE";
 		if (sortByMoney) query += " ORDER BY `Money` DESC, `PlayerID` ASC";
 
@@ -778,6 +780,7 @@ public:
 			info.playerId = row[0] ? row[0] : "";
 			info.money = row[1] ? std::stoull(row[1]) : 0;
 			info.isOnline = row[2] && std::string(row[2]) != "0";
+			info.isActive = row[3] && std::string(row[3]) != "0";
 			infos.push_back(info);
 		}
 		mysql_free_result(result);
@@ -964,11 +967,46 @@ public:
 			"DELETE FROM `Stock`",
 			"DELETE FROM `PlayerLoan`",
 			"DELETE FROM `PlayerSavings`",
-			"UPDATE `Player` SET `Money` = 0, `IsOnline` = FALSE"
+			"UPDATE `Player` SET `Money` = 0, `IsOnline` = FALSE, `IsActive` = FALSE"
 		};
 		for (const char* query : queries) {
 			if (mysql_query(connection_, query) == 0) continue;
 			failureReason = std::string("failed query [") + query + "]: " + mysql_error(connection_);
+			return false;
+		}
+		return true;
+	}
+
+	bool SetPlayerActive(const std::string& id, bool active, std::string& failureReason) {
+		if (!IsAccountTextValid(id, 32)) {
+			failureReason = "invalid player id";
+			return false;
+		}
+
+		const std::string escapedId = Escape(id);
+		const std::string existsQuery =
+			"SELECT 1 FROM `Player` WHERE `PlayerID` = '" + escapedId + "' LIMIT 1";
+		if (mysql_query(connection_, existsQuery.c_str()) != 0) {
+			failureReason = std::string("failed to select player: ") + mysql_error(connection_);
+			return false;
+		}
+		MYSQL_RES* result = mysql_store_result(connection_);
+		if (!result) {
+			failureReason = std::string("failed to read player: ") + mysql_error(connection_);
+			return false;
+		}
+		const bool playerFound = (mysql_fetch_row(result) != nullptr);
+		mysql_free_result(result);
+		if (!playerFound) {
+			failureReason = "player not found";
+			return false;
+		}
+
+		const std::string updateQuery =
+			std::string("UPDATE `Player` SET `IsActive` = ") + (active ? "TRUE" : "FALSE") +
+			" WHERE `PlayerID` = '" + escapedId + "'";
+		if (mysql_query(connection_, updateQuery.c_str()) != 0) {
+			failureReason = std::string("failed to update player activity: ") + mysql_error(connection_);
 			return false;
 		}
 		return true;
@@ -1791,6 +1829,19 @@ bool ParseClearILMode(const std::string& modeText, bool& clearSavings, bool& cle
 	return (mode == "I" || mode == "L" || mode == "IL" || mode == "LI");
 }
 
+bool ParseOnOffMode(const std::string& modeText, bool& value) {
+	const std::string mode = ToUpperAscii(modeText);
+	if (mode == "ON" || mode == "TRUE" || mode == "1") {
+		value = true;
+		return true;
+	}
+	if (mode == "OFF" || mode == "FALSE" || mode == "0") {
+		value = false;
+		return true;
+	}
+	return false;
+}
+
 struct SeeCommandOptions {
 	bool detail = false;
 	bool onlineOnly = false;
@@ -1831,6 +1882,7 @@ void AppendBasicPlayerSeeLine(std::ostringstream& output, const PlayerSeeInfo& i
 	if (index > 0) output << index << ". ";
 	output << "ID: " << info.playerId << " | Money: " << info.money;
 	if (includeOnline) output << " | Online: " << OnlineText(info.isOnline);
+	output << " | Active: " << OnlineText(info.isActive);
 }
 
 void AppendDetailedPlayerSeeLines(std::ostringstream& output, const PlayerSeeInfo& info,
@@ -1839,6 +1891,7 @@ void AppendDetailedPlayerSeeLines(std::ostringstream& output, const PlayerSeeInf
 	output << "ID: " << info.playerId << '\n';
 	output << "  Money: " << info.money << '\n';
 	if (includeOnline) output << "  Online: " << OnlineText(info.isOnline) << '\n';
+	output << "  Active: " << OnlineText(info.isActive) << '\n';
 	if (info.savings.active) {
 		output << "  Savings: true | SavingsID: " << info.savings.savingsId
 			<< " | Start: " << info.savings.startTime
@@ -1922,6 +1975,22 @@ std::string ExecuteAdminCommand(const std::string& command, Database& database,
 		if (!database.LoadPlayerSeeInfo(playerId, options.detail, info, reason))
 			return "FAIL " + reason;
 		return FormatSingleSeeResponse(info, options);
+	}
+	if (ToUpperAscii(commandName) == "ACTIVE") {
+		std::string playerId;
+		std::string modeText;
+		std::string extra;
+		input >> playerId >> modeText >> extra;
+		if (playerId.empty() || modeText.empty() || !extra.empty())
+			return "FAIL usage: active {playerId} {on|off}";
+		bool active = false;
+		if (!ParseOnOffMode(modeText, active))
+			return "FAIL invalid active mode";
+
+		std::string reason;
+		if (!database.SetPlayerActive(playerId, active, reason))
+			return "FAIL " + reason;
+		return "OK active " + playerId + " " + OnlineText(active);
 	}
 	if (ToUpperAscii(commandName) == "DELETEPLAYER") {
 		std::string playerId;

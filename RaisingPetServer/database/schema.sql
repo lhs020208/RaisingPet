@@ -11,6 +11,7 @@ CREATE TABLE `Player` (
     `PlayerID` VARCHAR(32) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
     `Password` VARCHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
     `IsOnline` BOOLEAN NOT NULL DEFAULT FALSE,
+    `IsActive` BOOLEAN NOT NULL DEFAULT FALSE COMMENT 'Manual activity flag controlled by admin client',
     `Money` BIGINT UNSIGNED NOT NULL DEFAULT 0,
     PRIMARY KEY (`PlayerID`),
     CONSTRAINT `CK_Player_PlayerID`
