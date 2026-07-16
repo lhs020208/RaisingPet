@@ -88,6 +88,12 @@ struct CLIENT_STOCK_ISSUE_APPLICATION_RESULT
 	unsigned int nStockId = 0;
 };
 
+struct CLIENT_STOCK_ISSUE_STATUS
+{
+	bool bIssued = false;
+	std::string strStockNameUtf8;
+};
+
 class CClientNetworkManager
 {
 public:
@@ -108,6 +114,7 @@ public:
 	bool ConsumeFinancialCompletion(CLIENT_FINANCIAL_COMPLETION& completion);
 	bool ConsumeFinancialActiveStatus(CLIENT_FINANCIAL_ACTIVE_STATUS& status);
 	bool ConsumeStockIssueResult(CLIENT_STOCK_ISSUE_APPLICATION_RESULT& result);
+	bool ConsumeStockIssueStatus(CLIENT_STOCK_ISSUE_STATUS& status);
 	bool IsBusy() const { return m_bBusy.load(); }
 	bool IsConnected() const;
 
@@ -136,6 +143,7 @@ private:
 	std::vector<CLIENT_FINANCIAL_COMPLETION> m_FinancialCompletions;
 	std::vector<CLIENT_FINANCIAL_ACTIVE_STATUS> m_FinancialActiveStatuses;
 	std::vector<CLIENT_STOCK_ISSUE_APPLICATION_RESULT> m_StockIssueResults;
+	std::vector<CLIENT_STOCK_ISSUE_STATUS> m_StockIssueStatuses;
 	std::atomic_bool m_bStopRequested = false;
 	std::atomic_bool m_bBusy = false;
 	std::atomic_bool m_bConnected = false;

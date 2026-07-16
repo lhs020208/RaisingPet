@@ -1511,18 +1511,24 @@ bool CShopUI::ConsumeLoginSceneReturnRequest()
 void CShopUI::SetStockIssued(bool issued, const std::wstring& stockName)
 {
 	m_bStockIssued = issued;
+	if (!m_bStockIssued)
+	{
+		m_wstrStockName.clear();
+		m_nStockNameCursorIndex = 0;
+		m_bStockIssueButtonPressed = false;
+		m_bPendingStockIssueRequest = false;
+		m_wstrPendingStockIssueName.clear();
+		return;
+	}
 	if (!stockName.empty())
 	{
 		m_wstrStockName = stockName;
 		m_nStockNameCursorIndex = m_wstrStockName.size();
 	}
-	if (m_bStockIssued)
-	{
-		m_bStockIssueButtonPressed = false;
-		m_bPendingStockIssueRequest = false;
-		m_wstrPendingStockIssueName.clear();
-		m_bStockNameInputActive = false;
-	}
+	m_bStockIssueButtonPressed = false;
+	m_bPendingStockIssueRequest = false;
+	m_wstrPendingStockIssueName.clear();
+	m_bStockNameInputActive = false;
 }
 
 void CShopUI::SetFinancialProductActive(int category, int productIndex, UINT durationSeconds)

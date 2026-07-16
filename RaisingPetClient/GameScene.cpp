@@ -1143,6 +1143,14 @@ void CGameScene::Animate(float fElapsedTime)
 		}
 	}
 
+	CLIENT_STOCK_ISSUE_STATUS stockIssueStatus;
+	while (g_pFramework->GetNetworkManager().ConsumeStockIssueStatus(stockIssueStatus))
+	{
+		m_ShopUI.SetStockIssued(stockIssueStatus.bIssued,
+			Utf8ToWideString(stockIssueStatus.strStockNameUtf8));
+		SaveLocalPlayerStatus();
+	}
+
 	std::int64_t nServerMoneyDelta = 0;
 	UINT nServerFinalMoney = 0;
 	while (g_pFramework->GetNetworkManager().ConsumeServerMoneyChange(

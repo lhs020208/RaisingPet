@@ -52,6 +52,7 @@ enum class PacketType : std::uint16_t {
 	FinancialProductActive = 12,
 	StockIssueRequest = 13,
 	StockIssueResponse = 14,
+	StockIssueStatus = 15,
 	AdminLoginRequest = 100,
 	AdminLoginResponse = 101,
 };
@@ -1006,6 +1007,36 @@ public:
 					return false;
 			}
 		}
+		return true;
+	}
+
+	bool LoadIssuedStockStatus(const std::string& id, bool& issued,
+		std::string& stockName, std::string& failureReason) {
+		issued = false;
+		stockName.clear();
+		if (!IsAccountTextValid(id, 32)) {
+			failureReason = "invalid player id";
+			return false;
+		}
+
+		const std::string escapedId = Escape(id);
+		const std::string query =
+			"SELECT `StockName` FROM `Stock` WHERE `IssuerID` = '" + escapedId + "' LIMIT 1";
+		if (mysql_query(connection_, query.c_str()) != 0) {
+			failureReason = std::string("failed to select issued stock: ") + mysql_error(connection_);
+			return false;
+		}
+		MYSQL_RES* result = mysql_store_result(connection_);
+		if (!result) {
+			failureReason = std::string("failed to read issued stock: ") + mysql_error(connection_);
+			return false;
+		}
+		MYSQL_ROW row = mysql_fetch_row(result);
+		if (row) {
+			issued = true;
+			stockName = row[0] ? row[0] : "";
+		}
+		mysql_free_result(result);
 		return true;
 	}
 
@@ -2006,6 +2037,21 @@ std::vector<char> MakeStockIssueResponse(const StockIssueApplicationResult& resu
 	return packet;
 }
 
+std::vector<char> MakeStockIssueStatusPacket(bool issued, const std::string& stockName) {
+	const std::uint16_t stockNameLength = issued
+		? static_cast<std::uint16_t>(stockName.size()) : 0;
+	std::vector<char> packet;
+	const std::uint16_t packetSize = static_cast<std::uint16_t>(
+		sizeof(PacketHeader) + 1 + sizeof(std::uint16_t) + stockNameLength);
+	packet.reserve(packetSize);
+	WriteUInt16(packet, packetSize);
+	WriteUInt16(packet, static_cast<std::uint16_t>(PacketType::StockIssueStatus));
+	packet.push_back(issued ? 1 : 0);
+	WriteUInt16(packet, stockNameLength);
+	packet.insert(packet.end(), stockName.begin(), stockName.begin() + stockNameLength);
+	return packet;
+}
+
 bool SendAll(SOCKET socket, const std::vector<char>& packet) {
 	int sentBytes = 0;
 	while (sentBytes < static_cast<int>(packet.size())) {
@@ -2738,6 +2784,15 @@ void ProcessPacket(Database& database, ClientSession& session,
 			std::vector<FinancialActiveStatus> statuses;
 			if (database.LoadActiveFinancialStatuses(session.playerId, statuses))
 				QueueFinancialActiveStatuses(session, statuses);
+			bool stockIssued = false;
+			std::string issuedStockName;
+			std::string stockStatusFailureReason;
+			if (database.LoadIssuedStockStatus(session.playerId,
+				stockIssued, issuedStockName, stockStatusFailureReason))
+				QueuePacket(session, MakeStockIssueStatusPacket(stockIssued, issuedStockName));
+			else
+				std::cerr << "[StockIssueStatus] " << session.playerId
+					<< " failed: " << stockStatusFailureReason << '\n';
 		}
 		std::cout << "[Login] " << request.id << " result=" << static_cast<int>(result) << '\n';
 		return;
