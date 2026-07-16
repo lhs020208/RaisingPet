@@ -143,7 +143,8 @@ std::wstring FormatStockPriceChangeText(UINT currentPrice, UINT previousPrice)
 {
 	const INT64 change = static_cast<INT64>(currentPrice) - static_cast<INT64>(previousPrice);
 	const double percent = (previousPrice > 0)
-		? (static_cast<double>(change) * 100.0 / static_cast<double>(previousPrice)) : 0.0;
+		? (static_cast<double>(change) * 100.0 / static_cast<double>(previousPrice))
+		: ((change > 0) ? 100.0 : 0.0);
 	wchar_t buffer[64] = {};
 	swprintf_s(buffer, L"%+lld(%.2f%%)", change, percent);
 	return(std::wstring(buffer));
@@ -153,7 +154,8 @@ std::wstring FormatStockPercentChange(UINT fromPrice, UINT toPrice)
 {
 	const INT64 change = static_cast<INT64>(toPrice) - static_cast<INT64>(fromPrice);
 	const double percent = (fromPrice > 0)
-		? (static_cast<double>(change) * 100.0 / static_cast<double>(fromPrice)) : 0.0;
+		? (static_cast<double>(change) * 100.0 / static_cast<double>(fromPrice))
+		: ((change > 0) ? 100.0 : 0.0);
 	wchar_t buffer[64] = {};
 	swprintf_s(buffer, L"%+.2f%%", percent);
 	return(std::wstring(buffer));
@@ -1488,16 +1490,24 @@ void CShopUI::RenderStockGraphPage(ID3D12GraphicsCommandList* commandList, CCame
 	for (auto it = m_StockManagementInfo.RecentPrices.rbegin();
 		it != m_StockManagementInfo.RecentPrices.rend() && prices.size() < 10; ++it)
 		prices.push_back(*it);
+	if (!prices.empty()
+		&& prices.size() < 10
+		&& prices.front().nPreviousPrice == prices.front().nNewPrice
+		&& prices.front().nNewPrice == 100)
+	{
+		prices.front().nPreviousPrice = 0;
+	}
 
 	UINT minimumPrice = 0;
 	UINT maximumPrice = 100;
 	if (!prices.empty())
 	{
-		minimumPrice = UINT_MAX;
+		minimumPrice = (prices.size() < 10) ? 0 : UINT_MAX;
 		maximumPrice = 0;
 		for (const SHOP_STOCK_PRICE_INFO& price : prices)
 		{
-			minimumPrice = min(minimumPrice, min(price.nPreviousPrice, price.nNewPrice));
+			if (prices.size() >= 10)
+				minimumPrice = min(minimumPrice, min(price.nPreviousPrice, price.nNewPrice));
 			maximumPrice = max(maximumPrice, max(price.nPreviousPrice, price.nNewPrice));
 		}
 		if (minimumPrice == UINT_MAX) minimumPrice = 0;
@@ -1509,9 +1519,9 @@ void CShopUI::RenderStockGraphPage(ID3D12GraphicsCommandList* commandList, CCame
 	const float plotLeft = graphRect.x + graphRectWidth * (1.59f / 19.60f);
 	const float plotRight = plotLeft + graphRectWidth * (12.23f / 19.60f);
 	const float infoLeft = plotRight + graphRectWidth * 0.018f;
-	const float plotTop = graphRect.y + graphRectHeight * 0.070f;
-	const float plotBottom = graphRect.y + graphRectHeight * (8.65f / 10.37f);
-	const float timeTop = plotBottom + graphRectHeight * 0.020f;
+	const float plotTop = graphRect.y + graphRectHeight * 0.064f;
+	const float plotBottom = graphRect.y + graphRectHeight * 0.768f;
+	const float timeTop = graphRect.y + graphRectHeight * 0.845f;
 	const float labelLeft = graphRect.x + graphRectWidth * 0.012f;
 	const float labelRight = plotLeft - graphRectWidth * 0.030f;
 	const float plotHeight = plotBottom - plotTop;
@@ -1545,6 +1555,14 @@ void CShopUI::RenderStockGraphPage(ID3D12GraphicsCommandList* commandList, CCame
 		const float barRight = centerX + barWidth * 0.5f;
 		const float previousY = priceToY(price.nPreviousPrice);
 		const float newY = priceToY(price.nNewPrice);
+		if (price.nPreviousPrice == price.nNewPrice)
+		{
+			g_pFramework->QueueDirectWriteText(FormatGraphTimeLabel(price.wstrChangedTime),
+				XMFLOAT4(centerX - slotWidth * 0.5f, timeTop,
+					centerX + slotWidth * 0.5f, timeTop + boardHeight * 0.04f),
+				boardHeight * 0.020f, 0xFFFFFFFF, true, true);
+			continue;
+		}
 		const float top = min(previousY, newY);
 		const float bottom = max(previousY, newY);
 		const UINT barColor = (price.nNewPrice >= price.nPreviousPrice) ? 0x00FF0000 : 0x000070C0;
@@ -1566,12 +1584,13 @@ void CShopUI::RenderStockGraphPage(ID3D12GraphicsCommandList* commandList, CCame
 		averagePrice = static_cast<UINT>(sum / prices.size());
 	}
 	const SHOP_STOCK_PRICE_INFO latestPrice = prices.empty() ? SHOP_STOCK_PRICE_INFO() : prices.back();
-	const UINT basePrice = prices.empty() ? 100 : max(1u, prices.front().nPreviousPrice);
+	const UINT basePrice = prices.empty() ? 100 : prices.front().nPreviousPrice;
 	const UINT latestNewPrice = prices.empty() ? 100 : latestPrice.nNewPrice;
 	const UINT latestPreviousPrice = prices.empty() ? 100 : latestPrice.nPreviousPrice;
 	const INT64 latestDelta = static_cast<INT64>(latestNewPrice) - static_cast<INT64>(latestPreviousPrice);
 	const double latestPercent = (latestPreviousPrice > 0)
-		? (static_cast<double>(latestDelta) * 100.0 / static_cast<double>(latestPreviousPrice)) : 0.0;
+		? (static_cast<double>(latestDelta) * 100.0 / static_cast<double>(latestPreviousPrice))
+		: ((latestDelta > 0) ? 100.0 : 0.0);
 	wchar_t latestDeltaText[80] = {};
 	swprintf_s(latestDeltaText, L"%+lld (%+.2f%%)", latestDelta, latestPercent);
 

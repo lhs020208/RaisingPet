@@ -632,7 +632,7 @@ public:
 		const std::string insertPrice =
 			"INSERT INTO `StockPrice` (`StockID`, `PreviousPrice`, `NewPrice`, "
 			"`BoughtQuantity`, `SoldQuantity`, `ChangeReason`, `ChangedTime`) VALUES (" +
-			std::to_string(stockId) + ", " + std::to_string(kInitialStockPrice) + ", " +
+			std::to_string(stockId) + ", 0, " +
 			std::to_string(kInitialStockPrice) + ", 0, 0, 'ISSUANCE', NOW())";
 		if (mysql_query(connection_, insertPrice.c_str()) != 0) {
 			mysql_query(connection_, "ROLLBACK");
@@ -2319,6 +2319,21 @@ void QueueFinancialActiveStatuses(ClientSession& session,
 		QueuePacket(session, MakeFinancialProductActivePacket(status));
 }
 
+void QueueStockManagementInfosForAuthenticatedSessions(Database& database,
+	std::vector<ClientSession>& sessions, std::mutex& sessionsMutex) {
+	std::lock_guard<std::mutex> lock(sessionsMutex);
+	for (ClientSession& session : sessions) {
+		if (!session.authenticated || session.socket == INVALID_SOCKET) continue;
+		StockManagementInfo info;
+		std::string reason;
+		if (database.LoadStockManagementInfo(session.playerId, info, reason))
+			QueuePacket(session, MakeStockManagementInfoResponse(info));
+		else
+			std::cerr << "[StockManagementInfo] " << session.playerId
+			<< " failed: " << reason << '\n';
+	}
+}
+
 void QueueFinancialClearNotifications(std::vector<ClientSession>& sessions,
 	std::mutex& sessionsMutex, const std::vector<FinancialClearResult>& results) {
 	std::lock_guard<std::mutex> lock(sessionsMutex);
@@ -2598,6 +2613,8 @@ std::string ExecuteAdminCommand(const std::string& command, Database& database,
 		std::string reason;
 		if (!database.UpdateStockPrices(true, updatedCount, reason))
 			return "FAIL " + reason;
+		if (updatedCount > 0)
+			QueueStockManagementInfosForAuthenticatedSessions(database, sessions, sessionsMutex);
 		return "OK update stock updated=" + std::to_string(updatedCount);
 	}
 	if (ToUpperAscii(commandName) == "DELETEPLAYER") {
@@ -3053,7 +3070,8 @@ bool ProcessReceiveBuffer(Database& database, ClientSession& session) {
 	return true;
 }
 
-void RunStockPriceUpdateServer() {
+void RunStockPriceUpdateServer(std::vector<ClientSession>& sessions,
+	std::mutex& sessionsMutex) {
 	Database stockDatabase;
 	if (!stockDatabase.Connect()) {
 		std::cerr << "Stock price updater database connection failed.\n";
@@ -3070,8 +3088,11 @@ void RunStockPriceUpdateServer() {
 		int updatedCount = 0;
 		std::string failureReason;
 		if (stockDatabase.UpdateStockPrices(false, updatedCount, failureReason)) {
-			if (updatedCount > 0)
+			if (updatedCount > 0) {
 				std::cout << "[StockPriceUpdate] updated=" << updatedCount << '\n';
+				QueueStockManagementInfosForAuthenticatedSessions(
+					stockDatabase, sessions, sessionsMutex);
+			}
 		}
 		else {
 			std::cerr << "[StockPriceUpdate] failed: " << failureReason << '\n';
@@ -3142,7 +3163,8 @@ int main(int argc, char* argv[]) {
 
 	std::cout << "RaisingPet TCP server is listening on 0.0.0.0:" << port << '\n';
 	std::thread(RunAdminServer, adminPort, std::ref(sessions), std::ref(sessionsMutex)).detach();
-	std::thread(RunStockPriceUpdateServer).detach();
+	std::thread(RunStockPriceUpdateServer,
+		std::ref(sessions), std::ref(sessionsMutex)).detach();
 	std::cout << "Press Ctrl+C to stop.\n";
 
 	while (true) {
