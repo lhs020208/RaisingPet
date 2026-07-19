@@ -481,20 +481,21 @@ void CShopUI::BuildObjects(ID3D12Device* device, ID3D12GraphicsCommandList* comm
 	loadImage(L"Assets/Image/Shop/InternetOnIcon.dds", m_InternetOnIconResource);
 	loadImage(L"Assets/Image/Shop/InternetOffIcon.dds", m_InternetOffIconResource);
 	loadImage(L"Assets/Image/Shop/NetworkErrorLog.dds", m_NetworkErrorLogResource);
-	loadImage(L"Assets/Image/Shop/Stock/StockSlot1.dds", m_StockSlotResources[0]);
-	loadImage(L"Assets/Image/Shop/Stock/StockSlot2.dds", m_StockSlotResources[1]);
-	loadImage(L"Assets/Image/Shop/Stock/Limit1.dds", m_StockLimitResources[0]);
-	loadImage(L"Assets/Image/Shop/Stock/Limit2.dds", m_StockLimitResources[1]);
-	loadImage(L"Assets/Image/Shop/Stock/CantCreateStockGenLog.dds", m_CantCreateStockGenLogResource);
-	loadImage(L"Assets/Image/Shop/Stock/StockName.dds", m_StockNameResource);
-	loadImage(L"Assets/Image/Shop/Stock/StockHolders.dds", m_StockHoldersResource);
-	loadImage(L"Assets/Image/Shop/Stock/StockManagementTable.dds", m_StockManagementTableResource);
-	loadImage(L"Assets/Image/Shop/Stock/StockChart.dds", m_StockChartResource);
-	loadImage(L"Assets/Image/Shop/Stock/MyGraph.dds", m_MyGraphResource);
-	loadImage(L"Assets/Image/Shop/Stock/SeeGraph.dds", m_SeeGraphResource);
-	loadImage(L"Assets/Image/Shop/Stock/StockUpMark.dds", m_StockUpMarkResource);
-	loadImage(L"Assets/Image/Shop/Stock/StockDownMark.dds", m_StockDownMarkResource);
-	loadImage(L"Assets/Image/Shop/Stock/IssuanceStock.dds", m_IssuanceStockResource);
+	loadImage(L"Assets/Image/Shop/Stock/StockManager/StockSlot1.dds", m_StockSlotResources[0]);
+	loadImage(L"Assets/Image/Shop/Stock/StockManager/StockSlot2.dds", m_StockSlotResources[1]);
+	loadImage(L"Assets/Image/Shop/Stock/StockManager/Limit1.dds", m_StockLimitResources[0]);
+	loadImage(L"Assets/Image/Shop/Stock/StockManager/Limit2.dds", m_StockLimitResources[1]);
+	loadImage(L"Assets/Image/Shop/Stock/StockManager/CantCreateStockGenLog.dds", m_CantCreateStockGenLogResource);
+	loadImage(L"Assets/Image/Shop/Stock/StockManager/StockName.dds", m_StockNameResource);
+	loadImage(L"Assets/Image/Shop/Stock/StockManager/StockHolders.dds", m_StockHoldersResource);
+	loadImage(L"Assets/Image/Shop/Stock/StockManager/StockManagementTable.dds", m_StockManagementTableResource);
+	loadImage(L"Assets/Image/Shop/Stock/StockManager/StockChart.dds", m_StockChartResource);
+	loadImage(L"Assets/Image/Shop/Stock/StockManager/MyGraph.dds", m_MyGraphResource);
+	loadImage(L"Assets/Image/Shop/Stock/StockManager/SeeGraph.dds", m_SeeGraphResource);
+	loadImage(L"Assets/Image/Shop/Stock/StockManager/StockUpMark.dds", m_StockUpMarkResource);
+	loadImage(L"Assets/Image/Shop/Stock/StockManager/StockDownMark.dds", m_StockDownMarkResource);
+	loadImage(L"Assets/Image/Shop/Stock/StockManager/IssuanceStock.dds", m_IssuanceStockResource);
+	loadImage(L"Assets/Image/Shop/Stock/StockManager/IssuanceStockErrorLog.dds", m_IssuanceStockErrorLogResource);
 	loadImage(L"Assets/Image/Common/EmptySquare.dds", m_EmptySquareResources[0]);
 	loadImage(L"Assets/Image/Common/EmptySquare.dds", m_EmptySquareResources[1]);
 	loadImage(L"Assets/Image/Shop/PetConfirmationButton.dds", m_PetConfirmationButtonResource);
@@ -549,7 +550,7 @@ void CShopUI::ReleaseObjects()
 		&m_CantCreateStockGenLogResource, &m_StockNameResource,
 		&m_StockHoldersResource, &m_StockManagementTableResource,
 		&m_StockChartResource, &m_MyGraphResource, &m_SeeGraphResource, &m_StockUpMarkResource,
-		&m_StockDownMarkResource, &m_IssuanceStockResource };
+		&m_StockDownMarkResource, &m_IssuanceStockResource, &m_IssuanceStockErrorLogResource };
 	for (UI_IMAGE_RESOURCE* image : images)
 	{
 		if (image->pd3dTexture) image->pd3dTexture->Release();
@@ -592,6 +593,11 @@ void CShopUI::Animate(float elapsedTime)
 	m_NetworkErrorLogs.erase(std::remove_if(m_NetworkErrorLogs.begin(), m_NetworkErrorLogs.end(),
 		[](const SHOP_NETWORK_ERROR_LOG& log) { return(log.fElapsedTime >= 1.0f); }),
 		m_NetworkErrorLogs.end());
+	for (SHOP_NETWORK_ERROR_LOG& log : m_StockIssueErrorLogs)
+		log.fElapsedTime += elapsedTime;
+	m_StockIssueErrorLogs.erase(std::remove_if(m_StockIssueErrorLogs.begin(), m_StockIssueErrorLogs.end(),
+		[](const SHOP_NETWORK_ERROR_LOG& log) { return(log.fElapsedTime >= 1.0f); }),
+		m_StockIssueErrorLogs.end());
 }
 
 void CShopUI::ReleaseUploadBuffers()
@@ -613,7 +619,7 @@ void CShopUI::ReleaseUploadBuffers()
 		&m_CantCreateStockGenLogResource, &m_StockNameResource,
 		&m_StockHoldersResource, &m_StockManagementTableResource,
 		&m_StockChartResource, &m_MyGraphResource, &m_SeeGraphResource, &m_StockUpMarkResource,
-		&m_StockDownMarkResource, &m_IssuanceStockResource };
+		&m_StockDownMarkResource, &m_IssuanceStockResource, &m_IssuanceStockErrorLogResource };
 	for (UI_IMAGE_RESOURCE* image : images)
 	{
 		if (image->pd3dTextureUploadBuffer)
@@ -1214,7 +1220,8 @@ void CShopUI::RenderStockManagementPage(ID3D12GraphicsCommandList* commandList, 
 	const XMFLOAT4 chartRect = GetStockChartRectangle(width, height);
 	RenderUiImage(commandList, camera, m_StockChartResource, chartRect);
 	RenderUiImage(commandList, camera, m_SeeGraphResource,
-		GetStockGraphButtonRectangle(camera->m_d3dViewport.Width, camera->m_d3dViewport.Height));
+		GetStockGraphButtonRectangle(camera->m_d3dViewport.Width, camera->m_d3dViewport.Height),
+		m_bStockIssued ? 0x00FFFFFF : 0x00BFBFBF);
 
 	if (g_pFramework)
 	{
@@ -1757,6 +1764,7 @@ void CShopUI::Render(ID3D12GraphicsCommandList* commandList, CCamera* camera, UI
 		else if (m_eShopPage == SHOP_PAGE::STOCK_MANAGEMENT)
 		{
 			RenderStockManagementPage(commandList, camera);
+			RenderStockIssueErrorLogs(commandList, camera);
 		}
 		else if (m_eShopPage == SHOP_PAGE::STOCK_CANT_PUBLISH)
 		{
@@ -1876,6 +1884,7 @@ void CShopUI::SetStockIssued(bool issued, const std::wstring& stockName)
 		m_nStockNameCursorIndex = 0;
 		m_bStockIssueButtonPressed = false;
 		m_bPendingStockIssueRequest = false;
+		m_bPendingStockIssueErrorLog = false;
 		m_bPendingStockManagementInfoRequest = false;
 		m_wstrPendingStockIssueName.clear();
 		m_StockManagementInfo = SHOP_STOCK_MANAGEMENT_INFO();
@@ -1888,9 +1897,16 @@ void CShopUI::SetStockIssued(bool issued, const std::wstring& stockName)
 	}
 	m_bStockIssueButtonPressed = false;
 	m_bPendingStockIssueRequest = false;
+	m_bPendingStockIssueErrorLog = false;
 	m_wstrPendingStockIssueName.clear();
 	m_bStockNameInputActive = false;
 	m_bPendingStockManagementInfoRequest = true;
+}
+
+void CShopUI::NotifyStockIssueFailed()
+{
+	if (m_bStockIssued) return;
+	m_bPendingStockIssueErrorLog = true;
 }
 
 void CShopUI::SetStockManagementInfo(const SHOP_STOCK_MANAGEMENT_INFO& info)
@@ -1909,6 +1925,7 @@ void CShopUI::SetStockManagementInfo(const SHOP_STOCK_MANAGEMENT_INFO& info)
 	}
 	m_bStockIssueButtonPressed = false;
 	m_bPendingStockIssueRequest = false;
+	m_bPendingStockIssueErrorLog = false;
 	m_wstrPendingStockIssueName.clear();
 }
 
@@ -2025,6 +2042,42 @@ void CShopUI::SpawnNetworkErrorLog(float width, float height, int slotIndex)
 	log.fElapsedTime = 0.0f;
 	m_NetworkErrorLogs.clear();
 	m_NetworkErrorLogs.push_back(log);
+}
+
+void CShopUI::RenderStockIssueErrorLogs(ID3D12GraphicsCommandList* commandList, CCamera* camera)
+{
+	if (m_bPendingStockIssueErrorLog && camera)
+	{
+		const float width = camera->m_d3dViewport.Width;
+		const float height = camera->m_d3dViewport.Height;
+		const XMFLOAT4 button = GetStockIssuanceButtonRectangle(width, height);
+		const XMFLOAT4 board = GetShopBoardRectangle(width, height,
+			m_xmf2ShopBoardOffset.x, m_xmf2ShopBoardOffset.y);
+		const float boardWidth = board.z - board.x;
+		const float logWidth = boardWidth * 0.54f;
+		const float logHeight = logWidth * (133.0f / 1757.0f);
+		const float centerX = (button.x + button.z) * 0.5f;
+		const float top = button.y - logHeight - 12.0f;
+
+		SHOP_NETWORK_ERROR_LOG log;
+		log.rectangle = XMFLOAT4(centerX - logWidth * 0.5f, top,
+			centerX + logWidth * 0.5f, top + logHeight);
+		log.fElapsedTime = 0.0f;
+		m_StockIssueErrorLogs.clear();
+		m_StockIssueErrorLogs.push_back(log);
+		m_bPendingStockIssueErrorLog = false;
+	}
+
+	for (const SHOP_NETWORK_ERROR_LOG& log : m_StockIssueErrorLogs)
+	{
+		const float alphaRatio = max(0.0f, 1.0f - log.fElapsedTime);
+		const UINT alpha = max(1u, static_cast<UINT>(alphaRatio * 255.0f + 0.5f));
+		const float moveY = -20.0f * log.fElapsedTime;
+		RenderUiImage(commandList, camera, m_IssuanceStockErrorLogResource,
+			XMFLOAT4(log.rectangle.x, log.rectangle.y + moveY,
+				log.rectangle.z, log.rectangle.w + moveY),
+			(alpha << 24) | 0x00FFFFFF);
+	}
 }
 
 bool CShopUI::ProcessShopUIClick(float x, float y, float width, float height, UINT money,
@@ -2160,6 +2213,7 @@ bool CShopUI::ProcessShopUIClick(float x, float y, float width, float height, UI
 	{
 		if (IsPointInRectangle(x, y, GetStockGraphButtonRectangle(width, height)))
 		{
+			if (!m_bStockIssued) return(true);
 			m_eShopPage = SHOP_PAGE::STOCK_SEE_MYGRAPH;
 			m_bStockNameInputActive = false;
 			m_bStockIssueButtonPressed = false;

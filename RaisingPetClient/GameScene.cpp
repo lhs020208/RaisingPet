@@ -1145,6 +1145,10 @@ void CGameScene::Animate(float fElapsedTime)
 			m_ShopUI.SetStockIssued(true);
 			SaveLocalPlayerStatus();
 		}
+		else
+		{
+			m_ShopUI.NotifyStockIssueFailed();
+		}
 	}
 
 	CLIENT_STOCK_ISSUE_STATUS stockIssueStatus;

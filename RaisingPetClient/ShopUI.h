@@ -88,6 +88,7 @@ public:
 	void SetFinancialMaximumProductIndex(int nCategory, int nProductIndex);
 	void SetFinancialProgressCount(int nCategory, int nProgressCount);
 	void SetStockIssued(bool bIssued, const std::wstring& stockName = std::wstring());
+	void NotifyStockIssueFailed();
 	void SetStockManagementInfo(const SHOP_STOCK_MANAGEMENT_INFO& info);
 	bool IsStockIssued() const { return m_bStockIssued; }
 	const std::wstring& GetStockName() const { return m_wstrStockName; }
@@ -157,6 +158,7 @@ private:
 	UI_IMAGE_RESOURCE m_StockUpMarkResource;
 	UI_IMAGE_RESOURCE m_StockDownMarkResource;
 	UI_IMAGE_RESOURCE m_IssuanceStockResource;
+	UI_IMAGE_RESOURCE m_IssuanceStockErrorLogResource;
 
 	bool m_bShopActive = false;
 	SHOP_PAGE m_eShopPage = SHOP_PAGE::SHOP_MENU;
@@ -197,10 +199,12 @@ private:
 	bool m_bStockIssueButtonPressed = false;
 	bool m_bStockIssued = false;
 	bool m_bPendingStockIssueRequest = false;
+	bool m_bPendingStockIssueErrorLog = false;
 	bool m_bPendingStockManagementInfoRequest = false;
 	std::wstring m_wstrPendingStockIssueName;
 	SHOP_STOCK_MANAGEMENT_INFO m_StockManagementInfo;
 	std::vector<SHOP_NETWORK_ERROR_LOG> m_NetworkErrorLogs;
+	std::vector<SHOP_NETWORK_ERROR_LOG> m_StockIssueErrorLogs;
 
 	void RenderUiImage(ID3D12GraphicsCommandList* pd3dCommandList, CCamera* pCamera,
 		UI_IMAGE_RESOURCE& imageResource, const XMFLOAT4& rectangle, UINT nTintColor = 0x00FFFFFF);
@@ -218,6 +222,7 @@ private:
 		UINT nMoney, size_t nPetCount, size_t nActivePetIndex,
 		const SHOP_TEXT_RENDER_CONTEXT& textContext, bool bNetworkConnected);
 	void SpawnNetworkErrorLog(float fViewportWidth, float fViewportHeight, int nSlotIndex);
+	void RenderStockIssueErrorLogs(ID3D12GraphicsCommandList* pd3dCommandList, CCamera* pCamera);
 	void DeactivateShop(float fViewportWidth, float fViewportHeight, size_t nActivePetIndex);
 	void ResetSelectedPet(size_t nActivePetIndex, size_t nPetCount);
 	void RebuildPetScrollMetrics(size_t nPetCount);
