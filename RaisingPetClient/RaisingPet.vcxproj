@@ -135,8 +135,8 @@
       <OptimizeReferences>true</OptimizeReferences>
     </Link>
     <PostBuildEvent>
-      <Command>if not exist "$(ProjectDir)Executable\Assets\Image\Debug\" mkdir "$(ProjectDir)Executable\Assets\Image\Debug\"
-xcopy "$(ProjectDir)Assets\Image\Debug\Test.dds" "$(ProjectDir)Executable\Assets\Image\Debug\" /Y</Command>
+      <Command>
+      </Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemGroup>
@@ -144,8 +144,8 @@ xcopy "$(ProjectDir)Assets\Image\Debug\Test.dds" "$(ProjectDir)Executable\Assets
     <ClInclude Include="ClientNetworkManager.h" />
     <ClInclude Include="D2DTextRenderer.h" />
     <ClInclude Include="GameScene.h" />
-	<ClInclude Include="LoginScene.h" />
-	<ClInclude Include="SceneManager.h" />
+    <ClInclude Include="LoginScene.h" />
+    <ClInclude Include="SceneManager.h" />
     <ClInclude Include="d3dx12.h" />
     <ClInclude Include="DDSTextureLoader12.h" />
     <ClInclude Include="GameFramework.h" />
@@ -167,11 +167,11 @@ xcopy "$(ProjectDir)Assets\Image\Debug\Test.dds" "$(ProjectDir)Executable\Assets
     <ClCompile Include="DDSTextureLoader12.cpp" />
     <ClCompile Include="GameFramework.cpp" />
     <ClCompile Include="GameScene.cpp" />
-	<ClCompile Include="LoginScene.cpp" />
-	<ClCompile Include="SceneManager.cpp" />
+    <ClCompile Include="LoginScene.cpp" />
+    <ClCompile Include="SceneManager.cpp" />
     <ClCompile Include="RaisingPet.cpp" />
     <ClCompile Include="Mesh.cpp" />
-	<ClCompile Include="MeshBinLoader.cpp" />
+    <ClCompile Include="MeshBinLoader.cpp" />
     <ClCompile Include="Object.cpp" />
     <ClCompile Include="Scene.cpp" />
     <ClCompile Include="ShopUI.cpp" />
