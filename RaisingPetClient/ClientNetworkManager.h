@@ -134,6 +134,7 @@ struct CLIENT_STOCK_TRANSACTION_INFO
 	unsigned int nSaleableQuantity = 0;
 	unsigned int nMyQuantity = 0;
 	unsigned int nRecentTradeQuantity = 0;
+	std::vector<CLIENT_STOCK_PRICE_INFO> RecentPrices;
 };
 
 class CClientNetworkManager

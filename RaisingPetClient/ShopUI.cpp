@@ -491,6 +491,7 @@ void CShopUI::BuildObjects(ID3D12Device* device, ID3D12GraphicsCommandList* comm
 	loadImage(L"Assets/Image/Shop/Stock/StockManager/StockManagementTable.dds", m_StockManagementTableResource);
 	loadImage(L"Assets/Image/Shop/Stock/StockManager/StockChart.dds", m_StockChartResource);
 	loadImage(L"Assets/Image/Shop/Stock/StockManager/MyGraph.dds", m_MyGraphResource);
+	loadImage(L"Assets/Image/Shop/Stock/StockTransaction/TargetGraph.dds", m_TargetGraphResource);
 	loadImage(L"Assets/Image/Shop/Stock/StockManager/SeeGraph.dds", m_SeeGraphResource);
 	loadImage(L"Assets/Image/Shop/Stock/StockManager/StockUpMark.dds", m_StockUpMarkResource);
 	loadImage(L"Assets/Image/Shop/Stock/StockManager/StockDownMark.dds", m_StockDownMarkResource);
@@ -503,6 +504,8 @@ void CShopUI::BuildObjects(ID3D12Device* device, ID3D12GraphicsCommandList* comm
 	loadImage(L"Assets/Image/Shop/Stock/StockTransaction/SeeStock.dds", m_SeeStockResource);
 	loadImage(L"Assets/Image/Shop/Stock/StockTransaction/StockBuying.dds", m_StockBuyingResource);
 	loadImage(L"Assets/Image/Shop/Stock/StockTransaction/StockSelling.dds", m_StockSellingResource);
+	loadImage(L"Assets/Image/Shop/Stock/StockTransaction/StockReceipt.dds", m_StockReceiptResource);
+	loadImage(L"Assets/Image/Login/TextCursor.dds", m_TextCursorResource);
 	loadImage(L"Assets/Image/Common/EmptySquare.dds", m_EmptySquareResources[0]);
 	loadImage(L"Assets/Image/Common/EmptySquare.dds", m_EmptySquareResources[1]);
 	loadImage(L"Assets/Image/Shop/PetConfirmationButton.dds", m_PetConfirmationButtonResource);
@@ -556,11 +559,12 @@ void CShopUI::ReleaseObjects()
 		&m_StockLimitResources[0], &m_StockLimitResources[1],
 		&m_CantCreateStockGenLogResource, &m_StockNameResource,
 		&m_StockHoldersResource, &m_StockManagementTableResource,
-		&m_StockChartResource, &m_MyGraphResource, &m_SeeGraphResource, &m_StockUpMarkResource,
+		&m_StockChartResource, &m_MyGraphResource, &m_TargetGraphResource, &m_SeeGraphResource, &m_StockUpMarkResource,
 		&m_StockDownMarkResource, &m_IssuanceStockResource, &m_IssuanceStockErrorLogResource,
 		&m_StockTransactionTitleResource, &m_StockTransactionIssuerResource,
 		&m_StockTransactionGraphResource, &m_StockTransactionDescriptionResource,
-		&m_SeeStockResource, &m_StockBuyingResource, &m_StockSellingResource };
+		&m_SeeStockResource, &m_StockBuyingResource, &m_StockSellingResource,
+		&m_StockReceiptResource, &m_TextCursorResource };
 	for (UI_IMAGE_RESOURCE* image : images)
 	{
 		if (image->pd3dTexture) image->pd3dTexture->Release();
@@ -588,6 +592,12 @@ void CShopUI::Animate(float elapsedTime)
 		m_fStockNameCursorBlinkElapsed += elapsedTime;
 		while (m_fStockNameCursorBlinkElapsed >= 1.0f)
 			m_fStockNameCursorBlinkElapsed -= 1.0f;
+	}
+	if (m_bStockTransactionQuantityInputActive)
+	{
+		m_fStockTransactionQuantityCursorBlinkElapsed += elapsedTime;
+		while (m_fStockTransactionQuantityCursorBlinkElapsed >= 1.0f)
+			m_fStockTransactionQuantityCursorBlinkElapsed -= 1.0f;
 	}
 	for (int category = 0; category < 2; ++category)
 	{
@@ -628,11 +638,12 @@ void CShopUI::ReleaseUploadBuffers()
 		&m_StockLimitResources[0], &m_StockLimitResources[1],
 		&m_CantCreateStockGenLogResource, &m_StockNameResource,
 		&m_StockHoldersResource, &m_StockManagementTableResource,
-		&m_StockChartResource, &m_MyGraphResource, &m_SeeGraphResource, &m_StockUpMarkResource,
+		&m_StockChartResource, &m_MyGraphResource, &m_TargetGraphResource, &m_SeeGraphResource, &m_StockUpMarkResource,
 		&m_StockDownMarkResource, &m_IssuanceStockResource, &m_IssuanceStockErrorLogResource,
 		&m_StockTransactionTitleResource, &m_StockTransactionIssuerResource,
 		&m_StockTransactionGraphResource, &m_StockTransactionDescriptionResource,
-		&m_SeeStockResource, &m_StockBuyingResource, &m_StockSellingResource };
+		&m_SeeStockResource, &m_StockBuyingResource, &m_StockSellingResource,
+		&m_StockReceiptResource, &m_TextCursorResource };
 	for (UI_IMAGE_RESOURCE* image : images)
 	{
 		if (image->pd3dTextureUploadBuffer)
@@ -730,6 +741,26 @@ void CShopUI::RenderSolidUiRectangle(ID3D12GraphicsCommandList* commandList, CCa
 	commandList->SetGraphicsRoot32BitConstant(5, color, 0);
 	commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 	commandList->DrawInstanced(6, 1, 0, 0);
+}
+
+void CShopUI::RenderStockQuantityCursor(ID3D12GraphicsCommandList* commandList, CCamera* camera,
+	const XMFLOAT4& rectangle, UINT quantity, float fontSize)
+{
+	if (!g_pFramework || !camera || m_fStockTransactionQuantityCursorBlinkElapsed >= 0.5f)
+		return;
+	const std::wstring text = std::to_wstring(quantity);
+	float measuredWidth = 0.0f;
+	float measuredHeight = 0.0f;
+	g_pFramework->MeasureDirectWriteText(text, fontSize,
+		max(rectangle.z - rectangle.x, 1.0f), max(rectangle.w - rectangle.y, 1.0f),
+		measuredWidth, measuredHeight);
+	const float textLeft = (rectangle.x + rectangle.z - measuredWidth) * 0.5f;
+	const float cursorHeight = (rectangle.w - rectangle.y) * 0.72f;
+	const float cursorWidth = max(2.0f, cursorHeight * 0.13f);
+	const float cursorX = min(textLeft + measuredWidth + 2.0f, rectangle.z - cursorWidth);
+	const float cursorTop = (rectangle.y + rectangle.w - cursorHeight) * 0.5f;
+	RenderUiImage(commandList, camera, m_TextCursorResource,
+		XMFLOAT4(cursorX, cursorTop, cursorX + cursorWidth, cursorTop + cursorHeight));
 }
 
 XMFLOAT4 CShopUI::GetMoneyUiRectangle(float width, float height, UINT money,
@@ -1293,6 +1324,10 @@ void CShopUI::RenderStockTransactionPage(ID3D12GraphicsCommandList* commandList,
 		g_pFramework->QueueDirectWriteText(hasSelectedStock
 			? std::to_wstring(m_nStockTransactionOrderQuantity) : emptyText,
 			quantityRect, (quantityRect.w - quantityRect.y) * 0.68f, 0xFF000000, true, true);
+		if (hasSelectedStock && m_bStockTransactionQuantityInputActive
+			&& m_eShopPage == SHOP_PAGE::STOCK_TRANSACTION)
+			RenderStockQuantityCursor(commandList, camera, quantityRect,
+				m_nStockTransactionOrderQuantity, (quantityRect.w - quantityRect.y) * 0.68f);
 		if (hasSelectedStock)
 		{
 			g_pFramework->QueueDirectWriteText(L"\uC8FC",
@@ -1699,13 +1734,20 @@ void CShopUI::RenderStockGraphPage(ID3D12GraphicsCommandList* commandList, CCame
 	const float graphLeft = (board.x + board.z - graphWidth) * 0.5f;
 	const float graphTop = board.y + boardHeight * 0.17f;
 	const XMFLOAT4 graphRect(graphLeft, graphTop, graphLeft + graphWidth, graphTop + graphHeight);
-	RenderUiImage(commandList, camera, m_MyGraphResource, graphRect);
+	const bool targetGraph = (m_eShopPage == SHOP_PAGE::STOCK_SEE_TARGET_GRAPH);
+	const bool hasTargetStock = !m_StockTransactionInfos.empty()
+		&& m_nSelectedStockTransactionIndex < m_StockTransactionInfos.size();
+	const SHOP_STOCK_TRANSACTION_INFO targetStock = hasTargetStock
+		? m_StockTransactionInfos[m_nSelectedStockTransactionIndex]
+		: SHOP_STOCK_TRANSACTION_INFO();
+	RenderUiImage(commandList, camera, targetGraph ? m_TargetGraphResource : m_MyGraphResource, graphRect);
 
 	if (!g_pFramework) return;
 
 	std::vector<SHOP_STOCK_PRICE_INFO> prices;
-	for (auto it = m_StockManagementInfo.RecentPrices.rbegin();
-		it != m_StockManagementInfo.RecentPrices.rend() && prices.size() < 10; ++it)
+	const std::vector<SHOP_STOCK_PRICE_INFO>& sourcePrices =
+		targetGraph ? targetStock.RecentPrices : m_StockManagementInfo.RecentPrices;
+	for (auto it = sourcePrices.rbegin(); it != sourcePrices.rend() && prices.size() < 10; ++it)
 		prices.push_back(*it);
 	if (!prices.empty()
 		&& prices.size() < 10
@@ -1824,16 +1866,74 @@ void CShopUI::RenderStockGraphPage(ID3D12GraphicsCommandList* commandList, CCame
 	};
 
 	drawInfo(L"[주가 요약]", 0, true);
-	drawInfo(L"최고가:     " + FormatStockPrice(highestPrice), 1);
-	drawInfo(L"최저가:     " + FormatStockPrice(lowestPrice), 2);
-	drawInfo(L"평균가:     " + FormatStockPrice(averagePrice), 3);
-	drawInfo(L"변동률:     " + FormatStockPercentChange(basePrice, latestNewPrice), 4);
-	drawInfo(L"[최근 갱신]", 7, true);
-	drawInfo(prices.empty() ? L"--:--" : FormatGraphTimeLabel(latestPrice.wstrChangedTime), 8);
-	drawInfo(FormatStockPrice(latestPreviousPrice) + L" → " + FormatStockPrice(latestNewPrice), 9);
-	drawInfo(latestDeltaText, 10);
-	drawInfo(L"매수 " + std::to_wstring(prices.empty() ? 0 : latestPrice.nBoughtQuantity) + L"주", 11);
-	drawInfo(L"매도 " + std::to_wstring(prices.empty() ? 0 : latestPrice.nSoldQuantity) + L"주", 12);
+	if (targetGraph)
+	{
+		const UINT currentPrice = hasTargetStock ? targetStock.nCurrentPrice : latestNewPrice;
+		drawInfo(L"현재가:     " + FormatStockPrice(currentPrice), 1);
+		drawInfo(L"최고가:     " + FormatStockPrice(highestPrice), 2);
+		drawInfo(L"최저가:     " + FormatStockPrice(lowestPrice), 3);
+		drawInfo(L"변동률:     " + FormatStockPercentChange(basePrice, currentPrice), 4);
+		drawInfo(L"[내 보유]", 7, true);
+		const UINT holdingQuantity = hasTargetStock ? targetStock.nMyQuantity : 0;
+		const UINT64 evaluatedPrice64 = static_cast<UINT64>(holdingQuantity)
+			* static_cast<UINT64>(currentPrice);
+		const UINT evaluatedPrice = static_cast<UINT>(
+			(evaluatedPrice64 > UINT_MAX) ? UINT_MAX : evaluatedPrice64);
+		drawInfo(L"보유주:     " + std::to_wstring(holdingQuantity) + L"주", 8);
+		drawInfo(L"평가액:     " + FormatStockPrice(evaluatedPrice), 9);
+		drawInfo(L"구매가능:   " + std::to_wstring(hasTargetStock ? targetStock.nSaleableQuantity : 0) + L"주", 10);
+		drawInfo(L"최근거래:   " + std::to_wstring(hasTargetStock ? targetStock.nRecentTradeQuantity : 0) + L"주", 11);
+
+		const XMFLOAT4 receiptRect = GetStockTargetReceiptRectangle(width, height);
+		RenderUiImage(commandList, camera, m_StockReceiptResource, receiptRect);
+		const XMFLOAT4 quantityRect = GetStockTargetQuantityRectangle(width, height);
+		const float receiptWidth = receiptRect.z - receiptRect.x;
+		const float receiptHeight = receiptRect.w - receiptRect.y;
+		const XMFLOAT4 priceRect(receiptRect.x + receiptWidth * 0.075f,
+			receiptRect.y + receiptHeight * 0.53f,
+			receiptRect.z - receiptWidth * 0.07f,
+			receiptRect.y + receiptHeight * 0.93f);
+		g_pFramework->QueueDirectWriteText(std::to_wstring(m_nStockTransactionOrderQuantity),
+			quantityRect, (quantityRect.w - quantityRect.y) * 0.82f, 0xFF000000, true, true);
+		if (m_bStockTransactionQuantityInputActive)
+			RenderStockQuantityCursor(commandList, camera, quantityRect,
+				m_nStockTransactionOrderQuantity, (quantityRect.w - quantityRect.y) * 0.82f);
+		g_pFramework->QueueDirectWriteText(L"주",
+			XMFLOAT4(quantityRect.z, quantityRect.y, receiptRect.z, quantityRect.w),
+			(quantityRect.w - quantityRect.y) * 0.72f, 0xFF000000, true, true);
+		const UINT64 totalPrice64 = static_cast<UINT64>(m_nStockTransactionOrderQuantity)
+			* static_cast<UINT64>(currentPrice);
+		g_pFramework->QueueDirectWriteText(ToWideString(FormatPossessionTwoDecimals(
+			static_cast<UINT>((totalPrice64 > UINT_MAX) ? UINT_MAX : totalPrice64))),
+			priceRect, (priceRect.w - priceRect.y) * 0.72f, 0xFF000000, true, true);
+
+		const XMFLOAT4 moneyRect = GetMoneyUiRectangle(width, height, 0, context);
+		const float buttonHeight = boardHeight * 0.105f;
+		const float buttonWidth = buttonHeight * (294.0f / 216.0f);
+		const float buttonGap = 8.0f;
+		const float moneyGap = 22.0f;
+		const float totalButtonWidth = buttonWidth * 2.0f + buttonGap;
+		const float buyingLeft = moneyRect.x - moneyGap - totalButtonWidth;
+		const float buttonTop = board.w - boardHeight * 0.13f;
+		RenderUiImage(commandList, camera, m_StockBuyingResource,
+			XMFLOAT4(buyingLeft, buttonTop, buyingLeft + buttonWidth, buttonTop + buttonHeight));
+		RenderUiImage(commandList, camera, m_StockSellingResource,
+			XMFLOAT4(buyingLeft + buttonWidth + buttonGap, buttonTop,
+				buyingLeft + buttonWidth * 2.0f + buttonGap, buttonTop + buttonHeight));
+	}
+	else
+	{
+		drawInfo(L"최고가:     " + FormatStockPrice(highestPrice), 1);
+		drawInfo(L"최저가:     " + FormatStockPrice(lowestPrice), 2);
+		drawInfo(L"평균가:     " + FormatStockPrice(averagePrice), 3);
+		drawInfo(L"변동률:     " + FormatStockPercentChange(basePrice, latestNewPrice), 4);
+		drawInfo(L"[최근 갱신]", 7, true);
+		drawInfo(prices.empty() ? L"--:--" : FormatGraphTimeLabel(latestPrice.wstrChangedTime), 8);
+		drawInfo(FormatStockPrice(latestPreviousPrice) + L" → " + FormatStockPrice(latestNewPrice), 9);
+		drawInfo(latestDeltaText, 10);
+		drawInfo(L"매수 " + std::to_wstring(prices.empty() ? 0 : latestPrice.nBoughtQuantity) + L"주", 11);
+		drawInfo(L"매도 " + std::to_wstring(prices.empty() ? 0 : latestPrice.nSoldQuantity) + L"주", 12);
+	}
 }
 
 void CShopUI::RenderPageTitle(ID3D12GraphicsCommandList* commandList, CCamera* camera)
@@ -1857,6 +1957,7 @@ void CShopUI::RenderPageTitle(ID3D12GraphicsCommandList* commandList, CCamera* c
 	case SHOP_PAGE::STOCK_CANT_PUBLISH: titleText = L"\uC8FC\uC2DD \uAD00\uB9AC"; break;
 	case SHOP_PAGE::STOCK_MANAGEMENT: titleText = L"\uC8FC\uC2DD \uAD00\uB9AC"; break;
 	case SHOP_PAGE::STOCK_SEE_MYGRAPH: titleText = L"\uC8FC\uC2DD \uADF8\uB798\uD504"; break;
+	case SHOP_PAGE::STOCK_SEE_TARGET_GRAPH: titleText = L"\uC8FC\uC2DD \uADF8\uB798\uD504"; break;
 	}
 	if (g_pFramework)
 	{
@@ -1962,7 +2063,8 @@ void CShopUI::Render(ID3D12GraphicsCommandList* commandList, CCamera* camera, UI
 		{
 			RenderCantCreateStockPage(commandList, camera, context);
 		}
-		else if (m_eShopPage == SHOP_PAGE::STOCK_SEE_MYGRAPH)
+		else if (m_eShopPage == SHOP_PAGE::STOCK_SEE_MYGRAPH
+			|| m_eShopPage == SHOP_PAGE::STOCK_SEE_TARGET_GRAPH)
 		{
 			RenderStockGraphPage(commandList, camera, context);
 		}
@@ -2065,6 +2167,67 @@ XMFLOAT4 CShopUI::GetStockTransactionQuantityRectangle(float width, float height
 		descriptionRect.y + descHeight * 0.09f,
 		descriptionRect.x + descWidth * 0.88f,
 		descriptionRect.y + descHeight * 0.40f));
+}
+
+XMFLOAT4 CShopUI::GetStockTransactionGraphButtonRectangle(float width, float height) const
+{
+	const XMFLOAT4 rightPanel = GetPetContentPanelRectangle(true, width, height,
+		m_xmf2ShopBoardOffset.x, m_xmf2ShopBoardOffset.y);
+	const float rightWidth = rightPanel.z - rightPanel.x;
+	const float rightHeight = rightPanel.w - rightPanel.y;
+	const float imageWidth = rightWidth * 0.94f;
+	const float gap = rightHeight * 0.018f;
+	const float titleHeight = imageWidth * (140.0f / 1095.0f);
+	const float issuerHeight = imageWidth * (148.0f / 1095.0f);
+	const float graphHeight = imageWidth * (459.0f / 1092.0f);
+	const float descriptionHeight = imageWidth * (310.0f / 1095.0f);
+	const float totalHeight = titleHeight + issuerHeight + graphHeight + descriptionHeight + gap * 3.0f;
+	const float imageLeft = (rightPanel.x + rightPanel.z - imageWidth) * 0.5f;
+	const float graphTop = rightPanel.y + (rightHeight - totalHeight) * 0.5f
+		+ titleHeight + issuerHeight + gap * 2.0f;
+	const XMFLOAT4 graphRect(imageLeft, graphTop, imageLeft + imageWidth, graphTop + graphHeight);
+	const float seeStockWidth = (graphRect.z - graphRect.x) * 0.55f;
+	const float seeStockHeight = seeStockWidth * (209.0f / 678.0f);
+	const float seeStockCenterY = graphRect.y + (graphRect.w - graphRect.y) * 0.40f;
+	return(XMFLOAT4((graphRect.x + graphRect.z - seeStockWidth) * 0.5f,
+		seeStockCenterY - seeStockHeight * 0.5f,
+		(graphRect.x + graphRect.z + seeStockWidth) * 0.5f,
+		seeStockCenterY + seeStockHeight * 0.5f));
+}
+
+XMFLOAT4 CShopUI::GetStockTargetReceiptRectangle(float width, float height) const
+{
+	const XMFLOAT4 board = GetShopBoardRectangle(width, height,
+		m_xmf2ShopBoardOffset.x, m_xmf2ShopBoardOffset.y);
+	const float boardWidth = board.z - board.x;
+	const float boardHeight = board.w - board.y;
+	const float graphWidth = boardWidth * 0.86f;
+	const float graphHeight = graphWidth * (1354.0f / 2553.0f);
+	const float graphLeft = (board.x + board.z - graphWidth) * 0.5f;
+	const float graphTop = board.y + boardHeight * 0.17f;
+	const XMFLOAT4 graphRect(graphLeft, graphTop, graphLeft + graphWidth, graphTop + graphHeight);
+	const float graphRectWidth = graphRect.z - graphRect.x;
+	const float graphRectHeight = graphRect.w - graphRect.y;
+	const float plotLeft = graphRect.x + graphRectWidth * (1.59f / 19.60f);
+	const float plotRight = plotLeft + graphRectWidth * (12.23f / 19.60f);
+	const float infoLeft = plotRight + graphRectWidth * 0.018f;
+	const float infoRight = graphRect.z - graphRectWidth * 0.02f;
+	const float receiptWidth = infoRight - infoLeft;
+	const float receiptHeight = receiptWidth * (430.0f / 1095.0f);
+	const float receiptBottom = graphRect.y + graphRectHeight * 0.965f;
+	return(XMFLOAT4(infoLeft, receiptBottom - receiptHeight,
+		infoLeft + receiptWidth, receiptBottom));
+}
+
+XMFLOAT4 CShopUI::GetStockTargetQuantityRectangle(float width, float height) const
+{
+	const XMFLOAT4 receipt = GetStockTargetReceiptRectangle(width, height);
+	const float receiptWidth = receipt.z - receipt.x;
+	const float receiptHeight = receipt.w - receipt.y;
+	return(XMFLOAT4(receipt.x + receiptWidth * 0.075f,
+		receipt.y + receiptHeight * 0.07f,
+		receipt.x + receiptWidth * 0.49f,
+		receipt.y + receiptHeight * 0.47f));
 }
 
 void CShopUI::ResetSelectedPet(size_t activePetIndex, size_t petCount)
@@ -2390,6 +2553,11 @@ bool CShopUI::ProcessShopUIClick(float x, float y, float width, float height, UI
 			m_bStockNameInputActive = false;
 			m_bStockIssueButtonPressed = false;
 		}
+		else if (m_eShopPage == SHOP_PAGE::STOCK_SEE_TARGET_GRAPH)
+		{
+			m_eShopPage = SHOP_PAGE::STOCK_TRANSACTION;
+			m_bStockTransactionQuantityInputActive = false;
+		}
 		else if (m_eShopPage == SHOP_PAGE::STOCK_TRANSACTION
 			|| m_eShopPage == SHOP_PAGE::STOCK_MANAGEMENT
 			|| m_eShopPage == SHOP_PAGE::STOCK_CANT_PUBLISH)
@@ -2499,6 +2667,13 @@ bool CShopUI::ProcessShopUIClick(float x, float y, float width, float height, UI
 			m_xmf2ShopBoardOffset.x, m_xmf2ShopBoardOffset.y);
 		const XMFLOAT4 right = GetPetContentPanelRectangle(true, width, height,
 			m_xmf2ShopBoardOffset.x, m_xmf2ShopBoardOffset.y);
+		if (!m_StockTransactionInfos.empty()
+			&& IsPointInRectangle(x, y, GetStockTransactionGraphButtonRectangle(width, height)))
+		{
+			m_eShopPage = SHOP_PAGE::STOCK_SEE_TARGET_GRAPH;
+			m_bStockTransactionQuantityInputActive = false;
+			return(true);
+		}
 		for (size_t row = 0; row < 10; ++row)
 		{
 			const size_t stockIndex = m_nStockTransactionScrollOffset + row;
@@ -2514,17 +2689,30 @@ bool CShopUI::ProcessShopUIClick(float x, float y, float width, float height, UI
 			&& IsPointInRectangle(x, y, GetStockTransactionQuantityRectangle(width, height)))
 		{
 			m_bStockTransactionQuantityInputActive = true;
+			m_fStockTransactionQuantityCursorBlinkElapsed = 0.0f;
 			return(true);
 		}
 		m_bStockTransactionQuantityInputActive = false;
 		if (IsPointInRectangle(x, y, left) || IsPointInRectangle(x, y, right)) return(true);
+	}
+	else if (m_eShopPage == SHOP_PAGE::STOCK_SEE_TARGET_GRAPH)
+	{
+		if (!m_StockTransactionInfos.empty()
+			&& IsPointInRectangle(x, y, GetStockTargetQuantityRectangle(width, height)))
+		{
+			m_bStockTransactionQuantityInputActive = true;
+			m_fStockTransactionQuantityCursorBlinkElapsed = 0.0f;
+			return(true);
+		}
+		m_bStockTransactionQuantityInputActive = false;
 	}
 	return(false);
 }
 
 bool CShopUI::OnProcessingKeyboardMessage(HWND hWnd, UINT message, WPARAM wParam, LPARAM)
 {
-	if (m_bShopActive && m_eShopPage == SHOP_PAGE::STOCK_TRANSACTION
+	if (m_bShopActive && (m_eShopPage == SHOP_PAGE::STOCK_TRANSACTION
+		|| m_eShopPage == SHOP_PAGE::STOCK_SEE_TARGET_GRAPH)
 		&& m_bStockTransactionQuantityInputActive)
 	{
 		const bool hasSelectedStock = !m_StockTransactionInfos.empty()
@@ -2542,6 +2730,7 @@ bool CShopUI::OnProcessingKeyboardMessage(HWND hWnd, UINT message, WPARAM wParam
 			if (ch == L'\b')
 			{
 				m_nStockTransactionOrderQuantity /= 10;
+				m_fStockTransactionQuantityCursorBlinkElapsed = 0.0f;
 				return(true);
 			}
 			if (ch >= L'0' && ch <= L'9')
@@ -2550,6 +2739,7 @@ bool CShopUI::OnProcessingKeyboardMessage(HWND hWnd, UINT message, WPARAM wParam
 				UINT64 nextQuantity = static_cast<UINT64>(m_nStockTransactionOrderQuantity) * 10 + digit;
 				if (nextQuantity > maximumQuantity) nextQuantity = maximumQuantity;
 				m_nStockTransactionOrderQuantity = static_cast<UINT>(nextQuantity);
+				m_fStockTransactionQuantityCursorBlinkElapsed = 0.0f;
 				return(true);
 			}
 			return(true);
@@ -2560,6 +2750,7 @@ bool CShopUI::OnProcessingKeyboardMessage(HWND hWnd, UINT message, WPARAM wParam
 			{
 			case VK_DELETE:
 				m_nStockTransactionOrderQuantity = 0;
+				m_fStockTransactionQuantityCursorBlinkElapsed = 0.0f;
 				return(true);
 			case VK_ESCAPE:
 				m_bStockTransactionQuantityInputActive = false;

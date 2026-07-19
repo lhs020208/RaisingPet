@@ -23,7 +23,7 @@
 namespace {
 constexpr unsigned short kDefaultPort = 7777;
 constexpr int kListenBacklog = SOMAXCONN;
-constexpr std::uint16_t kMaxPacketSize = 8192;
+constexpr std::uint16_t kMaxPacketSize = 16384;
 
 constexpr const char* kDbHost = "127.0.0.1";
 constexpr const char* kDbUser = "raisingpet_server";
@@ -210,6 +210,7 @@ struct StockTransactionInfo {
 	std::uint32_t saleableQuantity = 0;
 	std::uint32_t myQuantity = 0;
 	std::uint32_t recentTradeQuantity = 0;
+	std::vector<StockPriceSeeInfo> recentPrices;
 };
 
 struct PacketHeader {
@@ -1212,7 +1213,13 @@ public:
 				(myQuantity > UINT_MAX) ? UINT_MAX : myQuantity);
 			info.recentTradeQuantity = static_cast<std::uint32_t>(
 				(recentTrade > UINT_MAX) ? UINT_MAX : recentTrade);
-			if (info.stockId != 0) infos.push_back(info);
+			if (info.stockId != 0) {
+				if (!LoadStockRecentPrices(info.stockId, info.recentPrices, failureReason)) {
+					mysql_free_result(result);
+					return false;
+				}
+				infos.push_back(info);
+			}
 		}
 		mysql_free_result(result);
 		return true;
@@ -2326,6 +2333,9 @@ std::vector<char> MakeStockTransactionListResponse(const std::vector<StockTransa
 	std::uint16_t variableSize = 0;
 	std::uint16_t stockNameLengths[20] = {};
 	std::uint16_t issuerIdLengths[20] = {};
+	std::uint8_t recentPriceCounts[20] = {};
+	std::uint16_t recentTimeLengths[20][10] = {};
+	std::uint16_t fixedRecentSize = 0;
 	for (std::uint8_t i = 0; i < stockCount; ++i) {
 		stockNameLengths[i] = static_cast<std::uint16_t>(
 			std::min<size_t>(infos[i].stockName.size(), 150));
@@ -2333,14 +2343,24 @@ std::vector<char> MakeStockTransactionListResponse(const std::vector<StockTransa
 			std::min<size_t>(infos[i].issuerId.size(), 32));
 		variableSize = static_cast<std::uint16_t>(
 			variableSize + stockNameLengths[i] + issuerIdLengths[i]);
+		recentPriceCounts[i] = static_cast<std::uint8_t>(
+			std::min<size_t>(infos[i].recentPrices.size(), 10));
+		for (std::uint8_t priceIndex = 0; priceIndex < recentPriceCounts[i]; ++priceIndex) {
+			recentTimeLengths[i][priceIndex] = static_cast<std::uint16_t>(
+				std::min<size_t>(infos[i].recentPrices[priceIndex].changedTime.size(), 32));
+			variableSize = static_cast<std::uint16_t>(
+				variableSize + recentTimeLengths[i][priceIndex]);
+			fixedRecentSize = static_cast<std::uint16_t>(
+				fixedRecentSize + sizeof(std::uint64_t) * 4 + sizeof(std::uint16_t));
+		}
 	}
 
 	std::vector<char> packet;
 	const std::uint16_t packetSize = static_cast<std::uint16_t>(
 		sizeof(PacketHeader) + 1 +
 		stockCount * (sizeof(std::uint32_t) + sizeof(std::uint16_t) +
-			sizeof(std::uint16_t) + sizeof(std::uint64_t) * 2 + sizeof(std::uint32_t) * 3) +
-		variableSize);
+			sizeof(std::uint16_t) + sizeof(std::uint64_t) * 2 + sizeof(std::uint32_t) * 3 + 1) +
+		fixedRecentSize + variableSize);
 	packet.reserve(packetSize);
 	WriteUInt16(packet, packetSize);
 	WriteUInt16(packet, static_cast<std::uint16_t>(PacketType::StockTransactionListResponse));
@@ -2359,6 +2379,17 @@ std::vector<char> MakeStockTransactionListResponse(const std::vector<StockTransa
 		WriteUInt32(packet, info.saleableQuantity);
 		WriteUInt32(packet, info.myQuantity);
 		WriteUInt32(packet, info.recentTradeQuantity);
+		packet.push_back(static_cast<char>(recentPriceCounts[i]));
+		for (std::uint8_t priceIndex = 0; priceIndex < recentPriceCounts[i]; ++priceIndex) {
+			const StockPriceSeeInfo& price = info.recentPrices[priceIndex];
+			WriteUInt64(packet, price.previousPrice);
+			WriteUInt64(packet, price.newPrice);
+			WriteUInt64(packet, price.boughtQuantity);
+			WriteUInt64(packet, price.soldQuantity);
+			WriteUInt16(packet, recentTimeLengths[i][priceIndex]);
+			packet.insert(packet.end(), price.changedTime.begin(),
+				price.changedTime.begin() + recentTimeLengths[i][priceIndex]);
+		}
 	}
 	return packet;
 }

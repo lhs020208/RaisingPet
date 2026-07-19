@@ -70,6 +70,7 @@ struct SHOP_STOCK_TRANSACTION_INFO
 	UINT nSaleableQuantity = 0;
 	UINT nMyQuantity = 0;
 	UINT nRecentTradeQuantity = 0;
+	std::vector<SHOP_STOCK_PRICE_INFO> RecentPrices;
 };
 
 class CShopUI
@@ -131,7 +132,8 @@ private:
 		STOCK_TRANSACTION,
 		STOCK_CANT_PUBLISH,
 		STOCK_MANAGEMENT,
-		STOCK_SEE_MYGRAPH
+		STOCK_SEE_MYGRAPH,
+		STOCK_SEE_TARGET_GRAPH
 	};
 
 	ID3D12PipelineState* m_pd3dUiImagePipelineState = NULL;
@@ -168,6 +170,7 @@ private:
 	UI_IMAGE_RESOURCE m_StockManagementTableResource;
 	UI_IMAGE_RESOURCE m_StockChartResource;
 	UI_IMAGE_RESOURCE m_MyGraphResource;
+	UI_IMAGE_RESOURCE m_TargetGraphResource;
 	UI_IMAGE_RESOURCE m_SeeGraphResource;
 	UI_IMAGE_RESOURCE m_StockUpMarkResource;
 	UI_IMAGE_RESOURCE m_StockDownMarkResource;
@@ -180,6 +183,8 @@ private:
 	UI_IMAGE_RESOURCE m_SeeStockResource;
 	UI_IMAGE_RESOURCE m_StockBuyingResource;
 	UI_IMAGE_RESOURCE m_StockSellingResource;
+	UI_IMAGE_RESOURCE m_StockReceiptResource;
+	UI_IMAGE_RESOURCE m_TextCursorResource;
 
 	bool m_bShopActive = false;
 	SHOP_PAGE m_eShopPage = SHOP_PAGE::SHOP_MENU;
@@ -231,6 +236,7 @@ private:
 	size_t m_nSelectedStockTransactionIndex = 0;
 	UINT m_nStockTransactionOrderQuantity = 0;
 	bool m_bStockTransactionQuantityInputActive = false;
+	float m_fStockTransactionQuantityCursorBlinkElapsed = 0.0f;
 	std::vector<SHOP_NETWORK_ERROR_LOG> m_NetworkErrorLogs;
 	std::vector<SHOP_NETWORK_ERROR_LOG> m_StockIssueErrorLogs;
 
@@ -273,6 +279,8 @@ private:
 	void RenderStockManagementPage(ID3D12GraphicsCommandList* pd3dCommandList, CCamera* pCamera);
 	void RenderStockGraphPage(ID3D12GraphicsCommandList* pd3dCommandList, CCamera* pCamera,
 		const SHOP_TEXT_RENDER_CONTEXT& textContext);
+	void RenderStockQuantityCursor(ID3D12GraphicsCommandList* pd3dCommandList, CCamera* pCamera,
+		const XMFLOAT4& rectangle, UINT nQuantity, float fFontSize);
 	void RenderPageTitle(ID3D12GraphicsCommandList* pd3dCommandList, CCamera* pCamera);
 	XMFLOAT4 GetStockChartRectangle(float fViewportWidth, float fViewportHeight) const;
 	XMFLOAT4 GetStockGraphButtonRectangle(float fViewportWidth, float fViewportHeight) const;
@@ -292,4 +300,7 @@ private:
 	XMFLOAT4 GetStockTransactionListRowRectangle(size_t nRow, float fViewportWidth, float fViewportHeight) const;
 	XMFLOAT4 GetStockTransactionScrollThumbRectangle(float fViewportWidth, float fViewportHeight) const;
 	XMFLOAT4 GetStockTransactionQuantityRectangle(float fViewportWidth, float fViewportHeight) const;
+	XMFLOAT4 GetStockTransactionGraphButtonRectangle(float fViewportWidth, float fViewportHeight) const;
+	XMFLOAT4 GetStockTargetReceiptRectangle(float fViewportWidth, float fViewportHeight) const;
+	XMFLOAT4 GetStockTargetQuantityRectangle(float fViewportWidth, float fViewportHeight) const;
 };

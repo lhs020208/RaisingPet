@@ -1212,6 +1212,16 @@ void CGameScene::Animate(float fElapsedTime)
 			shopStockInfo.nSaleableQuantity = stockInfo.nSaleableQuantity;
 			shopStockInfo.nMyQuantity = stockInfo.nMyQuantity;
 			shopStockInfo.nRecentTradeQuantity = stockInfo.nRecentTradeQuantity;
+			for (const CLIENT_STOCK_PRICE_INFO& price : stockInfo.RecentPrices)
+			{
+				SHOP_STOCK_PRICE_INFO shopPrice;
+				shopPrice.nPreviousPrice = price.nPreviousPrice;
+				shopPrice.nNewPrice = price.nNewPrice;
+				shopPrice.nBoughtQuantity = price.nBoughtQuantity;
+				shopPrice.nSoldQuantity = price.nSoldQuantity;
+				shopPrice.wstrChangedTime = Utf8ToWideString(price.strChangedTime);
+				shopStockInfo.RecentPrices.push_back(shopPrice);
+			}
 			shopStockTransactionInfos.push_back(shopStockInfo);
 		}
 		m_ShopUI.SetStockTransactionInfos(shopStockTransactionInfos);
