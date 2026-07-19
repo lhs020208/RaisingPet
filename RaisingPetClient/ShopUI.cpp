@@ -1112,6 +1112,24 @@ void CShopUI::RenderStockMenuPage(ID3D12GraphicsCommandList* commandList, CCamer
 		RenderUiImage(commandList, camera, m_StockSlotResources[i], GetStockSlotRectangle(i, width, height));
 }
 
+void CShopUI::RenderStockTransactionPage(ID3D12GraphicsCommandList* commandList, CCamera* camera)
+{
+	const float width = camera->m_d3dViewport.Width;
+	const float height = camera->m_d3dViewport.Height;
+	const XMFLOAT4 leftPanel = GetPetContentPanelRectangle(false, width, height,
+		m_xmf2ShopBoardOffset.x, m_xmf2ShopBoardOffset.y);
+	const XMFLOAT4 rightPanel = GetPetContentPanelRectangle(true, width, height,
+		m_xmf2ShopBoardOffset.x, m_xmf2ShopBoardOffset.y);
+
+	RenderUiImage(commandList, camera, m_EmptySquareResources[0], leftPanel);
+	RenderUiImage(commandList, camera, m_EmptySquareResources[1], rightPanel);
+
+	const XMFLOAT4 scrollTrack = GetPetScrollTrackRectangle(width, height,
+		m_xmf2ShopBoardOffset.x, m_xmf2ShopBoardOffset.y);
+	RenderUiImage(commandList, camera, m_ScrollBackgroundResource, scrollTrack);
+	RenderUiImage(commandList, camera, m_ScrollResource, scrollTrack);
+}
+
 void CShopUI::RenderStockManagementPage(ID3D12GraphicsCommandList* commandList, CCamera* camera)
 {
 	const float width = camera->m_d3dViewport.Width;
@@ -1731,6 +1749,10 @@ void CShopUI::Render(ID3D12GraphicsCommandList* commandList, CCamera* camera, UI
 		else if (m_eShopPage == SHOP_PAGE::STOCK_MENU)
 		{
 			RenderStockMenuPage(commandList, camera);
+		}
+		else if (m_eShopPage == SHOP_PAGE::STOCK_TRANSACTION)
+		{
+			RenderStockTransactionPage(commandList, camera);
 		}
 		else if (m_eShopPage == SHOP_PAGE::STOCK_MANAGEMENT)
 		{

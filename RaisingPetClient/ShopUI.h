@@ -235,6 +235,7 @@ private:
 		const SHOP_TEXT_RENDER_CONTEXT& textContext);
 	bool ProcessFinancialClick(float x, float y, float fViewportWidth, float fViewportHeight);
 	void RenderStockMenuPage(ID3D12GraphicsCommandList* pd3dCommandList, CCamera* pCamera);
+	void RenderStockTransactionPage(ID3D12GraphicsCommandList* pd3dCommandList, CCamera* pCamera);
 	void RenderStockManagementPage(ID3D12GraphicsCommandList* pd3dCommandList, CCamera* pCamera);
 	void RenderStockGraphPage(ID3D12GraphicsCommandList* pd3dCommandList, CCamera* pCamera,
 		const SHOP_TEXT_RENDER_CONTEXT& textContext);
