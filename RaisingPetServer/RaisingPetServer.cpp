@@ -632,7 +632,7 @@ public:
 		const std::string insertPrice =
 			"INSERT INTO `StockPrice` (`StockID`, `PreviousPrice`, `NewPrice`, "
 			"`BoughtQuantity`, `SoldQuantity`, `ChangeReason`, `ChangedTime`) VALUES (" +
-			std::to_string(stockId) + ", 0, " +
+			std::to_string(stockId) + ", " + std::to_string(kInitialStockPrice) + ", " +
 			std::to_string(kInitialStockPrice) + ", 0, 0, 'ISSUANCE', NOW())";
 		if (mysql_query(connection_, insertPrice.c_str()) != 0) {
 			mysql_query(connection_, "ROLLBACK");
