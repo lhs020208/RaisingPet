@@ -23,7 +23,7 @@
 namespace {
 constexpr unsigned short kDefaultPort = 7777;
 constexpr int kListenBacklog = SOMAXCONN;
-constexpr std::uint16_t kMaxPacketSize = 1024;
+constexpr std::uint16_t kMaxPacketSize = 8192;
 
 constexpr const char* kDbHost = "127.0.0.1";
 constexpr const char* kDbUser = "raisingpet_server";
@@ -55,6 +55,8 @@ enum class PacketType : std::uint16_t {
 	StockIssueStatus = 15,
 	StockManagementInfoRequest = 16,
 	StockManagementInfoResponse = 17,
+	StockTransactionListRequest = 18,
+	StockTransactionListResponse = 19,
 	AdminLoginRequest = 100,
 	AdminLoginResponse = 101,
 };
@@ -197,6 +199,17 @@ struct StockManagementInfo {
 	std::uint64_t previousPrice = kInitialStockPrice;
 	std::vector<StockPriceSeeInfo> recentPrices;
 	StockHolderSeeInfo topHolders[3];
+};
+
+struct StockTransactionInfo {
+	std::uint32_t stockId = 0;
+	std::string stockName;
+	std::string issuerId;
+	std::uint64_t currentPrice = kInitialStockPrice;
+	std::uint64_t previousPrice = kInitialStockPrice;
+	std::uint32_t saleableQuantity = 0;
+	std::uint32_t myQuantity = 0;
+	std::uint32_t recentTradeQuantity = 0;
 };
 
 struct PacketHeader {
@@ -1146,6 +1159,62 @@ public:
 
 		if (!LoadStockRecentPrices(stockId, info.recentPrices, failureReason))
 			return false;
+		return true;
+	}
+
+	bool LoadStockTransactionInfos(const std::string& id,
+		std::vector<StockTransactionInfo>& infos, std::string& failureReason) {
+		infos.clear();
+		if (!IsAccountTextValid(id, 32)) {
+			failureReason = "invalid player id";
+			return false;
+		}
+
+		const std::string escapedId = Escape(id);
+		const std::string query =
+			"SELECT `S`.`StockID`, `S`.`StockName`, `S`.`IssuerID`, `S`.`CurrentPrice`, "
+			"COALESCE((SELECT `SP`.`PreviousPrice` FROM `StockPrice` `SP` "
+			"WHERE `SP`.`StockID` = `S`.`StockID` "
+			"ORDER BY `SP`.`ChangedTime` DESC, `SP`.`StockPriceID` DESC LIMIT 1), `S`.`CurrentPrice`), "
+			"(`S`.`UnsoldQuantity` + COALESCE((SELECT SUM(`SS`.`Quantity`) FROM `StockSale` `SS` "
+			"WHERE `SS`.`StockID` = `S`.`StockID`), 0)), "
+			"COALESCE((SELECT `SH`.`Quantity` FROM `StockHolding` `SH` "
+			"WHERE `SH`.`StockID` = `S`.`StockID` AND `SH`.`PlayerID` = '" + escapedId + "'), 0), "
+			"COALESCE((SELECT `ST`.`Quantity` FROM `StockTrade` `ST` "
+			"WHERE `ST`.`StockID` = `S`.`StockID` "
+			"ORDER BY `ST`.`TradeTime` DESC, `ST`.`TradeID` DESC LIMIT 1), 0) "
+			"FROM `Stock` `S` WHERE `S`.`IssuerID` <> '" + escapedId + "' "
+			"ORDER BY `S`.`StockID` ASC";
+		if (mysql_query(connection_, query.c_str()) != 0) {
+			failureReason = std::string("failed to select stock transaction infos: ") + mysql_error(connection_);
+			return false;
+		}
+		MYSQL_RES* result = mysql_store_result(connection_);
+		if (!result) {
+			failureReason = std::string("failed to read stock transaction infos: ") + mysql_error(connection_);
+			return false;
+		}
+
+		MYSQL_ROW row = nullptr;
+		while ((row = mysql_fetch_row(result)) != nullptr) {
+			StockTransactionInfo info;
+			info.stockId = row[0] ? static_cast<std::uint32_t>(std::stoul(row[0])) : 0;
+			info.stockName = row[1] ? row[1] : "";
+			info.issuerId = row[2] ? row[2] : "";
+			info.currentPrice = row[3] ? std::stoull(row[3]) : kInitialStockPrice;
+			info.previousPrice = row[4] ? std::stoull(row[4]) : info.currentPrice;
+			const std::uint64_t saleable = row[5] ? std::stoull(row[5]) : 0;
+			const std::uint64_t myQuantity = row[6] ? std::stoull(row[6]) : 0;
+			const std::uint64_t recentTrade = row[7] ? std::stoull(row[7]) : 0;
+			info.saleableQuantity = static_cast<std::uint32_t>(
+				(saleable > UINT_MAX) ? UINT_MAX : saleable);
+			info.myQuantity = static_cast<std::uint32_t>(
+				(myQuantity > UINT_MAX) ? UINT_MAX : myQuantity);
+			info.recentTradeQuantity = static_cast<std::uint32_t>(
+				(recentTrade > UINT_MAX) ? UINT_MAX : recentTrade);
+			if (info.stockId != 0) infos.push_back(info);
+		}
+		mysql_free_result(result);
 		return true;
 	}
 
@@ -2252,6 +2321,48 @@ std::vector<char> MakeStockManagementInfoResponse(const StockManagementInfo& inf
 	return packet;
 }
 
+std::vector<char> MakeStockTransactionListResponse(const std::vector<StockTransactionInfo>& infos) {
+	const std::uint8_t stockCount = static_cast<std::uint8_t>(std::min<size_t>(infos.size(), 20));
+	std::uint16_t variableSize = 0;
+	std::uint16_t stockNameLengths[20] = {};
+	std::uint16_t issuerIdLengths[20] = {};
+	for (std::uint8_t i = 0; i < stockCount; ++i) {
+		stockNameLengths[i] = static_cast<std::uint16_t>(
+			std::min<size_t>(infos[i].stockName.size(), 150));
+		issuerIdLengths[i] = static_cast<std::uint16_t>(
+			std::min<size_t>(infos[i].issuerId.size(), 32));
+		variableSize = static_cast<std::uint16_t>(
+			variableSize + stockNameLengths[i] + issuerIdLengths[i]);
+	}
+
+	std::vector<char> packet;
+	const std::uint16_t packetSize = static_cast<std::uint16_t>(
+		sizeof(PacketHeader) + 1 +
+		stockCount * (sizeof(std::uint32_t) + sizeof(std::uint16_t) +
+			sizeof(std::uint16_t) + sizeof(std::uint64_t) * 2 + sizeof(std::uint32_t) * 3) +
+		variableSize);
+	packet.reserve(packetSize);
+	WriteUInt16(packet, packetSize);
+	WriteUInt16(packet, static_cast<std::uint16_t>(PacketType::StockTransactionListResponse));
+	packet.push_back(static_cast<char>(stockCount));
+	for (std::uint8_t i = 0; i < stockCount; ++i) {
+		const StockTransactionInfo& info = infos[i];
+		WriteUInt32(packet, info.stockId);
+		WriteUInt16(packet, stockNameLengths[i]);
+		packet.insert(packet.end(), info.stockName.begin(),
+			info.stockName.begin() + stockNameLengths[i]);
+		WriteUInt16(packet, issuerIdLengths[i]);
+		packet.insert(packet.end(), info.issuerId.begin(),
+			info.issuerId.begin() + issuerIdLengths[i]);
+		WriteUInt64(packet, info.currentPrice);
+		WriteUInt64(packet, info.previousPrice);
+		WriteUInt32(packet, info.saleableQuantity);
+		WriteUInt32(packet, info.myQuantity);
+		WriteUInt32(packet, info.recentTradeQuantity);
+	}
+	return packet;
+}
+
 bool SendAll(SOCKET socket, const std::vector<char>& packet) {
 	int sentBytes = 0;
 	while (sentBytes < static_cast<int>(packet.size())) {
@@ -2993,6 +3104,17 @@ void ProcessPacket(Database& database, ClientSession& session,
 		QueuePacket(session, MakeStockManagementInfoResponse(info));
 		return;
 	}
+	if (packetType == PacketType::StockTransactionListRequest) {
+		std::vector<StockTransactionInfo> infos;
+		if (session.authenticated) {
+			std::string reason;
+			if (!database.LoadStockTransactionInfos(session.playerId, infos, reason))
+				std::cerr << "[StockTransactionList] " << session.playerId
+				<< " failed: " << reason << '\n';
+		}
+		QueuePacket(session, MakeStockTransactionListResponse(infos));
+		return;
+	}
 
 	AuthRequest request;
 	if (!ParseAuthRequest(payload, request)) {
@@ -3063,7 +3185,8 @@ bool ProcessReceiveBuffer(Database& database, ClientSession& session) {
 			packetType != PacketType::SavingsJoinRequest &&
 			packetType != PacketType::LoanApplyRequest &&
 			packetType != PacketType::StockIssueRequest &&
-			packetType != PacketType::StockManagementInfoRequest)
+			packetType != PacketType::StockManagementInfoRequest &&
+			packetType != PacketType::StockTransactionListRequest)
 			return false;
 		ProcessPacket(database, session, packetType, payload);
 	}

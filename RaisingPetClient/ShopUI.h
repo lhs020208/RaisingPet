@@ -60,6 +60,18 @@ struct SHOP_STOCK_MANAGEMENT_INFO
 	std::vector<SHOP_STOCK_PRICE_INFO> RecentPrices;
 };
 
+struct SHOP_STOCK_TRANSACTION_INFO
+{
+	UINT nStockId = 0;
+	std::wstring wstrStockName;
+	std::wstring wstrIssuerId;
+	UINT nCurrentPrice = 100;
+	UINT nPreviousPrice = 100;
+	UINT nSaleableQuantity = 0;
+	UINT nMyQuantity = 0;
+	UINT nRecentTradeQuantity = 0;
+};
+
 class CShopUI
 {
 public:
@@ -82,6 +94,7 @@ public:
 	bool ConsumeFinancialProductRequest(int& nCategory, int& nProductIndex);
 	bool ConsumeStockIssueRequest(std::wstring& stockName);
 	bool ConsumeStockManagementInfoRequest();
+	bool ConsumeStockTransactionListRequest();
 	bool ConsumeLoginSceneReturnRequest();
 	void SetFinancialProductActive(int nCategory, int nProductIndex, UINT nDurationSeconds);
 	void ClearFinancialProductActive(int nCategory, int nProductIndex);
@@ -90,6 +103,7 @@ public:
 	void SetStockIssued(bool bIssued, const std::wstring& stockName = std::wstring());
 	void NotifyStockIssueFailed();
 	void SetStockManagementInfo(const SHOP_STOCK_MANAGEMENT_INFO& info);
+	void SetStockTransactionInfos(const std::vector<SHOP_STOCK_TRANSACTION_INFO>& infos);
 	bool IsStockIssued() const { return m_bStockIssued; }
 	const std::wstring& GetStockName() const { return m_wstrStockName; }
 
@@ -159,6 +173,13 @@ private:
 	UI_IMAGE_RESOURCE m_StockDownMarkResource;
 	UI_IMAGE_RESOURCE m_IssuanceStockResource;
 	UI_IMAGE_RESOURCE m_IssuanceStockErrorLogResource;
+	UI_IMAGE_RESOURCE m_StockTransactionTitleResource;
+	UI_IMAGE_RESOURCE m_StockTransactionIssuerResource;
+	UI_IMAGE_RESOURCE m_StockTransactionGraphResource;
+	UI_IMAGE_RESOURCE m_StockTransactionDescriptionResource;
+	UI_IMAGE_RESOURCE m_SeeStockResource;
+	UI_IMAGE_RESOURCE m_StockBuyingResource;
+	UI_IMAGE_RESOURCE m_StockSellingResource;
 
 	bool m_bShopActive = false;
 	SHOP_PAGE m_eShopPage = SHOP_PAGE::SHOP_MENU;
@@ -201,8 +222,15 @@ private:
 	bool m_bPendingStockIssueRequest = false;
 	bool m_bPendingStockIssueErrorLog = false;
 	bool m_bPendingStockManagementInfoRequest = false;
+	bool m_bPendingStockTransactionListRequest = false;
 	std::wstring m_wstrPendingStockIssueName;
 	SHOP_STOCK_MANAGEMENT_INFO m_StockManagementInfo;
+	std::vector<SHOP_STOCK_TRANSACTION_INFO> m_StockTransactionInfos;
+	size_t m_nStockTransactionScrollOffset = 0;
+	size_t m_nMaximumStockTransactionScrollOffset = 0;
+	size_t m_nSelectedStockTransactionIndex = 0;
+	UINT m_nStockTransactionOrderQuantity = 0;
+	bool m_bStockTransactionQuantityInputActive = false;
 	std::vector<SHOP_NETWORK_ERROR_LOG> m_NetworkErrorLogs;
 	std::vector<SHOP_NETWORK_ERROR_LOG> m_StockIssueErrorLogs;
 
@@ -240,7 +268,8 @@ private:
 		const SHOP_TEXT_RENDER_CONTEXT& textContext);
 	bool ProcessFinancialClick(float x, float y, float fViewportWidth, float fViewportHeight);
 	void RenderStockMenuPage(ID3D12GraphicsCommandList* pd3dCommandList, CCamera* pCamera);
-	void RenderStockTransactionPage(ID3D12GraphicsCommandList* pd3dCommandList, CCamera* pCamera);
+	void RenderStockTransactionPage(ID3D12GraphicsCommandList* pd3dCommandList, CCamera* pCamera,
+		const SHOP_TEXT_RENDER_CONTEXT& textContext);
 	void RenderStockManagementPage(ID3D12GraphicsCommandList* pd3dCommandList, CCamera* pCamera);
 	void RenderStockGraphPage(ID3D12GraphicsCommandList* pd3dCommandList, CCamera* pCamera,
 		const SHOP_TEXT_RENDER_CONTEXT& textContext);
@@ -260,4 +289,7 @@ private:
 	XMFLOAT4 GetFinancialLeftButtonRectangle(float fViewportWidth, float fViewportHeight) const;
 	XMFLOAT4 GetFinancialRightButtonRectangle(float fViewportWidth, float fViewportHeight) const;
 	XMFLOAT4 GetStockSlotRectangle(int nIndex, float fViewportWidth, float fViewportHeight) const;
+	XMFLOAT4 GetStockTransactionListRowRectangle(size_t nRow, float fViewportWidth, float fViewportHeight) const;
+	XMFLOAT4 GetStockTransactionScrollThumbRectangle(float fViewportWidth, float fViewportHeight) const;
+	XMFLOAT4 GetStockTransactionQuantityRectangle(float fViewportWidth, float fViewportHeight) const;
 };

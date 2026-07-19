@@ -1033,6 +1033,10 @@ void CGameScene::OnProcessingMouseMessage(HWND hWnd, UINT nMessageID, WPARAM wPa
 	{
 		g_pFramework->GetNetworkManager().SendStockManagementInfoRequest();
 	}
+	if (m_ShopUI.ConsumeStockTransactionListRequest())
+	{
+		g_pFramework->GetNetworkManager().SendStockTransactionListRequest();
+	}
 	if (bShopMessageProcessed)
 		return;
 
@@ -1190,6 +1194,27 @@ void CGameScene::Animate(float fElapsedTime)
 			shopStockInfo.RecentPrices.push_back(shopPrice);
 		}
 		m_ShopUI.SetStockManagementInfo(shopStockInfo);
+	}
+
+	std::vector<CLIENT_STOCK_TRANSACTION_INFO> stockTransactionInfos;
+	while (g_pFramework->GetNetworkManager().ConsumeStockTransactionList(stockTransactionInfos))
+	{
+		std::vector<SHOP_STOCK_TRANSACTION_INFO> shopStockTransactionInfos;
+		shopStockTransactionInfos.reserve(stockTransactionInfos.size());
+		for (const CLIENT_STOCK_TRANSACTION_INFO& stockInfo : stockTransactionInfos)
+		{
+			SHOP_STOCK_TRANSACTION_INFO shopStockInfo;
+			shopStockInfo.nStockId = stockInfo.nStockId;
+			shopStockInfo.wstrStockName = Utf8ToWideString(stockInfo.strStockNameUtf8);
+			shopStockInfo.wstrIssuerId = Utf8ToWideString(stockInfo.strIssuerId);
+			shopStockInfo.nCurrentPrice = stockInfo.nCurrentPrice;
+			shopStockInfo.nPreviousPrice = stockInfo.nPreviousPrice;
+			shopStockInfo.nSaleableQuantity = stockInfo.nSaleableQuantity;
+			shopStockInfo.nMyQuantity = stockInfo.nMyQuantity;
+			shopStockInfo.nRecentTradeQuantity = stockInfo.nRecentTradeQuantity;
+			shopStockTransactionInfos.push_back(shopStockInfo);
+		}
+		m_ShopUI.SetStockTransactionInfos(shopStockTransactionInfos);
 	}
 
 	std::int64_t nServerMoneyDelta = 0;

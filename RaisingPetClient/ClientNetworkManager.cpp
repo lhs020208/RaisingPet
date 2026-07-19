@@ -10,7 +10,7 @@
 
 namespace
 {
-constexpr std::uint16_t kMaxPacketSize = 1024;
+constexpr std::uint16_t kMaxPacketSize = 8192;
 
 enum class PacketType : std::uint16_t
 {
@@ -31,6 +31,8 @@ enum class PacketType : std::uint16_t
 	StockIssueStatus = 15,
 	StockManagementInfoRequest = 16,
 	StockManagementInfoResponse = 17,
+	StockTransactionListRequest = 18,
+	StockTransactionListResponse = 19,
 };
 
 std::uint16_t ReadUInt16(const char* data)
@@ -156,6 +158,16 @@ std::vector<char> MakeStockManagementInfoRequestPacket()
 	return(packet);
 }
 
+std::vector<char> MakeStockTransactionListRequestPacket()
+{
+	std::vector<char> packet;
+	const std::uint16_t packetSize = 4;
+	packet.reserve(packetSize);
+	WriteUInt16(packet, packetSize);
+	WriteUInt16(packet, static_cast<std::uint16_t>(PacketType::StockTransactionListRequest));
+	return(packet);
+}
+
 bool SendAll(SOCKET socket, const std::vector<char>& packet)
 {
 	int sentBytes = 0;
@@ -188,7 +200,8 @@ bool ProcessPersistentPacketBuffer(std::vector<char>& receiveBuffer,
 	std::vector<CLIENT_FINANCIAL_ACTIVE_STATUS>& financialActiveStatuses,
 	std::vector<CLIENT_STOCK_ISSUE_APPLICATION_RESULT>& stockIssueResults,
 	std::vector<CLIENT_STOCK_ISSUE_STATUS>& stockIssueStatuses,
-	std::vector<CLIENT_STOCK_MANAGEMENT_INFO>& stockManagementInfos)
+	std::vector<CLIENT_STOCK_MANAGEMENT_INFO>& stockManagementInfos,
+	std::vector<std::vector<CLIENT_STOCK_TRANSACTION_INFO>>& stockTransactionLists)
 {
 	while (receiveBuffer.size() >= 4)
 	{
@@ -361,6 +374,52 @@ bool ProcessPersistentPacketBuffer(std::vector<char>& receiveBuffer,
 			if (cursor != end) return(false);
 			stockManagementInfos.push_back(info);
 		}
+		else if (packetType == static_cast<std::uint16_t>(PacketType::StockTransactionListResponse))
+		{
+			const char* cursor = payload;
+			const char* end = payload + payloadSize;
+			if (cursor + 1 > end) return(false);
+			const unsigned char stockCount = static_cast<unsigned char>(*cursor++);
+			if (stockCount > 20) return(false);
+			std::vector<CLIENT_STOCK_TRANSACTION_INFO> infos;
+			infos.reserve(stockCount);
+			for (unsigned char i = 0; i < stockCount; ++i)
+			{
+				if (cursor + sizeof(std::uint32_t) + sizeof(std::uint16_t) > end) return(false);
+				CLIENT_STOCK_TRANSACTION_INFO info;
+				info.nStockId = static_cast<unsigned int>(ReadUInt32(cursor));
+				cursor += sizeof(std::uint32_t);
+				const std::uint16_t stockNameLength = ReadUInt16(cursor);
+				cursor += sizeof(std::uint16_t);
+				if (stockNameLength > 150 || cursor + stockNameLength + sizeof(std::uint16_t) > end)
+					return(false);
+				info.strStockNameUtf8.assign(cursor, cursor + stockNameLength);
+				cursor += stockNameLength;
+				const std::uint16_t issuerIdLength = ReadUInt16(cursor);
+				cursor += sizeof(std::uint16_t);
+				if (issuerIdLength > 32 || cursor + issuerIdLength + sizeof(std::uint64_t) * 2
+					+ sizeof(std::uint32_t) * 3 > end) return(false);
+				info.strIssuerId.assign(cursor, cursor + issuerIdLength);
+				cursor += issuerIdLength;
+				const std::uint64_t currentPrice = ReadUInt64(cursor);
+				if (currentPrice > UINT_MAX) return(false);
+				info.nCurrentPrice = static_cast<unsigned int>(currentPrice);
+				cursor += sizeof(std::uint64_t);
+				const std::uint64_t previousPrice = ReadUInt64(cursor);
+				if (previousPrice > UINT_MAX) return(false);
+				info.nPreviousPrice = static_cast<unsigned int>(previousPrice);
+				cursor += sizeof(std::uint64_t);
+				info.nSaleableQuantity = static_cast<unsigned int>(ReadUInt32(cursor));
+				cursor += sizeof(std::uint32_t);
+				info.nMyQuantity = static_cast<unsigned int>(ReadUInt32(cursor));
+				cursor += sizeof(std::uint32_t);
+				info.nRecentTradeQuantity = static_cast<unsigned int>(ReadUInt32(cursor));
+				cursor += sizeof(std::uint32_t);
+				infos.push_back(info);
+			}
+			if (cursor != end) return(false);
+			stockTransactionLists.push_back(infos);
+		}
 
 		receiveBuffer.erase(receiveBuffer.begin(), receiveBuffer.begin() + packetSize);
 	}
@@ -443,6 +502,16 @@ bool CClientNetworkManager::SendStockManagementInfoRequest()
 	return(SendAll(m_Socket, packet));
 }
 
+bool CClientNetworkManager::SendStockTransactionListRequest()
+{
+	if (!m_bConnected.load()) return(false);
+	const std::vector<char> packet = MakeStockTransactionListRequestPacket();
+
+	std::lock_guard<std::mutex> lock(m_Mutex);
+	if (m_Socket == INVALID_SOCKET) return(false);
+	return(SendAll(m_Socket, packet));
+}
+
 bool CClientNetworkManager::StartAuthRequest(CLIENT_AUTH_REQUEST request,
 	const std::string& id, const std::string& password)
 {
@@ -460,6 +529,7 @@ bool CClientNetworkManager::StartAuthRequest(CLIENT_AUTH_REQUEST request,
 		m_StockIssueResults.clear();
 		m_StockIssueStatuses.clear();
 		m_StockManagementInfos.clear();
+		m_StockTransactionLists.clear();
 	}
 
 	m_bStopRequested.store(false);
@@ -554,6 +624,16 @@ bool CClientNetworkManager::ConsumeStockManagementInfo(CLIENT_STOCK_MANAGEMENT_I
 	if (m_StockManagementInfos.empty()) return(false);
 	info = m_StockManagementInfos.front();
 	m_StockManagementInfos.erase(m_StockManagementInfos.begin());
+	return(true);
+}
+
+bool CClientNetworkManager::ConsumeStockTransactionList(
+	std::vector<CLIENT_STOCK_TRANSACTION_INFO>& infos)
+{
+	std::lock_guard<std::mutex> lock(m_Mutex);
+	if (m_StockTransactionLists.empty()) return(false);
+	infos = m_StockTransactionLists.front();
+	m_StockTransactionLists.erase(m_StockTransactionLists.begin());
 	return(true);
 }
 
@@ -728,13 +808,15 @@ void CClientNetworkManager::AuthThread(CLIENT_AUTH_REQUEST request,
 			std::vector<CLIENT_STOCK_ISSUE_APPLICATION_RESULT> stockIssueResults;
 			std::vector<CLIENT_STOCK_ISSUE_STATUS> stockIssueStatuses;
 			std::vector<CLIENT_STOCK_MANAGEMENT_INFO> stockManagementInfos;
+			std::vector<std::vector<CLIENT_STOCK_TRANSACTION_INFO>> stockTransactionLists;
 			if (!ProcessPersistentPacketBuffer(persistentReceiveBuffer,
 				moneyChanges, financialResults, financialCompletions, financialActiveStatuses,
-				stockIssueResults, stockIssueStatuses, stockManagementInfos)) break;
+				stockIssueResults, stockIssueStatuses, stockManagementInfos,
+				stockTransactionLists)) break;
 			if (!moneyChanges.empty() || !financialResults.empty() ||
 				!financialCompletions.empty() || !financialActiveStatuses.empty() ||
 				!stockIssueResults.empty() || !stockIssueStatuses.empty() ||
-				!stockManagementInfos.empty())
+				!stockManagementInfos.empty() || !stockTransactionLists.empty())
 			{
 				std::lock_guard<std::mutex> lock(m_Mutex);
 				m_ServerMoneyChanges.insert(m_ServerMoneyChanges.end(),
@@ -751,6 +833,8 @@ void CClientNetworkManager::AuthThread(CLIENT_AUTH_REQUEST request,
 					stockIssueStatuses.begin(), stockIssueStatuses.end());
 				m_StockManagementInfos.insert(m_StockManagementInfos.end(),
 					stockManagementInfos.begin(), stockManagementInfos.end());
+				m_StockTransactionLists.insert(m_StockTransactionLists.end(),
+					stockTransactionLists.begin(), stockTransactionLists.end());
 			}
 		}
 	}
