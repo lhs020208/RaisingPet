@@ -104,6 +104,7 @@ public:
 	void SetFinancialProgressCount(int nCategory, int nProgressCount);
 	void SetStockIssued(bool bIssued, const std::wstring& stockName = std::wstring());
 	void NotifyStockIssueFailed();
+	void NotifyStockTradeFailed(int nAction);
 	void SetStockManagementInfo(const SHOP_STOCK_MANAGEMENT_INFO& info);
 	void SetStockTransactionInfos(const std::vector<SHOP_STOCK_TRANSACTION_INFO>& infos);
 	bool IsStockIssued() const { return m_bStockIssued; }
@@ -184,6 +185,8 @@ private:
 	UI_IMAGE_RESOURCE m_SeeStockResource;
 	UI_IMAGE_RESOURCE m_StockBuyingResource;
 	UI_IMAGE_RESOURCE m_StockSellingResource;
+	UI_IMAGE_RESOURCE m_StockBuyingFailLogResource;
+	UI_IMAGE_RESOURCE m_StockSellingFailLogResource;
 	UI_IMAGE_RESOURCE m_StockReceiptResource;
 	UI_IMAGE_RESOURCE m_TextCursorResource;
 
@@ -241,8 +244,10 @@ private:
 	int m_nPendingStockTradeAction = -1;
 	UINT m_nPendingStockTradeStockId = 0;
 	UINT m_nPendingStockTradeQuantity = 0;
+	bool m_bPendingStockTradeFailLog[2] = { false, false };
 	std::vector<SHOP_NETWORK_ERROR_LOG> m_NetworkErrorLogs;
 	std::vector<SHOP_NETWORK_ERROR_LOG> m_StockIssueErrorLogs;
+	std::vector<SHOP_NETWORK_ERROR_LOG> m_StockTradeFailLogs[2];
 
 	void RenderUiImage(ID3D12GraphicsCommandList* pd3dCommandList, CCamera* pCamera,
 		UI_IMAGE_RESOURCE& imageResource, const XMFLOAT4& rectangle, UINT nTintColor = 0x00FFFFFF);
@@ -279,10 +284,12 @@ private:
 	bool ProcessFinancialClick(float x, float y, float fViewportWidth, float fViewportHeight);
 	void RenderStockMenuPage(ID3D12GraphicsCommandList* pd3dCommandList, CCamera* pCamera);
 	void RenderStockTransactionPage(ID3D12GraphicsCommandList* pd3dCommandList, CCamera* pCamera,
-		const SHOP_TEXT_RENDER_CONTEXT& textContext);
+		UINT nMoney, const SHOP_TEXT_RENDER_CONTEXT& textContext);
 	void RenderStockManagementPage(ID3D12GraphicsCommandList* pd3dCommandList, CCamera* pCamera);
 	void RenderStockGraphPage(ID3D12GraphicsCommandList* pd3dCommandList, CCamera* pCamera,
-		const SHOP_TEXT_RENDER_CONTEXT& textContext);
+		UINT nMoney, const SHOP_TEXT_RENDER_CONTEXT& textContext);
+	void RenderStockTradeFailLogs(ID3D12GraphicsCommandList* pd3dCommandList, CCamera* pCamera,
+		UINT nMoney, const SHOP_TEXT_RENDER_CONTEXT& textContext);
 	void RenderStockQuantityCursor(ID3D12GraphicsCommandList* pd3dCommandList, CCamera* pCamera,
 		const XMFLOAT4& rectangle, UINT nQuantity, float fFontSize);
 	void RenderPageTitle(ID3D12GraphicsCommandList* pd3dCommandList, CCamera* pCamera);
@@ -315,5 +322,6 @@ private:
 		const SHOP_TEXT_RENDER_CONTEXT& textContext) const;
 	XMFLOAT4 GetStockTargetSellingButtonRectangle(float fViewportWidth, float fViewportHeight,
 		const SHOP_TEXT_RENDER_CONTEXT& textContext) const;
+	bool IsStockTradeButtonDisabled(int nAction, UINT nMoney) const;
 	void QueueStockTradeRequest(int nAction);
 };

@@ -504,6 +504,8 @@ void CShopUI::BuildObjects(ID3D12Device* device, ID3D12GraphicsCommandList* comm
 	loadImage(L"Assets/Image/Shop/Stock/StockTransaction/SeeStock.dds", m_SeeStockResource);
 	loadImage(L"Assets/Image/Shop/Stock/StockTransaction/StockBuying.dds", m_StockBuyingResource);
 	loadImage(L"Assets/Image/Shop/Stock/StockTransaction/StockSelling.dds", m_StockSellingResource);
+	loadImage(L"Assets/Image/Shop/Stock/StockTransaction/StockBuyingFailLog.dds", m_StockBuyingFailLogResource);
+	loadImage(L"Assets/Image/Shop/Stock/StockTransaction/StockSellingFailLog.dds", m_StockSellingFailLogResource);
 	loadImage(L"Assets/Image/Shop/Stock/StockTransaction/StockReceipt.dds", m_StockReceiptResource);
 	loadImage(L"Assets/Image/Login/TextCursor.dds", m_TextCursorResource);
 	loadImage(L"Assets/Image/Common/EmptySquare.dds", m_EmptySquareResources[0]);
@@ -564,6 +566,7 @@ void CShopUI::ReleaseObjects()
 		&m_StockTransactionTitleResource, &m_StockTransactionIssuerResource,
 		&m_StockTransactionGraphResource, &m_StockTransactionDescriptionResource,
 		&m_SeeStockResource, &m_StockBuyingResource, &m_StockSellingResource,
+		&m_StockBuyingFailLogResource, &m_StockSellingFailLogResource,
 		&m_StockReceiptResource, &m_TextCursorResource };
 	for (UI_IMAGE_RESOURCE* image : images)
 	{
@@ -618,6 +621,15 @@ void CShopUI::Animate(float elapsedTime)
 	m_StockIssueErrorLogs.erase(std::remove_if(m_StockIssueErrorLogs.begin(), m_StockIssueErrorLogs.end(),
 		[](const SHOP_NETWORK_ERROR_LOG& log) { return(log.fElapsedTime >= 1.0f); }),
 		m_StockIssueErrorLogs.end());
+	for (int i = 0; i < 2; ++i)
+	{
+		for (SHOP_NETWORK_ERROR_LOG& log : m_StockTradeFailLogs[i])
+			log.fElapsedTime += elapsedTime;
+		m_StockTradeFailLogs[i].erase(std::remove_if(m_StockTradeFailLogs[i].begin(),
+			m_StockTradeFailLogs[i].end(),
+			[](const SHOP_NETWORK_ERROR_LOG& log) { return(log.fElapsedTime >= 1.0f); }),
+			m_StockTradeFailLogs[i].end());
+	}
 }
 
 void CShopUI::ReleaseUploadBuffers()
@@ -643,6 +655,7 @@ void CShopUI::ReleaseUploadBuffers()
 		&m_StockTransactionTitleResource, &m_StockTransactionIssuerResource,
 		&m_StockTransactionGraphResource, &m_StockTransactionDescriptionResource,
 		&m_SeeStockResource, &m_StockBuyingResource, &m_StockSellingResource,
+		&m_StockBuyingFailLogResource, &m_StockSellingFailLogResource,
 		&m_StockReceiptResource, &m_TextCursorResource };
 	for (UI_IMAGE_RESOURCE* image : images)
 	{
@@ -1163,7 +1176,7 @@ void CShopUI::RenderStockMenuPage(ID3D12GraphicsCommandList* commandList, CCamer
 }
 
 void CShopUI::RenderStockTransactionPage(ID3D12GraphicsCommandList* commandList, CCamera* camera,
-	const SHOP_TEXT_RENDER_CONTEXT& context)
+	UINT money, const SHOP_TEXT_RENDER_CONTEXT& context)
 {
 	const float width = camera->m_d3dViewport.Width;
 	const float height = camera->m_d3dViewport.Height;
@@ -1344,9 +1357,11 @@ void CShopUI::RenderStockTransactionPage(ID3D12GraphicsCommandList* commandList,
 	}
 
 	RenderUiImage(commandList, camera, m_StockBuyingResource,
-		GetStockTransactionBuyingButtonRectangle(width, height, context));
+		GetStockTransactionBuyingButtonRectangle(width, height, context),
+		IsStockTradeButtonDisabled(0, money) ? 0x00BFBFBF : 0x00FFFFFF);
 	RenderUiImage(commandList, camera, m_StockSellingResource,
-		GetStockTransactionSellingButtonRectangle(width, height, context));
+		GetStockTransactionSellingButtonRectangle(width, height, context),
+		IsStockTradeButtonDisabled(1, money) ? 0x00BFBFBF : 0x00FFFFFF);
 }
 
 void CShopUI::RenderStockManagementPage(ID3D12GraphicsCommandList* commandList, CCamera* camera)
@@ -1708,7 +1723,7 @@ void CShopUI::RenderCantCreateStockPage(ID3D12GraphicsCommandList* commandList, 
 }
 
 void CShopUI::RenderStockGraphPage(ID3D12GraphicsCommandList* commandList, CCamera* camera,
-	const SHOP_TEXT_RENDER_CONTEXT& context)
+	UINT money, const SHOP_TEXT_RENDER_CONTEXT& context)
 {
 	if (!camera) return;
 	const float width = camera->m_d3dViewport.Width;
@@ -1896,9 +1911,11 @@ void CShopUI::RenderStockGraphPage(ID3D12GraphicsCommandList* commandList, CCame
 			priceRect, (priceRect.w - priceRect.y) * 0.72f, 0xFF000000, true, true);
 
 		RenderUiImage(commandList, camera, m_StockBuyingResource,
-			GetStockTargetBuyingButtonRectangle(width, height, context));
+			GetStockTargetBuyingButtonRectangle(width, height, context),
+			IsStockTradeButtonDisabled(0, money) ? 0x00BFBFBF : 0x00FFFFFF);
 		RenderUiImage(commandList, camera, m_StockSellingResource,
-			GetStockTargetSellingButtonRectangle(width, height, context));
+			GetStockTargetSellingButtonRectangle(width, height, context),
+			IsStockTradeButtonDisabled(1, money) ? 0x00BFBFBF : 0x00FFFFFF);
 	}
 	else
 	{
@@ -2031,7 +2048,8 @@ void CShopUI::Render(ID3D12GraphicsCommandList* commandList, CCamera* camera, UI
 		}
 		else if (m_eShopPage == SHOP_PAGE::STOCK_TRANSACTION)
 		{
-			RenderStockTransactionPage(commandList, camera, context);
+			RenderStockTransactionPage(commandList, camera, money, context);
+			RenderStockTradeFailLogs(commandList, camera, money, context);
 		}
 		else if (m_eShopPage == SHOP_PAGE::STOCK_MANAGEMENT)
 		{
@@ -2045,7 +2063,9 @@ void CShopUI::Render(ID3D12GraphicsCommandList* commandList, CCamera* camera, UI
 		else if (m_eShopPage == SHOP_PAGE::STOCK_SEE_MYGRAPH
 			|| m_eShopPage == SHOP_PAGE::STOCK_SEE_TARGET_GRAPH)
 		{
-			RenderStockGraphPage(commandList, camera, context);
+			RenderStockGraphPage(commandList, camera, money, context);
+			if (m_eShopPage == SHOP_PAGE::STOCK_SEE_TARGET_GRAPH)
+				RenderStockTradeFailLogs(commandList, camera, money, context);
 		}
 		RenderMoneyUI(commandList, camera, money, context);
 		RenderUiImage(commandList, camera, m_ShopBackSpaceIconResource,
@@ -2373,6 +2393,12 @@ void CShopUI::NotifyStockIssueFailed()
 	m_bPendingStockIssueErrorLog = true;
 }
 
+void CShopUI::NotifyStockTradeFailed(int action)
+{
+	if (action != 0 && action != 1) return;
+	m_bPendingStockTradeFailLog[action] = true;
+}
+
 void CShopUI::SetStockManagementInfo(const SHOP_STOCK_MANAGEMENT_INFO& info)
 {
 	m_StockManagementInfo = info;
@@ -2411,6 +2437,24 @@ void CShopUI::SetStockTransactionInfos(const std::vector<SHOP_STOCK_TRANSACTION_
 	}
 	if (m_nSelectedStockTransactionIndex >= m_StockTransactionInfos.size())
 		m_nSelectedStockTransactionIndex = 0;
+}
+
+bool CShopUI::IsStockTradeButtonDisabled(int action, UINT money) const
+{
+	if (action != 0 && action != 1) return(true);
+	if (m_StockTransactionInfos.empty()
+		|| m_nSelectedStockTransactionIndex >= m_StockTransactionInfos.size())
+		return(true);
+
+	const SHOP_STOCK_TRANSACTION_INFO& stock =
+		m_StockTransactionInfos[m_nSelectedStockTransactionIndex];
+	if (action == 0)
+	{
+		const UINT64 totalPrice = static_cast<UINT64>(m_nStockTransactionOrderQuantity)
+			* static_cast<UINT64>(stock.nCurrentPrice);
+		return(totalPrice > static_cast<UINT64>(money));
+	}
+	return(m_nStockTransactionOrderQuantity > stock.nMyQuantity);
 }
 
 void CShopUI::QueueStockTradeRequest(int action)
@@ -2577,6 +2621,63 @@ void CShopUI::RenderStockIssueErrorLogs(ID3D12GraphicsCommandList* commandList, 
 	}
 }
 
+void CShopUI::RenderStockTradeFailLogs(ID3D12GraphicsCommandList* commandList, CCamera* camera,
+	UINT money, const SHOP_TEXT_RENDER_CONTEXT& context)
+{
+	if (!camera) return;
+	const float width = camera->m_d3dViewport.Width;
+	const float height = camera->m_d3dViewport.Height;
+
+	auto getButtonRectangle = [&](int action) -> XMFLOAT4
+	{
+		if (m_eShopPage == SHOP_PAGE::STOCK_SEE_TARGET_GRAPH)
+			return(action == 0)
+				? GetStockTargetBuyingButtonRectangle(width, height, context)
+				: GetStockTargetSellingButtonRectangle(width, height, context);
+		return(action == 0)
+			? GetStockTransactionBuyingButtonRectangle(width, height, context)
+			: GetStockTransactionSellingButtonRectangle(width, height, context);
+	};
+
+	for (int action = 0; action < 2; ++action)
+	{
+		if (m_bPendingStockTradeFailLog[action])
+		{
+			const XMFLOAT4 button = getButtonRectangle(action);
+			const XMFLOAT4 board = GetShopBoardRectangle(width, height,
+				m_xmf2ShopBoardOffset.x, m_xmf2ShopBoardOffset.y);
+			const float boardWidth = board.z - board.x;
+			const float logWidth = boardWidth * 0.44f;
+			const float logHeight = logWidth * ((action == 0) ? (134.0f / 1757.0f)
+				: (133.0f / 1757.0f));
+			const float centerX = (button.x + button.z) * 0.5f;
+			const float top = button.y - logHeight - 12.0f;
+
+			SHOP_NETWORK_ERROR_LOG log;
+			log.rectangle = XMFLOAT4(centerX - logWidth * 0.5f, top,
+				centerX + logWidth * 0.5f, top + logHeight);
+			log.fElapsedTime = 0.0f;
+			m_StockTradeFailLogs[action].clear();
+			m_StockTradeFailLogs[action].push_back(log);
+			m_bPendingStockTradeFailLog[action] = false;
+		}
+
+		UI_IMAGE_RESOURCE& resource = (action == 0)
+			? m_StockBuyingFailLogResource : m_StockSellingFailLogResource;
+		for (const SHOP_NETWORK_ERROR_LOG& log : m_StockTradeFailLogs[action])
+		{
+			const float alphaRatio = max(0.0f, 1.0f - log.fElapsedTime);
+			const UINT alpha = max(1u, static_cast<UINT>(alphaRatio * 255.0f + 0.5f));
+			const float moveY = -20.0f * log.fElapsedTime;
+			RenderUiImage(commandList, camera, resource,
+				XMFLOAT4(log.rectangle.x, log.rectangle.y + moveY,
+					log.rectangle.z, log.rectangle.w + moveY),
+				(alpha << 24) | 0x00FFFFFF);
+		}
+	}
+	(void)money;
+}
+
 bool CShopUI::ProcessShopUIClick(float x, float y, float width, float height, UINT money,
 	size_t petCount, size_t activePetIndex, const SHOP_TEXT_RENDER_CONTEXT& context,
 	bool networkConnected)
@@ -2732,14 +2833,16 @@ bool CShopUI::ProcessShopUIClick(float x, float y, float width, float height, UI
 			&& IsPointInRectangle(x, y,
 				GetStockTransactionBuyingButtonRectangle(width, height, context)))
 		{
-			QueueStockTradeRequest(0);
+			if (!IsStockTradeButtonDisabled(0, money))
+				QueueStockTradeRequest(0);
 			return(true);
 		}
 		if (!m_StockTransactionInfos.empty()
 			&& IsPointInRectangle(x, y,
 				GetStockTransactionSellingButtonRectangle(width, height, context)))
 		{
-			QueueStockTradeRequest(1);
+			if (!IsStockTradeButtonDisabled(1, money))
+				QueueStockTradeRequest(1);
 			return(true);
 		}
 		if (!m_StockTransactionInfos.empty()
@@ -2776,14 +2879,16 @@ bool CShopUI::ProcessShopUIClick(float x, float y, float width, float height, UI
 			&& IsPointInRectangle(x, y,
 				GetStockTargetBuyingButtonRectangle(width, height, context)))
 		{
-			QueueStockTradeRequest(0);
+			if (!IsStockTradeButtonDisabled(0, money))
+				QueueStockTradeRequest(0);
 			return(true);
 		}
 		if (!m_StockTransactionInfos.empty()
 			&& IsPointInRectangle(x, y,
 				GetStockTargetSellingButtonRectangle(width, height, context)))
 		{
-			QueueStockTradeRequest(1);
+			if (!IsStockTradeButtonDisabled(1, money))
+				QueueStockTradeRequest(1);
 			return(true);
 		}
 		if (!m_StockTransactionInfos.empty()

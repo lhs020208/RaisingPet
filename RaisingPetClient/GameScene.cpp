@@ -1254,6 +1254,11 @@ void CGameScene::Animate(float fElapsedTime)
 			ApplyServerMoneyChange(stockTradeResult.nFinalMoney);
 			SaveLocalPlayerStatus();
 		}
+		else
+		{
+			m_ShopUI.NotifyStockTradeFailed(
+				(stockTradeResult.eAction == CLIENT_STOCK_TRADE_ACTION::BUY) ? 0 : 1);
+		}
 		g_pFramework->GetNetworkManager().SendStockTransactionListRequest();
 		g_pFramework->GetNetworkManager().SendStockManagementInfoRequest();
 	}
