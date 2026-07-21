@@ -96,6 +96,7 @@ public:
 	bool ConsumeStockIssueRequest(std::wstring& stockName);
 	bool ConsumeStockManagementInfoRequest();
 	bool ConsumeStockTransactionListRequest();
+	bool ConsumeStockTradeRequest(int& nAction, UINT& nStockId, UINT& nQuantity);
 	bool ConsumeLoginSceneReturnRequest();
 	void SetFinancialProductActive(int nCategory, int nProductIndex, UINT nDurationSeconds);
 	void ClearFinancialProductActive(int nCategory, int nProductIndex);
@@ -237,6 +238,9 @@ private:
 	UINT m_nStockTransactionOrderQuantity = 0;
 	bool m_bStockTransactionQuantityInputActive = false;
 	float m_fStockTransactionQuantityCursorBlinkElapsed = 0.0f;
+	int m_nPendingStockTradeAction = -1;
+	UINT m_nPendingStockTradeStockId = 0;
+	UINT m_nPendingStockTradeQuantity = 0;
 	std::vector<SHOP_NETWORK_ERROR_LOG> m_NetworkErrorLogs;
 	std::vector<SHOP_NETWORK_ERROR_LOG> m_StockIssueErrorLogs;
 
@@ -301,6 +305,15 @@ private:
 	XMFLOAT4 GetStockTransactionScrollThumbRectangle(float fViewportWidth, float fViewportHeight) const;
 	XMFLOAT4 GetStockTransactionQuantityRectangle(float fViewportWidth, float fViewportHeight) const;
 	XMFLOAT4 GetStockTransactionGraphButtonRectangle(float fViewportWidth, float fViewportHeight) const;
+	XMFLOAT4 GetStockTransactionBuyingButtonRectangle(float fViewportWidth, float fViewportHeight,
+		const SHOP_TEXT_RENDER_CONTEXT& textContext) const;
+	XMFLOAT4 GetStockTransactionSellingButtonRectangle(float fViewportWidth, float fViewportHeight,
+		const SHOP_TEXT_RENDER_CONTEXT& textContext) const;
 	XMFLOAT4 GetStockTargetReceiptRectangle(float fViewportWidth, float fViewportHeight) const;
 	XMFLOAT4 GetStockTargetQuantityRectangle(float fViewportWidth, float fViewportHeight) const;
+	XMFLOAT4 GetStockTargetBuyingButtonRectangle(float fViewportWidth, float fViewportHeight,
+		const SHOP_TEXT_RENDER_CONTEXT& textContext) const;
+	XMFLOAT4 GetStockTargetSellingButtonRectangle(float fViewportWidth, float fViewportHeight,
+		const SHOP_TEXT_RENDER_CONTEXT& textContext) const;
+	void QueueStockTradeRequest(int nAction);
 };

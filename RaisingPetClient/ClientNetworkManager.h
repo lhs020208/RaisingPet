@@ -58,6 +58,23 @@ enum class CLIENT_STOCK_ISSUE_RESULT
 	NETWORK_ERROR = 6
 };
 
+enum class CLIENT_STOCK_TRADE_ACTION
+{
+	BUY = 0,
+	SELL = 1
+};
+
+enum class CLIENT_STOCK_TRADE_RESULT
+{
+	SUCCESS = 0,
+	INVALID_REQUEST = 1,
+	NOT_AUTHENTICATED = 2,
+	NOT_ENOUGH_MONEY = 3,
+	NOT_ENOUGH_STOCK = 4,
+	NOT_ENOUGH_SALEABLE_STOCK = 5,
+	DATABASE_ERROR = 6
+};
+
 struct CLIENT_FINANCIAL_APPLICATION_RESULT
 {
 	CLIENT_FINANCIAL_CATEGORY eCategory = CLIENT_FINANCIAL_CATEGORY::SAVINGS;
@@ -137,6 +154,15 @@ struct CLIENT_STOCK_TRANSACTION_INFO
 	std::vector<CLIENT_STOCK_PRICE_INFO> RecentPrices;
 };
 
+struct CLIENT_STOCK_TRADE_APPLICATION_RESULT
+{
+	CLIENT_STOCK_TRADE_ACTION eAction = CLIENT_STOCK_TRADE_ACTION::BUY;
+	CLIENT_STOCK_TRADE_RESULT eResult = CLIENT_STOCK_TRADE_RESULT::DATABASE_ERROR;
+	unsigned int nStockId = 0;
+	unsigned int nQuantity = 0;
+	unsigned int nFinalMoney = 0;
+};
+
 class CClientNetworkManager
 {
 public:
@@ -151,6 +177,8 @@ public:
 	bool SendStockIssueRequest(const std::string& stockNameUtf8);
 	bool SendStockManagementInfoRequest();
 	bool SendStockTransactionListRequest();
+	bool SendStockTradeRequest(CLIENT_STOCK_TRADE_ACTION eAction,
+		unsigned int nStockId, unsigned int nQuantity);
 	void Disconnect();
 
 	bool ConsumeAuthResult(CLIENT_AUTH_REQUEST& request, CLIENT_AUTH_RESULT& result);
@@ -162,6 +190,7 @@ public:
 	bool ConsumeStockIssueStatus(CLIENT_STOCK_ISSUE_STATUS& status);
 	bool ConsumeStockManagementInfo(CLIENT_STOCK_MANAGEMENT_INFO& info);
 	bool ConsumeStockTransactionList(std::vector<CLIENT_STOCK_TRANSACTION_INFO>& infos);
+	bool ConsumeStockTradeResult(CLIENT_STOCK_TRADE_APPLICATION_RESULT& result);
 	bool IsBusy() const { return m_bBusy.load(); }
 	bool IsConnected() const;
 
@@ -193,6 +222,7 @@ private:
 	std::vector<CLIENT_STOCK_ISSUE_STATUS> m_StockIssueStatuses;
 	std::vector<CLIENT_STOCK_MANAGEMENT_INFO> m_StockManagementInfos;
 	std::vector<std::vector<CLIENT_STOCK_TRANSACTION_INFO>> m_StockTransactionLists;
+	std::vector<CLIENT_STOCK_TRADE_APPLICATION_RESULT> m_StockTradeResults;
 	std::atomic_bool m_bStopRequested = false;
 	std::atomic_bool m_bBusy = false;
 	std::atomic_bool m_bConnected = false;

@@ -1343,22 +1343,10 @@ void CShopUI::RenderStockTransactionPage(ID3D12GraphicsCommandList* commandList,
 			priceRect, (priceRect.w - priceRect.y) * 0.60f, 0xFF000000, true, true);
 	}
 
-	const XMFLOAT4 moneyRect = GetMoneyUiRectangle(width, height, 0, context);
-	const XMFLOAT4 confirm = GetPetConfirmationRectangle(width, height,
-		m_xmf2ShopBoardOffset.x, m_xmf2ShopBoardOffset.y);
-	const float buttonHeight = confirm.w - confirm.y;
-	const float buttonWidth = buttonHeight * (294.0f / 216.0f);
-	const float buttonGap = 8.0f;
-	const float moneyGap = 22.0f;
-	const float totalButtonWidth = buttonWidth * 2.0f + buttonGap;
-	const float desiredLeft = moneyRect.x - moneyGap - totalButtonWidth;
-	const float minimumLeft = rightPanel.x + (rightPanel.z - rightPanel.x) * 0.07f;
-	const float buyingLeft = max(minimumLeft, desiredLeft);
 	RenderUiImage(commandList, camera, m_StockBuyingResource,
-		XMFLOAT4(buyingLeft, confirm.y, buyingLeft + buttonWidth, confirm.w));
+		GetStockTransactionBuyingButtonRectangle(width, height, context));
 	RenderUiImage(commandList, camera, m_StockSellingResource,
-		XMFLOAT4(buyingLeft + buttonWidth + buttonGap, confirm.y,
-			buyingLeft + buttonWidth * 2.0f + buttonGap, confirm.w));
+		GetStockTransactionSellingButtonRectangle(width, height, context));
 }
 
 void CShopUI::RenderStockManagementPage(ID3D12GraphicsCommandList* commandList, CCamera* camera)
@@ -1907,19 +1895,10 @@ void CShopUI::RenderStockGraphPage(ID3D12GraphicsCommandList* commandList, CCame
 			static_cast<UINT>((totalPrice64 > UINT_MAX) ? UINT_MAX : totalPrice64))),
 			priceRect, (priceRect.w - priceRect.y) * 0.72f, 0xFF000000, true, true);
 
-		const XMFLOAT4 moneyRect = GetMoneyUiRectangle(width, height, 0, context);
-		const float buttonHeight = boardHeight * 0.105f;
-		const float buttonWidth = buttonHeight * (294.0f / 216.0f);
-		const float buttonGap = 8.0f;
-		const float moneyGap = 22.0f;
-		const float totalButtonWidth = buttonWidth * 2.0f + buttonGap;
-		const float buyingLeft = moneyRect.x - moneyGap - totalButtonWidth;
-		const float buttonTop = board.w - boardHeight * 0.13f;
 		RenderUiImage(commandList, camera, m_StockBuyingResource,
-			XMFLOAT4(buyingLeft, buttonTop, buyingLeft + buttonWidth, buttonTop + buttonHeight));
+			GetStockTargetBuyingButtonRectangle(width, height, context));
 		RenderUiImage(commandList, camera, m_StockSellingResource,
-			XMFLOAT4(buyingLeft + buttonWidth + buttonGap, buttonTop,
-				buyingLeft + buttonWidth * 2.0f + buttonGap, buttonTop + buttonHeight));
+			GetStockTargetSellingButtonRectangle(width, height, context));
 	}
 	else
 	{
@@ -2195,6 +2174,35 @@ XMFLOAT4 CShopUI::GetStockTransactionGraphButtonRectangle(float width, float hei
 		seeStockCenterY + seeStockHeight * 0.5f));
 }
 
+XMFLOAT4 CShopUI::GetStockTransactionBuyingButtonRectangle(float width, float height,
+	const SHOP_TEXT_RENDER_CONTEXT& context) const
+{
+	const XMFLOAT4 rightPanel = GetPetContentPanelRectangle(true, width, height,
+		m_xmf2ShopBoardOffset.x, m_xmf2ShopBoardOffset.y);
+	const XMFLOAT4 moneyRect = GetMoneyUiRectangle(width, height, 0, context);
+	const XMFLOAT4 confirm = GetPetConfirmationRectangle(width, height,
+		m_xmf2ShopBoardOffset.x, m_xmf2ShopBoardOffset.y);
+	const float buttonHeight = confirm.w - confirm.y;
+	const float buttonWidth = buttonHeight * (294.0f / 216.0f);
+	const float buttonGap = 8.0f;
+	const float moneyGap = 22.0f;
+	const float totalButtonWidth = buttonWidth * 2.0f + buttonGap;
+	const float desiredLeft = moneyRect.x - moneyGap - totalButtonWidth;
+	const float minimumLeft = rightPanel.x + (rightPanel.z - rightPanel.x) * 0.07f;
+	const float buyingLeft = max(minimumLeft, desiredLeft);
+	return(XMFLOAT4(buyingLeft, confirm.y, buyingLeft + buttonWidth, confirm.w));
+}
+
+XMFLOAT4 CShopUI::GetStockTransactionSellingButtonRectangle(float width, float height,
+	const SHOP_TEXT_RENDER_CONTEXT& context) const
+{
+	const XMFLOAT4 buying = GetStockTransactionBuyingButtonRectangle(width, height, context);
+	const float buttonWidth = buying.z - buying.x;
+	const float buttonGap = 8.0f;
+	return(XMFLOAT4(buying.z + buttonGap, buying.y,
+		buying.z + buttonGap + buttonWidth, buying.w));
+}
+
 XMFLOAT4 CShopUI::GetStockTargetReceiptRectangle(float width, float height) const
 {
 	const XMFLOAT4 board = GetShopBoardRectangle(width, height,
@@ -2228,6 +2236,34 @@ XMFLOAT4 CShopUI::GetStockTargetQuantityRectangle(float width, float height) con
 		receipt.y + receiptHeight * 0.07f,
 		receipt.x + receiptWidth * 0.49f,
 		receipt.y + receiptHeight * 0.47f));
+}
+
+XMFLOAT4 CShopUI::GetStockTargetBuyingButtonRectangle(float width, float height,
+	const SHOP_TEXT_RENDER_CONTEXT& context) const
+{
+	const XMFLOAT4 board = GetShopBoardRectangle(width, height,
+		m_xmf2ShopBoardOffset.x, m_xmf2ShopBoardOffset.y);
+	const float boardHeight = board.w - board.y;
+	const XMFLOAT4 moneyRect = GetMoneyUiRectangle(width, height, 0, context);
+	const float buttonHeight = boardHeight * 0.105f;
+	const float buttonWidth = buttonHeight * (294.0f / 216.0f);
+	const float buttonGap = 8.0f;
+	const float moneyGap = 22.0f;
+	const float totalButtonWidth = buttonWidth * 2.0f + buttonGap;
+	const float buyingLeft = moneyRect.x - moneyGap - totalButtonWidth;
+	const float buttonTop = board.w - boardHeight * 0.13f;
+	return(XMFLOAT4(buyingLeft, buttonTop,
+		buyingLeft + buttonWidth, buttonTop + buttonHeight));
+}
+
+XMFLOAT4 CShopUI::GetStockTargetSellingButtonRectangle(float width, float height,
+	const SHOP_TEXT_RENDER_CONTEXT& context) const
+{
+	const XMFLOAT4 buying = GetStockTargetBuyingButtonRectangle(width, height, context);
+	const float buttonWidth = buying.z - buying.x;
+	const float buttonGap = 8.0f;
+	return(XMFLOAT4(buying.z + buttonGap, buying.y,
+		buying.z + buttonGap + buttonWidth, buying.w));
 }
 
 void CShopUI::ResetSelectedPet(size_t activePetIndex, size_t petCount)
@@ -2281,6 +2317,18 @@ bool CShopUI::ConsumeStockTransactionListRequest()
 {
 	if (!m_bPendingStockTransactionListRequest) return(false);
 	m_bPendingStockTransactionListRequest = false;
+	return(true);
+}
+
+bool CShopUI::ConsumeStockTradeRequest(int& action, UINT& stockId, UINT& quantity)
+{
+	if (m_nPendingStockTradeAction < 0) return(false);
+	action = m_nPendingStockTradeAction;
+	stockId = m_nPendingStockTradeStockId;
+	quantity = m_nPendingStockTradeQuantity;
+	m_nPendingStockTradeAction = -1;
+	m_nPendingStockTradeStockId = 0;
+	m_nPendingStockTradeQuantity = 0;
 	return(true);
 }
 
@@ -2363,6 +2411,19 @@ void CShopUI::SetStockTransactionInfos(const std::vector<SHOP_STOCK_TRANSACTION_
 	}
 	if (m_nSelectedStockTransactionIndex >= m_StockTransactionInfos.size())
 		m_nSelectedStockTransactionIndex = 0;
+}
+
+void CShopUI::QueueStockTradeRequest(int action)
+{
+	if (action != 0 && action != 1) return;
+	if (m_StockTransactionInfos.empty()
+		|| m_nSelectedStockTransactionIndex >= m_StockTransactionInfos.size())
+		return;
+	m_nPendingStockTradeAction = action;
+	m_nPendingStockTradeStockId =
+		m_StockTransactionInfos[m_nSelectedStockTransactionIndex].nStockId;
+	m_nPendingStockTradeQuantity = m_nStockTransactionOrderQuantity;
+	m_bStockTransactionQuantityInputActive = false;
 }
 
 void CShopUI::SetFinancialProductActive(int category, int productIndex, UINT durationSeconds)
@@ -2668,6 +2729,20 @@ bool CShopUI::ProcessShopUIClick(float x, float y, float width, float height, UI
 		const XMFLOAT4 right = GetPetContentPanelRectangle(true, width, height,
 			m_xmf2ShopBoardOffset.x, m_xmf2ShopBoardOffset.y);
 		if (!m_StockTransactionInfos.empty()
+			&& IsPointInRectangle(x, y,
+				GetStockTransactionBuyingButtonRectangle(width, height, context)))
+		{
+			QueueStockTradeRequest(0);
+			return(true);
+		}
+		if (!m_StockTransactionInfos.empty()
+			&& IsPointInRectangle(x, y,
+				GetStockTransactionSellingButtonRectangle(width, height, context)))
+		{
+			QueueStockTradeRequest(1);
+			return(true);
+		}
+		if (!m_StockTransactionInfos.empty()
 			&& IsPointInRectangle(x, y, GetStockTransactionGraphButtonRectangle(width, height)))
 		{
 			m_eShopPage = SHOP_PAGE::STOCK_SEE_TARGET_GRAPH;
@@ -2697,6 +2772,20 @@ bool CShopUI::ProcessShopUIClick(float x, float y, float width, float height, UI
 	}
 	else if (m_eShopPage == SHOP_PAGE::STOCK_SEE_TARGET_GRAPH)
 	{
+		if (!m_StockTransactionInfos.empty()
+			&& IsPointInRectangle(x, y,
+				GetStockTargetBuyingButtonRectangle(width, height, context)))
+		{
+			QueueStockTradeRequest(0);
+			return(true);
+		}
+		if (!m_StockTransactionInfos.empty()
+			&& IsPointInRectangle(x, y,
+				GetStockTargetSellingButtonRectangle(width, height, context)))
+		{
+			QueueStockTradeRequest(1);
+			return(true);
+		}
 		if (!m_StockTransactionInfos.empty()
 			&& IsPointInRectangle(x, y, GetStockTargetQuantityRectangle(width, height)))
 		{

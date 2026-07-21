@@ -1037,6 +1037,18 @@ void CGameScene::OnProcessingMouseMessage(HWND hWnd, UINT nMessageID, WPARAM wPa
 	{
 		g_pFramework->GetNetworkManager().SendStockTransactionListRequest();
 	}
+	int nStockTradeAction = -1;
+	UINT nStockTradeStockId = 0;
+	UINT nStockTradeQuantity = 0;
+	if (m_ShopUI.ConsumeStockTradeRequest(
+		nStockTradeAction, nStockTradeStockId, nStockTradeQuantity))
+	{
+		const CLIENT_STOCK_TRADE_ACTION eAction =
+			(nStockTradeAction == 0)
+			? CLIENT_STOCK_TRADE_ACTION::BUY : CLIENT_STOCK_TRADE_ACTION::SELL;
+		g_pFramework->GetNetworkManager().SendStockTradeRequest(
+			eAction, nStockTradeStockId, nStockTradeQuantity);
+	}
 	if (bShopMessageProcessed)
 		return;
 
@@ -1225,6 +1237,25 @@ void CGameScene::Animate(float fElapsedTime)
 			shopStockTransactionInfos.push_back(shopStockInfo);
 		}
 		m_ShopUI.SetStockTransactionInfos(shopStockTransactionInfos);
+	}
+
+	CLIENT_STOCK_TRADE_APPLICATION_RESULT stockTradeResult;
+	while (g_pFramework->GetNetworkManager().ConsumeStockTradeResult(stockTradeResult))
+	{
+		char debugText[256] = {};
+		sprintf_s(debugText, "[StockTrade] action=%d result=%d stockId=%u quantity=%u money=%u\n",
+			static_cast<int>(stockTradeResult.eAction),
+			static_cast<int>(stockTradeResult.eResult),
+			stockTradeResult.nStockId, stockTradeResult.nQuantity,
+			stockTradeResult.nFinalMoney);
+		OutputDebugStringA(debugText);
+		if (stockTradeResult.eResult == CLIENT_STOCK_TRADE_RESULT::SUCCESS)
+		{
+			ApplyServerMoneyChange(stockTradeResult.nFinalMoney);
+			SaveLocalPlayerStatus();
+		}
+		g_pFramework->GetNetworkManager().SendStockTransactionListRequest();
+		g_pFramework->GetNetworkManager().SendStockManagementInfoRequest();
 	}
 
 	std::int64_t nServerMoneyDelta = 0;

@@ -33,6 +33,8 @@ enum class PacketType : std::uint16_t
 	StockManagementInfoResponse = 17,
 	StockTransactionListRequest = 18,
 	StockTransactionListResponse = 19,
+	StockTradeRequest = 20,
+	StockTradeResponse = 21,
 };
 
 std::uint16_t ReadUInt16(const char* data)
@@ -168,6 +170,21 @@ std::vector<char> MakeStockTransactionListRequestPacket()
 	return(packet);
 }
 
+std::vector<char> MakeStockTradeRequestPacket(CLIENT_STOCK_TRADE_ACTION eAction,
+	unsigned int nStockId, unsigned int nQuantity)
+{
+	std::vector<char> packet;
+	const std::uint16_t packetSize = static_cast<std::uint16_t>(
+		4 + 1 + sizeof(std::uint32_t) + sizeof(std::uint32_t));
+	packet.reserve(packetSize);
+	WriteUInt16(packet, packetSize);
+	WriteUInt16(packet, static_cast<std::uint16_t>(PacketType::StockTradeRequest));
+	packet.push_back(static_cast<char>(eAction));
+	WriteUInt32(packet, static_cast<std::uint32_t>(nStockId));
+	WriteUInt32(packet, static_cast<std::uint32_t>(nQuantity));
+	return(packet);
+}
+
 bool SendAll(SOCKET socket, const std::vector<char>& packet)
 {
 	int sentBytes = 0;
@@ -201,7 +218,8 @@ bool ProcessPersistentPacketBuffer(std::vector<char>& receiveBuffer,
 	std::vector<CLIENT_STOCK_ISSUE_APPLICATION_RESULT>& stockIssueResults,
 	std::vector<CLIENT_STOCK_ISSUE_STATUS>& stockIssueStatuses,
 	std::vector<CLIENT_STOCK_MANAGEMENT_INFO>& stockManagementInfos,
-	std::vector<std::vector<CLIENT_STOCK_TRANSACTION_INFO>>& stockTransactionLists)
+	std::vector<std::vector<CLIENT_STOCK_TRANSACTION_INFO>>& stockTransactionLists,
+	std::vector<CLIENT_STOCK_TRADE_APPLICATION_RESULT>& stockTradeResults)
 {
 	while (receiveBuffer.size() >= 4)
 	{
@@ -450,6 +468,27 @@ bool ProcessPersistentPacketBuffer(std::vector<char>& receiveBuffer,
 			if (cursor != end) return(false);
 			stockTransactionLists.push_back(infos);
 		}
+		else if (packetType == static_cast<std::uint16_t>(PacketType::StockTradeResponse))
+		{
+			constexpr std::uint16_t expectedSize =
+				1 + 1 + sizeof(std::uint32_t) + sizeof(std::uint32_t) + sizeof(std::uint64_t);
+			if (payloadSize != expectedSize) return(false);
+			const unsigned char action = static_cast<unsigned char>(payload[0]);
+			if (action > 1) return(false);
+			const std::uint64_t finalValue =
+				ReadUInt64(payload + 1 + 1 + sizeof(std::uint32_t) + sizeof(std::uint32_t));
+			if (finalValue > UINT_MAX) return(false);
+			CLIENT_STOCK_TRADE_APPLICATION_RESULT result;
+			result.eAction = (action == 0)
+				? CLIENT_STOCK_TRADE_ACTION::BUY : CLIENT_STOCK_TRADE_ACTION::SELL;
+			result.eResult = static_cast<CLIENT_STOCK_TRADE_RESULT>(
+				static_cast<unsigned char>(payload[1]));
+			result.nStockId = static_cast<unsigned int>(ReadUInt32(payload + 2));
+			result.nQuantity = static_cast<unsigned int>(
+				ReadUInt32(payload + 2 + sizeof(std::uint32_t)));
+			result.nFinalMoney = static_cast<unsigned int>(finalValue);
+			stockTradeResults.push_back(result);
+		}
 
 		receiveBuffer.erase(receiveBuffer.begin(), receiveBuffer.begin() + packetSize);
 	}
@@ -542,6 +581,18 @@ bool CClientNetworkManager::SendStockTransactionListRequest()
 	return(SendAll(m_Socket, packet));
 }
 
+bool CClientNetworkManager::SendStockTradeRequest(CLIENT_STOCK_TRADE_ACTION eAction,
+	unsigned int nStockId, unsigned int nQuantity)
+{
+	if (!m_bConnected.load()) return(false);
+	if (nStockId == 0) return(false);
+	const std::vector<char> packet = MakeStockTradeRequestPacket(eAction, nStockId, nQuantity);
+
+	std::lock_guard<std::mutex> lock(m_Mutex);
+	if (m_Socket == INVALID_SOCKET) return(false);
+	return(SendAll(m_Socket, packet));
+}
+
 bool CClientNetworkManager::StartAuthRequest(CLIENT_AUTH_REQUEST request,
 	const std::string& id, const std::string& password)
 {
@@ -560,6 +611,7 @@ bool CClientNetworkManager::StartAuthRequest(CLIENT_AUTH_REQUEST request,
 		m_StockIssueStatuses.clear();
 		m_StockManagementInfos.clear();
 		m_StockTransactionLists.clear();
+		m_StockTradeResults.clear();
 	}
 
 	m_bStopRequested.store(false);
@@ -664,6 +716,16 @@ bool CClientNetworkManager::ConsumeStockTransactionList(
 	if (m_StockTransactionLists.empty()) return(false);
 	infos = m_StockTransactionLists.front();
 	m_StockTransactionLists.erase(m_StockTransactionLists.begin());
+	return(true);
+}
+
+bool CClientNetworkManager::ConsumeStockTradeResult(
+	CLIENT_STOCK_TRADE_APPLICATION_RESULT& result)
+{
+	std::lock_guard<std::mutex> lock(m_Mutex);
+	if (m_StockTradeResults.empty()) return(false);
+	result = m_StockTradeResults.front();
+	m_StockTradeResults.erase(m_StockTradeResults.begin());
 	return(true);
 }
 
@@ -839,14 +901,16 @@ void CClientNetworkManager::AuthThread(CLIENT_AUTH_REQUEST request,
 			std::vector<CLIENT_STOCK_ISSUE_STATUS> stockIssueStatuses;
 			std::vector<CLIENT_STOCK_MANAGEMENT_INFO> stockManagementInfos;
 			std::vector<std::vector<CLIENT_STOCK_TRANSACTION_INFO>> stockTransactionLists;
+			std::vector<CLIENT_STOCK_TRADE_APPLICATION_RESULT> stockTradeResults;
 			if (!ProcessPersistentPacketBuffer(persistentReceiveBuffer,
 				moneyChanges, financialResults, financialCompletions, financialActiveStatuses,
 				stockIssueResults, stockIssueStatuses, stockManagementInfos,
-				stockTransactionLists)) break;
+				stockTransactionLists, stockTradeResults)) break;
 			if (!moneyChanges.empty() || !financialResults.empty() ||
 				!financialCompletions.empty() || !financialActiveStatuses.empty() ||
 				!stockIssueResults.empty() || !stockIssueStatuses.empty() ||
-				!stockManagementInfos.empty() || !stockTransactionLists.empty())
+				!stockManagementInfos.empty() || !stockTransactionLists.empty() ||
+				!stockTradeResults.empty())
 			{
 				std::lock_guard<std::mutex> lock(m_Mutex);
 				m_ServerMoneyChanges.insert(m_ServerMoneyChanges.end(),
@@ -865,6 +929,8 @@ void CClientNetworkManager::AuthThread(CLIENT_AUTH_REQUEST request,
 					stockManagementInfos.begin(), stockManagementInfos.end());
 				m_StockTransactionLists.insert(m_StockTransactionLists.end(),
 					stockTransactionLists.begin(), stockTransactionLists.end());
+				m_StockTradeResults.insert(m_StockTradeResults.end(),
+					stockTradeResults.begin(), stockTradeResults.end());
 			}
 		}
 	}

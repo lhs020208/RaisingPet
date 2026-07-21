@@ -57,6 +57,8 @@ enum class PacketType : std::uint16_t {
 	StockManagementInfoResponse = 17,
 	StockTransactionListRequest = 18,
 	StockTransactionListResponse = 19,
+	StockTradeRequest = 20,
+	StockTradeResponse = 21,
 	AdminLoginRequest = 100,
 	AdminLoginResponse = 101,
 };
@@ -96,6 +98,21 @@ enum class StockIssueResult : std::uint8_t {
 	DatabaseError = 5,
 };
 
+enum class StockTradeAction : std::uint8_t {
+	Buy = 0,
+	Sell = 1,
+};
+
+enum class StockTradeResult : std::uint8_t {
+	Success = 0,
+	InvalidRequest = 1,
+	NotAuthenticated = 2,
+	NotEnoughMoney = 3,
+	NotEnoughStock = 4,
+	NotEnoughSaleableStock = 5,
+	DatabaseError = 6,
+};
+
 struct FinancialApplicationResult {
 	FinancialResult result = FinancialResult::DatabaseError;
 	std::uint32_t productId = 0;
@@ -122,6 +139,14 @@ struct StockIssueApplicationResult {
 	StockIssueResult result = StockIssueResult::DatabaseError;
 	std::uint64_t finalMoney = 0;
 	std::uint32_t stockId = 0;
+};
+
+struct StockTradeApplicationResult {
+	StockTradeAction action = StockTradeAction::Buy;
+	StockTradeResult result = StockTradeResult::DatabaseError;
+	std::uint32_t stockId = 0;
+	std::uint32_t quantity = 0;
+	std::uint64_t finalMoney = 0;
 };
 
 struct FinancialClearResult {
@@ -1225,6 +1250,81 @@ public:
 		return true;
 	}
 
+	StockTradeApplicationResult ApplyStockTrade(const std::string& id,
+		StockTradeAction action, std::uint32_t stockId, std::uint32_t quantity) {
+		StockTradeApplicationResult application;
+		application.action = action;
+		application.stockId = stockId;
+		application.quantity = quantity;
+		if (!IsAccountTextValid(id, 32) || stockId == 0 || quantity == 0)
+			return WithStockTradeResult(application, StockTradeResult::InvalidRequest);
+
+		const std::string escapedId = Escape(id);
+		if (mysql_query(connection_, "START TRANSACTION") != 0)
+			return WithStockTradeDatabaseError(application, "ApplyStockTrade start transaction");
+
+		std::uint64_t currentMoney = 0;
+		bool isOnline = false;
+		if (!LoadPlayerMoneyForUpdate(escapedId, currentMoney, isOnline)) {
+			mysql_query(connection_, "ROLLBACK");
+			return WithStockTradeDatabaseError(application, "ApplyStockTrade select player");
+		}
+		application.finalMoney = currentMoney;
+		if (!isOnline) {
+			mysql_query(connection_, "ROLLBACK");
+			return WithStockTradeResult(application, StockTradeResult::NotAuthenticated);
+		}
+
+		std::uint64_t currentPrice = 0;
+		std::uint32_t unsoldQuantity = 0;
+		std::string issuerId;
+		if (!LoadStockForTradeUpdate(stockId, currentPrice, unsoldQuantity, issuerId)) {
+			mysql_query(connection_, "ROLLBACK");
+			return WithStockTradeResult(application, StockTradeResult::InvalidRequest);
+		}
+		if (issuerId == id) {
+			mysql_query(connection_, "ROLLBACK");
+			return WithStockTradeResult(application, StockTradeResult::InvalidRequest);
+		}
+
+		if (action == StockTradeAction::Buy) {
+			const std::uint64_t totalPrice =
+				currentPrice * static_cast<std::uint64_t>(quantity);
+			if (currentMoney < totalPrice) {
+				mysql_query(connection_, "ROLLBACK");
+				return WithStockTradeResult(application, StockTradeResult::NotEnoughMoney);
+			}
+			if (!BuyStockForPlayer(escapedId, stockId, quantity, currentPrice,
+				unsoldQuantity, totalPrice)) {
+				mysql_query(connection_, "ROLLBACK");
+				return WithStockTradeResult(application,
+					m_lastStockTradeFailureIsSaleable_ ? StockTradeResult::NotEnoughSaleableStock
+					: StockTradeResult::DatabaseError);
+			}
+			application.finalMoney = currentMoney - totalPrice;
+		}
+		else if (action == StockTradeAction::Sell) {
+			if (!SellStockForPlayer(escapedId, stockId, quantity, currentPrice)) {
+				mysql_query(connection_, "ROLLBACK");
+				return WithStockTradeResult(application,
+					m_lastStockTradeFailureIsStock_ ? StockTradeResult::NotEnoughStock
+					: StockTradeResult::DatabaseError);
+			}
+			application.finalMoney = currentMoney;
+		}
+		else {
+			mysql_query(connection_, "ROLLBACK");
+			return WithStockTradeResult(application, StockTradeResult::InvalidRequest);
+		}
+
+		if (mysql_query(connection_, "COMMIT") != 0) {
+			mysql_query(connection_, "ROLLBACK");
+			return WithStockTradeDatabaseError(application, "ApplyStockTrade commit");
+		}
+		application.result = StockTradeResult::Success;
+		return application;
+	}
+
 	bool ClearFinancialProducts(const std::string& id, bool clearSavings, bool clearLoan,
 		FinancialClearResult& clearResult, std::string& failureReason) {
 		clearResult = {};
@@ -1571,6 +1671,19 @@ private:
 		return result;
 	}
 
+	static StockTradeApplicationResult WithStockTradeResult(
+		StockTradeApplicationResult result, StockTradeResult stockResult) {
+		result.result = stockResult;
+		return result;
+	}
+
+	StockTradeApplicationResult WithStockTradeDatabaseError(StockTradeApplicationResult result,
+		const char* context) {
+		std::cerr << context << " failed: " << mysql_error(connection_) << '\n';
+		result.result = StockTradeResult::DatabaseError;
+		return result;
+	}
+
 	static bool IsAccountTextValid(const std::string& text, std::size_t maxLength) {
 		if (text.empty() || text.size() > maxLength) return false;
 		for (const char ch : text) {
@@ -1632,6 +1745,211 @@ private:
 		MYSQL_ROW row = mysql_fetch_row(result);
 		if (row && row[0]) value = std::stoull(row[0]);
 		mysql_free_result(result);
+		return true;
+	}
+
+	bool LoadStockForTradeUpdate(std::uint32_t stockId, std::uint64_t& currentPrice,
+		std::uint32_t& unsoldQuantity, std::string& issuerId) {
+		const std::string query =
+			"SELECT `CurrentPrice`, `UnsoldQuantity`, `IssuerID` FROM `Stock` "
+			"WHERE `StockID` = " + std::to_string(stockId) + " LIMIT 1 FOR UPDATE";
+		if (mysql_query(connection_, query.c_str()) != 0) {
+			std::cerr << "LoadStockForTradeUpdate failed: " << mysql_error(connection_) << '\n';
+			return false;
+		}
+		MYSQL_RES* result = mysql_store_result(connection_);
+		if (!result) return false;
+		MYSQL_ROW row = mysql_fetch_row(result);
+		if (!row) {
+			mysql_free_result(result);
+			return false;
+		}
+		currentPrice = row[0] ? std::stoull(row[0]) : 0;
+		unsoldQuantity = row[1] ? static_cast<std::uint32_t>(std::stoul(row[1])) : 0;
+		issuerId = row[2] ? row[2] : "";
+		mysql_free_result(result);
+		return currentPrice > 0;
+	}
+
+	bool InsertStockTrade(std::uint32_t stockId, const std::string& escapedBuyerId,
+		const std::string* escapedSellerId, std::uint32_t quantity, std::uint64_t price) {
+		std::string query =
+			"INSERT INTO `StockTrade` (`StockID`, `BuyerID`, `SellerID`, `Quantity`, `Price`, `TradeTime`) "
+			"VALUES (" + std::to_string(stockId) + ", '" + escapedBuyerId + "', ";
+		query += escapedSellerId ? ("'" + *escapedSellerId + "'") : "NULL";
+		query += ", " + std::to_string(quantity) + ", " + std::to_string(price) + ", NOW())";
+		if (mysql_query(connection_, query.c_str()) != 0) {
+			std::cerr << "InsertStockTrade failed: " << mysql_error(connection_) << '\n';
+			return false;
+		}
+		return true;
+	}
+
+	bool BuyStockForPlayer(const std::string& escapedBuyerId, std::uint32_t stockId,
+		std::uint32_t quantity, std::uint64_t currentPrice,
+		std::uint32_t unsoldQuantity, std::uint64_t totalPrice) {
+		m_lastStockTradeFailureIsSaleable_ = false;
+		m_lastStockTradeFailureIsStock_ = false;
+
+		struct SaleRow {
+			std::uint64_t saleId = 0;
+			std::string sellerId;
+			std::uint32_t quantity = 0;
+		};
+		std::vector<SaleRow> saleRows;
+		std::uint64_t saleQuantity = 0;
+		const std::string saleQuery =
+			"SELECT `SaleID`, `SellerID`, `Quantity` FROM `StockSale` "
+			"WHERE `StockID` = " + std::to_string(stockId) +
+			" AND `SellerID` <> '" + escapedBuyerId + "' "
+			"ORDER BY `RegisteredTime` ASC, `SaleID` ASC FOR UPDATE";
+		if (mysql_query(connection_, saleQuery.c_str()) != 0) {
+			std::cerr << "BuyStockForPlayer select sale failed: " << mysql_error(connection_) << '\n';
+			return false;
+		}
+		MYSQL_RES* saleResult = mysql_store_result(connection_);
+		if (!saleResult) return false;
+		MYSQL_ROW row = nullptr;
+		while ((row = mysql_fetch_row(saleResult)) != nullptr) {
+			SaleRow saleRow;
+			saleRow.saleId = row[0] ? std::stoull(row[0]) : 0;
+			saleRow.sellerId = row[1] ? row[1] : "";
+			saleRow.quantity = row[2] ? static_cast<std::uint32_t>(std::stoul(row[2])) : 0;
+			if (saleRow.saleId != 0 && !saleRow.sellerId.empty() && saleRow.quantity != 0) {
+				saleRows.push_back(saleRow);
+				saleQuantity += saleRow.quantity;
+			}
+		}
+		mysql_free_result(saleResult);
+
+		if (static_cast<std::uint64_t>(unsoldQuantity) + saleQuantity < quantity) {
+			m_lastStockTradeFailureIsSaleable_ = true;
+			return false;
+		}
+
+		const std::string updateBuyerMoney =
+			"UPDATE `Player` SET `Money` = `Money` - " + std::to_string(totalPrice) +
+			" WHERE `PlayerID` = '" + escapedBuyerId + "'";
+		if (mysql_query(connection_, updateBuyerMoney.c_str()) != 0) {
+			std::cerr << "BuyStockForPlayer update buyer money failed: " << mysql_error(connection_) << '\n';
+			return false;
+		}
+
+		const std::string upsertHolding =
+			"INSERT INTO `StockHolding` (`PlayerID`, `StockID`, `Quantity`) VALUES ('" +
+			escapedBuyerId + "', " + std::to_string(stockId) + ", " + std::to_string(quantity) +
+			") ON DUPLICATE KEY UPDATE `Quantity` = `Quantity` + VALUES(`Quantity`)";
+		if (mysql_query(connection_, upsertHolding.c_str()) != 0) {
+			std::cerr << "BuyStockForPlayer upsert buyer holding failed: " << mysql_error(connection_) << '\n';
+			return false;
+		}
+
+		std::uint32_t remainingQuantity = quantity;
+		const std::uint32_t fromUnsold = min(remainingQuantity, unsoldQuantity);
+		if (fromUnsold > 0) {
+			const std::string updateUnsold =
+				"UPDATE `Stock` SET `UnsoldQuantity` = `UnsoldQuantity` - " +
+				std::to_string(fromUnsold) + " WHERE `StockID` = " + std::to_string(stockId);
+			if (mysql_query(connection_, updateUnsold.c_str()) != 0) {
+				std::cerr << "BuyStockForPlayer update unsold failed: " << mysql_error(connection_) << '\n';
+				return false;
+			}
+			if (!InsertStockTrade(stockId, escapedBuyerId, nullptr, fromUnsold, currentPrice))
+				return false;
+			remainingQuantity -= fromUnsold;
+		}
+
+		for (const SaleRow& saleRow : saleRows) {
+			if (remainingQuantity == 0) break;
+			const std::uint32_t boughtQuantity = min(remainingQuantity, saleRow.quantity);
+			const std::string escapedSellerId = Escape(saleRow.sellerId);
+			if (boughtQuantity == saleRow.quantity) {
+				const std::string deleteSale =
+					"DELETE FROM `StockSale` WHERE `SaleID` = " +
+					std::to_string(saleRow.saleId);
+				if (mysql_query(connection_, deleteSale.c_str()) != 0) {
+					std::cerr << "BuyStockForPlayer delete sale failed: " << mysql_error(connection_) << '\n';
+					return false;
+				}
+			}
+			else {
+				const std::string updateSale =
+					"UPDATE `StockSale` SET `Quantity` = `Quantity` - " +
+					std::to_string(boughtQuantity) + " WHERE `SaleID` = " +
+					std::to_string(saleRow.saleId);
+				if (mysql_query(connection_, updateSale.c_str()) != 0) {
+					std::cerr << "BuyStockForPlayer update sale failed: " << mysql_error(connection_) << '\n';
+					return false;
+				}
+			}
+			const std::uint64_t sellerMoney = currentPrice * static_cast<std::uint64_t>(boughtQuantity);
+			const std::string updateSellerMoney =
+				"UPDATE `Player` SET `Money` = `Money` + " + std::to_string(sellerMoney) +
+				" WHERE `PlayerID` = '" + escapedSellerId + "'";
+			if (mysql_query(connection_, updateSellerMoney.c_str()) != 0) {
+				std::cerr << "BuyStockForPlayer update seller money failed: " << mysql_error(connection_) << '\n';
+				return false;
+			}
+			if (!InsertStockTrade(stockId, escapedBuyerId, &escapedSellerId,
+				boughtQuantity, currentPrice))
+				return false;
+			remainingQuantity -= boughtQuantity;
+		}
+		return remainingQuantity == 0;
+	}
+
+	bool SellStockForPlayer(const std::string& escapedSellerId, std::uint32_t stockId,
+		std::uint32_t quantity, std::uint64_t currentPrice) {
+		(void)currentPrice;
+		m_lastStockTradeFailureIsSaleable_ = false;
+		m_lastStockTradeFailureIsStock_ = false;
+		const std::string holdingQuery =
+			"SELECT `Quantity` FROM `StockHolding` WHERE `PlayerID` = '" +
+			escapedSellerId + "' AND `StockID` = " + std::to_string(stockId) +
+			" LIMIT 1 FOR UPDATE";
+		if (mysql_query(connection_, holdingQuery.c_str()) != 0) {
+			std::cerr << "SellStockForPlayer select holding failed: " << mysql_error(connection_) << '\n';
+			return false;
+		}
+		MYSQL_RES* result = mysql_store_result(connection_);
+		if (!result) return false;
+		MYSQL_ROW row = mysql_fetch_row(result);
+		const std::uint32_t holdingQuantity =
+			(row && row[0]) ? static_cast<std::uint32_t>(std::stoul(row[0])) : 0;
+		mysql_free_result(result);
+		if (holdingQuantity < quantity) {
+			m_lastStockTradeFailureIsStock_ = true;
+			return false;
+		}
+
+		if (holdingQuantity == quantity) {
+			const std::string deleteHolding =
+				"DELETE FROM `StockHolding` WHERE `PlayerID` = '" + escapedSellerId +
+				"' AND `StockID` = " + std::to_string(stockId);
+			if (mysql_query(connection_, deleteHolding.c_str()) != 0) {
+				std::cerr << "SellStockForPlayer delete holding failed: " << mysql_error(connection_) << '\n';
+				return false;
+			}
+		}
+		else {
+			const std::string updateHolding =
+				"UPDATE `StockHolding` SET `Quantity` = `Quantity` - " +
+				std::to_string(quantity) + " WHERE `PlayerID` = '" + escapedSellerId +
+				"' AND `StockID` = " + std::to_string(stockId);
+			if (mysql_query(connection_, updateHolding.c_str()) != 0) {
+				std::cerr << "SellStockForPlayer update holding failed: " << mysql_error(connection_) << '\n';
+				return false;
+			}
+		}
+
+		const std::string insertSale =
+			"INSERT INTO `StockSale` (`SellerID`, `StockID`, `Quantity`, `RegisteredTime`) "
+			"VALUES ('" + escapedSellerId + "', " + std::to_string(stockId) + ", " +
+			std::to_string(quantity) + ", NOW())";
+		if (mysql_query(connection_, insertSale.c_str()) != 0) {
+			std::cerr << "SellStockForPlayer insert sale failed: " << mysql_error(connection_) << '\n';
+			return false;
+		}
 		return true;
 	}
 
@@ -2088,6 +2406,8 @@ private:
 		return escaped;
 	}
 
+	bool m_lastStockTradeFailureIsSaleable_ = false;
+	bool m_lastStockTradeFailureIsStock_ = false;
 	MYSQL* connection_ = nullptr;
 };
 
@@ -2173,6 +2493,18 @@ bool ParseStockIssueRequest(const std::vector<char>& payload, std::string& stock
 	return true;
 }
 
+bool ParseStockTradeRequest(const std::vector<char>& payload,
+	StockTradeAction& action, std::uint32_t& stockId, std::uint32_t& quantity) {
+	constexpr std::size_t expectedSize = 1 + sizeof(std::uint32_t) + sizeof(std::uint32_t);
+	if (payload.size() != expectedSize) return false;
+	const std::uint8_t actionValue = static_cast<std::uint8_t>(payload[0]);
+	if (actionValue > 1) return false;
+	action = (actionValue == 0) ? StockTradeAction::Buy : StockTradeAction::Sell;
+	stockId = ReadUInt32(payload.data() + 1);
+	quantity = ReadUInt32(payload.data() + 1 + sizeof(std::uint32_t));
+	return true;
+}
+
 std::vector<char> MakePacketWithResult(PacketType type, AuthResult result) {
 	std::vector<char> packet;
 	packet.reserve(sizeof(PacketHeader) + 1);
@@ -2251,6 +2583,22 @@ std::vector<char> MakeStockIssueResponse(const StockIssueApplicationResult& resu
 	packet.push_back(static_cast<char>(result.result));
 	WriteUInt64(packet, result.finalMoney);
 	WriteUInt32(packet, result.stockId);
+	return packet;
+}
+
+std::vector<char> MakeStockTradeResponse(const StockTradeApplicationResult& result) {
+	std::vector<char> packet;
+	const std::uint16_t packetSize = static_cast<std::uint16_t>(
+		sizeof(PacketHeader) + 1 + 1 + sizeof(std::uint32_t) +
+		sizeof(std::uint32_t) + sizeof(std::uint64_t));
+	packet.reserve(packetSize);
+	WriteUInt16(packet, packetSize);
+	WriteUInt16(packet, static_cast<std::uint16_t>(PacketType::StockTradeResponse));
+	packet.push_back(static_cast<char>(result.action));
+	packet.push_back(static_cast<char>(result.result));
+	WriteUInt32(packet, result.stockId);
+	WriteUInt32(packet, result.quantity);
+	WriteUInt64(packet, result.finalMoney);
 	return packet;
 }
 
@@ -3146,6 +3494,42 @@ void ProcessPacket(Database& database, ClientSession& session,
 		QueuePacket(session, MakeStockTransactionListResponse(infos));
 		return;
 	}
+	if (packetType == PacketType::StockTradeRequest) {
+		StockTradeAction action = StockTradeAction::Buy;
+		std::uint32_t stockId = 0;
+		std::uint32_t quantity = 0;
+		if (!session.authenticated) {
+			StockTradeApplicationResult result;
+			result.result = StockTradeResult::NotAuthenticated;
+			QueuePacket(session, MakeStockTradeResponse(result));
+			return;
+		}
+		if (!ParseStockTradeRequest(payload, action, stockId, quantity)) {
+			StockTradeApplicationResult result;
+			result.result = StockTradeResult::InvalidRequest;
+			QueuePacket(session, MakeStockTradeResponse(result));
+			return;
+		}
+		const StockTradeApplicationResult result =
+			database.ApplyStockTrade(session.playerId, action, stockId, quantity);
+		QueuePacket(session, MakeStockTradeResponse(result));
+		if (result.result == StockTradeResult::Success) {
+			std::vector<StockTransactionInfo> infos;
+			std::string reason;
+			if (database.LoadStockTransactionInfos(session.playerId, infos, reason))
+				QueuePacket(session, MakeStockTransactionListResponse(infos));
+			else
+				std::cerr << "[StockTransactionList] " << session.playerId
+				<< " failed after trade: " << reason << '\n';
+		}
+		std::cout << "[StockTrade] " << session.playerId
+			<< " action=" << static_cast<int>(action)
+			<< " stockId=" << stockId
+			<< " quantity=" << quantity
+			<< " result=" << static_cast<int>(result.result)
+			<< " money=" << result.finalMoney << '\n';
+		return;
+	}
 
 	AuthRequest request;
 	if (!ParseAuthRequest(payload, request)) {
@@ -3217,7 +3601,8 @@ bool ProcessReceiveBuffer(Database& database, ClientSession& session) {
 			packetType != PacketType::LoanApplyRequest &&
 			packetType != PacketType::StockIssueRequest &&
 			packetType != PacketType::StockManagementInfoRequest &&
-			packetType != PacketType::StockTransactionListRequest)
+			packetType != PacketType::StockTransactionListRequest &&
+			packetType != PacketType::StockTradeRequest)
 			return false;
 		ProcessPacket(database, session, packetType, payload);
 	}
