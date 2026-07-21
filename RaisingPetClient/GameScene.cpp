@@ -1018,10 +1018,13 @@ void CGameScene::OnProcessingMouseMessage(HWND hWnd, UINT nMessageID, WPARAM wPa
 	if (m_ShopUI.ConsumeFinancialProductRequest(nFinancialCategory, nFinancialProductIndex))
 	{
 		const unsigned int nProductId = static_cast<unsigned int>(nFinancialProductIndex + 1);
+		bool bRequestSent = false;
 		if (nFinancialCategory == 0)
-			g_pFramework->GetNetworkManager().SendSavingsJoinRequest(nProductId);
+			bRequestSent = g_pFramework->GetNetworkManager().SendSavingsJoinRequest(nProductId);
 		else if (nFinancialCategory == 1)
-			g_pFramework->GetNetworkManager().SendLoanApplyRequest(nProductId);
+			bRequestSent = g_pFramework->GetNetworkManager().SendLoanApplyRequest(nProductId);
+		if (!bRequestSent)
+			m_ShopUI.NotifyFinancialApplicationFailed(nFinancialCategory);
 	}
 	std::wstring wstrStockName;
 	if (m_ShopUI.ConsumeStockIssueRequest(wstrStockName))
@@ -1116,7 +1119,12 @@ void CGameScene::Animate(float fElapsedTime)
 	CLIENT_FINANCIAL_APPLICATION_RESULT financialResult;
 	while (g_pFramework->GetNetworkManager().ConsumeFinancialApplicationResult(financialResult))
 	{
-		if (financialResult.eResult != CLIENT_FINANCIAL_RESULT::SUCCESS) continue;
+		if (financialResult.eResult != CLIENT_FINANCIAL_RESULT::SUCCESS)
+		{
+			m_ShopUI.NotifyFinancialApplicationFailed(
+				(financialResult.eCategory == CLIENT_FINANCIAL_CATEGORY::SAVINGS) ? 0 : 1);
+			continue;
+		}
 		ApplyServerMoneyChange(financialResult.nFinalMoney);
 		const int nCategory = (financialResult.eCategory == CLIENT_FINANCIAL_CATEGORY::SAVINGS) ? 0 : 1;
 		if (financialResult.nProductId >= 1 && financialResult.nProductId <= 10)

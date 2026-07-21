@@ -534,6 +534,9 @@ void CShopUI::BuildObjects(ID3D12Device* device, ID3D12GraphicsCommandList* comm
 	loadImage(L"Assets/Image/Shop/Financial/TimerFrame.dds", m_FinancialTimerFrameResource);
 	loadImage(L"Assets/Image/Shop/Financial/MoneyFrame.dds", m_FinancialMoneyFrameResource);
 	loadImage(L"Assets/Image/Shop/Financial/RightPoint.dds", m_FinancialRightPointResource);
+	loadImage(L"Assets/Image/Shop/Financial/ApplicationButton.dds", m_FinancialApplicationButtonResource);
+	loadImage(L"Assets/Image/Shop/Financial/ISFailLog.dds", m_FinancialFailLogResources[0]);
+	loadImage(L"Assets/Image/Shop/Financial/LoansFailLog.dds", m_FinancialFailLogResources[1]);
 }
 
 void CShopUI::ReleaseObjects()
@@ -555,7 +558,9 @@ void CShopUI::ReleaseObjects()
 		&m_FinancialCategoryButtonResources[0], &m_FinancialCategoryButtonResources[1],
 		&m_FinancialLeftButtonResource, &m_FinancialRightButtonResource,
 		&m_FinancialTimerFrameResource, &m_FinancialMoneyFrameResource,
-		&m_FinancialRightPointResource, &m_InternetOnIconResource,
+		&m_FinancialRightPointResource, &m_FinancialApplicationButtonResource,
+		&m_FinancialFailLogResources[0], &m_FinancialFailLogResources[1],
+		&m_InternetOnIconResource,
 		&m_InternetOffIconResource, &m_NetworkErrorLogResource,
 		&m_StockSlotResources[0], &m_StockSlotResources[1],
 		&m_StockLimitResources[0], &m_StockLimitResources[1],
@@ -616,6 +621,15 @@ void CShopUI::Animate(float elapsedTime)
 	m_NetworkErrorLogs.erase(std::remove_if(m_NetworkErrorLogs.begin(), m_NetworkErrorLogs.end(),
 		[](const SHOP_NETWORK_ERROR_LOG& log) { return(log.fElapsedTime >= 1.0f); }),
 		m_NetworkErrorLogs.end());
+	for (int i = 0; i < 2; ++i)
+	{
+		for (SHOP_NETWORK_ERROR_LOG& log : m_FinancialFailLogs[i])
+			log.fElapsedTime += elapsedTime;
+		m_FinancialFailLogs[i].erase(std::remove_if(m_FinancialFailLogs[i].begin(),
+			m_FinancialFailLogs[i].end(),
+			[](const SHOP_NETWORK_ERROR_LOG& log) { return(log.fElapsedTime >= 1.0f); }),
+			m_FinancialFailLogs[i].end());
+	}
 	for (SHOP_NETWORK_ERROR_LOG& log : m_StockIssueErrorLogs)
 		log.fElapsedTime += elapsedTime;
 	m_StockIssueErrorLogs.erase(std::remove_if(m_StockIssueErrorLogs.begin(), m_StockIssueErrorLogs.end(),
@@ -644,7 +658,9 @@ void CShopUI::ReleaseUploadBuffers()
 		&m_FinancialCategoryButtonResources[0], &m_FinancialCategoryButtonResources[1],
 		&m_FinancialLeftButtonResource, &m_FinancialRightButtonResource,
 		&m_FinancialTimerFrameResource, &m_FinancialMoneyFrameResource,
-		&m_FinancialRightPointResource, &m_InternetOnIconResource,
+		&m_FinancialRightPointResource, &m_FinancialApplicationButtonResource,
+		&m_FinancialFailLogResources[0], &m_FinancialFailLogResources[1],
+		&m_InternetOnIconResource,
 		&m_InternetOffIconResource, &m_NetworkErrorLogResource,
 		&m_StockSlotResources[0], &m_StockSlotResources[1],
 		&m_StockLimitResources[0], &m_StockLimitResources[1],
@@ -979,6 +995,17 @@ XMFLOAT4 CShopUI::GetFinancialRightButtonRectangle(float width, float height) co
 	return(XMFLOAT4(right - buttonWidth, leftButton.y, right, leftButton.w));
 }
 
+XMFLOAT4 CShopUI::GetFinancialApplicationButtonRectangle(float width, float height,
+	UINT money, const SHOP_TEXT_RENDER_CONTEXT& context) const
+{
+	const XMFLOAT4 moneyRect = GetMoneyUiRectangle(width, height, money, context);
+	const float buttonHeight = moneyRect.w - moneyRect.y;
+	const float buttonWidth = buttonHeight * (447.0f / 217.0f);
+	const float gap = 8.0f;
+	return(XMFLOAT4(moneyRect.x - gap - buttonWidth, moneyRect.y,
+		moneyRect.x - gap, moneyRect.w));
+}
+
 XMFLOAT4 CShopUI::GetStockSlotRectangle(int index, float width, float height) const
 {
 	const XMFLOAT4 board = GetShopBoardRectangle(width, height,
@@ -1095,7 +1122,7 @@ void CShopUI::RenderEnhancementPage(ID3D12GraphicsCommandList* commandList, CCam
 }
 
 void CShopUI::RenderFinancialPage(ID3D12GraphicsCommandList* commandList, CCamera* camera,
-	const SHOP_TEXT_RENDER_CONTEXT& context)
+	UINT money, const SHOP_TEXT_RENDER_CONTEXT& context)
 {
 	const float width = camera->m_d3dViewport.Width;
 	const float height = camera->m_d3dViewport.Height;
@@ -1165,6 +1192,11 @@ void CShopUI::RenderFinancialPage(ID3D12GraphicsCommandList* commandList, CCamer
 		0.115f, firstIncome ? 0x0000B050 : 0x00FF0000);
 	renderCenteredText(FormatFinancialMoney(product.nSecondMoney, secondIncome), moneyFrames[1],
 		0.115f, secondIncome ? 0x0000B050 : 0x00FF0000);
+
+	RenderUiImage(commandList, camera, m_FinancialApplicationButtonResource,
+		GetFinancialApplicationButtonRectangle(width, height, money, context),
+		IsFinancialApplicationButtonDisabled(money) ? 0x00BFBFBF : 0x00FFFFFF);
+	RenderFinancialFailLogs(commandList, camera, money, context);
 }
 
 void CShopUI::RenderStockMenuPage(ID3D12GraphicsCommandList* commandList, CCamera* camera)
@@ -2040,7 +2072,7 @@ void CShopUI::Render(ID3D12GraphicsCommandList* commandList, CCamera* camera, UI
 		}
 		else if (m_eShopPage == SHOP_PAGE::BANK)
 		{
-			RenderFinancialPage(commandList, camera, context);
+			RenderFinancialPage(commandList, camera, money, context);
 		}
 		else if (m_eShopPage == SHOP_PAGE::STOCK_MENU)
 		{
@@ -2512,6 +2544,12 @@ void CShopUI::SetFinancialProgressCount(int category, int progressCount)
 		&& m_nFinancialProgressCounts[1] >= 5);
 }
 
+void CShopUI::NotifyFinancialApplicationFailed(int category)
+{
+	if (category < 0 || category >= 2) return;
+	m_bPendingFinancialFailLog[category] = true;
+}
+
 bool CShopUI::IsPointOver(float x, float y, float width, float height) const
 {
 	if (IsPointInRectangle(x, y, GetShopIconRectangle(width, height))) return(true);
@@ -2537,7 +2575,8 @@ void CShopUI::DeactivateShop(float width, float height, size_t activePetIndex)
 	ResetSelectedPet(activePetIndex, m_nCachedPetCount);
 }
 
-bool CShopUI::ProcessFinancialClick(float x, float y, float width, float height)
+bool CShopUI::ProcessFinancialClick(float x, float y, float width, float height,
+	UINT money, const SHOP_TEXT_RENDER_CONTEXT& context)
 {
 	for (int category = 0; category < 2; ++category)
 	{
@@ -2560,10 +2599,9 @@ bool CShopUI::ProcessFinancialClick(float x, float y, float width, float height)
 		if (index < 9 && index < m_nFinancialMaximumProductIndices[m_nFinancialCategory]) ++index;
 		return(true);
 	}
-	if (IsPointInRectangle(x, y, GetFinancialProductNameRectangle(width, height,
-		m_xmf2ShopBoardOffset.x, m_xmf2ShopBoardOffset.y)))
+	if (IsPointInRectangle(x, y, GetFinancialApplicationButtonRectangle(width, height, money, context)))
 	{
-		if (!m_bFinancialProductActive[m_nFinancialCategory])
+		if (!IsFinancialApplicationButtonDisabled(money))
 		{
 			m_nPendingFinancialCategory = m_nFinancialCategory;
 			m_nPendingFinancialProductIndex = m_nFinancialProductIndices[m_nFinancialCategory];
@@ -2573,6 +2611,63 @@ bool CShopUI::ProcessFinancialClick(float x, float y, float width, float height)
 
 	return(IsPointInRectangle(x, y, GetFinancialBankFrameRectangle(width, height,
 		m_xmf2ShopBoardOffset.x, m_xmf2ShopBoardOffset.y)));
+}
+
+bool CShopUI::IsFinancialApplicationButtonDisabled(UINT money) const
+{
+	if (m_nFinancialCategory != 0 && m_nFinancialCategory != 1) return(true);
+	const int productIndex = m_nFinancialProductIndices[m_nFinancialCategory];
+	if (productIndex < 0 || productIndex > 9) return(true);
+	if (productIndex > m_nFinancialMaximumProductIndices[m_nFinancialCategory]) return(true);
+	if (m_bFinancialProductActive[m_nFinancialCategory]) return(true);
+
+	if (m_nFinancialCategory == 0)
+	{
+		const FINANCIAL_PRODUCT_DATA& product = gInstallmentSavingsProducts[productIndex];
+		if (product.nFirstMoney > money) return(true);
+	}
+	return(false);
+}
+
+void CShopUI::RenderFinancialFailLogs(ID3D12GraphicsCommandList* commandList, CCamera* camera,
+	UINT money, const SHOP_TEXT_RENDER_CONTEXT& context)
+{
+	if (!camera) return;
+	const float width = camera->m_d3dViewport.Width;
+	const float height = camera->m_d3dViewport.Height;
+	for (int category = 0; category < 2; ++category)
+	{
+		if (m_bPendingFinancialFailLog[category])
+		{
+			const XMFLOAT4 button = GetFinancialApplicationButtonRectangle(width, height, money, context);
+			const XMFLOAT4 board = GetShopBoardRectangle(width, height,
+				m_xmf2ShopBoardOffset.x, m_xmf2ShopBoardOffset.y);
+			const float boardWidth = board.z - board.x;
+			const float logWidth = boardWidth * 0.54f;
+			const float logHeight = logWidth * (133.0f / 1756.0f);
+			const float centerX = (button.x + button.z) * 0.5f;
+			const float top = button.y - logHeight - 12.0f;
+
+			SHOP_NETWORK_ERROR_LOG log;
+			log.rectangle = XMFLOAT4(centerX - logWidth * 0.5f, top,
+				centerX + logWidth * 0.5f, top + logHeight);
+			log.fElapsedTime = 0.0f;
+			m_FinancialFailLogs[category].clear();
+			m_FinancialFailLogs[category].push_back(log);
+			m_bPendingFinancialFailLog[category] = false;
+		}
+
+		for (const SHOP_NETWORK_ERROR_LOG& log : m_FinancialFailLogs[category])
+		{
+			const float alphaRatio = max(0.0f, 1.0f - log.fElapsedTime);
+			const UINT alpha = max(1u, static_cast<UINT>(alphaRatio * 255.0f + 0.5f));
+			const float moveY = -20.0f * log.fElapsedTime;
+			RenderUiImage(commandList, camera, m_FinancialFailLogResources[category],
+				XMFLOAT4(log.rectangle.x, log.rectangle.y + moveY,
+					log.rectangle.z, log.rectangle.w + moveY),
+				(alpha << 24) | 0x00FFFFFF);
+		}
+	}
 }
 
 void CShopUI::SpawnNetworkErrorLog(float width, float height, int slotIndex)
@@ -2806,7 +2901,7 @@ bool CShopUI::ProcessShopUIClick(float x, float y, float width, float height, UI
 	}
 	else if (m_eShopPage == SHOP_PAGE::BANK)
 	{
-		if (ProcessFinancialClick(x, y, width, height)) return(true);
+		if (ProcessFinancialClick(x, y, width, height, money, context)) return(true);
 	}
 	else if (m_eShopPage == SHOP_PAGE::STOCK_MENU)
 	{

@@ -102,6 +102,7 @@ public:
 	void ClearFinancialProductActive(int nCategory, int nProductIndex);
 	void SetFinancialMaximumProductIndex(int nCategory, int nProductIndex);
 	void SetFinancialProgressCount(int nCategory, int nProgressCount);
+	void NotifyFinancialApplicationFailed(int nCategory);
 	void SetStockIssued(bool bIssued, const std::wstring& stockName = std::wstring());
 	void NotifyStockIssueFailed();
 	void NotifyStockTradeFailed(int nAction);
@@ -161,6 +162,8 @@ private:
 	UI_IMAGE_RESOURCE m_FinancialTimerFrameResource;
 	UI_IMAGE_RESOURCE m_FinancialMoneyFrameResource;
 	UI_IMAGE_RESOURCE m_FinancialRightPointResource;
+	UI_IMAGE_RESOURCE m_FinancialApplicationButtonResource;
+	UI_IMAGE_RESOURCE m_FinancialFailLogResources[2];
 	UI_IMAGE_RESOURCE m_InternetOnIconResource;
 	UI_IMAGE_RESOURCE m_InternetOffIconResource;
 	UI_IMAGE_RESOURCE m_NetworkErrorLogResource;
@@ -221,6 +224,7 @@ private:
 	int m_nActiveFinancialProductIndex[2] = { -1, -1 };
 	UINT m_nActiveFinancialDurationSeconds[2] = { 0, 0 };
 	float m_fActiveFinancialElapsedSeconds[2] = { 0.0f, 0.0f };
+	bool m_bPendingFinancialFailLog[2] = { false, false };
 	bool m_bStockCreationAvailable = false;
 	std::wstring m_wstrStockName;
 	size_t m_nStockNameCursorIndex = 0;
@@ -246,6 +250,7 @@ private:
 	UINT m_nPendingStockTradeQuantity = 0;
 	bool m_bPendingStockTradeFailLog[2] = { false, false };
 	std::vector<SHOP_NETWORK_ERROR_LOG> m_NetworkErrorLogs;
+	std::vector<SHOP_NETWORK_ERROR_LOG> m_FinancialFailLogs[2];
 	std::vector<SHOP_NETWORK_ERROR_LOG> m_StockIssueErrorLogs;
 	std::vector<SHOP_NETWORK_ERROR_LOG> m_StockTradeFailLogs[2];
 
@@ -280,8 +285,12 @@ private:
 	XMFLOAT4 GetEnhanceButtonRectangle(int nType, float fViewportWidth, float fViewportHeight) const;
 	XMFLOAT4 GetEnhancePriceRectangle(int nType, float fViewportWidth, float fViewportHeight) const;
 	void RenderFinancialPage(ID3D12GraphicsCommandList* pd3dCommandList, CCamera* pCamera,
-		const SHOP_TEXT_RENDER_CONTEXT& textContext);
-	bool ProcessFinancialClick(float x, float y, float fViewportWidth, float fViewportHeight);
+		UINT nMoney, const SHOP_TEXT_RENDER_CONTEXT& textContext);
+	bool ProcessFinancialClick(float x, float y, float fViewportWidth, float fViewportHeight,
+		UINT nMoney, const SHOP_TEXT_RENDER_CONTEXT& textContext);
+	bool IsFinancialApplicationButtonDisabled(UINT nMoney) const;
+	void RenderFinancialFailLogs(ID3D12GraphicsCommandList* pd3dCommandList, CCamera* pCamera,
+		UINT nMoney, const SHOP_TEXT_RENDER_CONTEXT& textContext);
 	void RenderStockMenuPage(ID3D12GraphicsCommandList* pd3dCommandList, CCamera* pCamera);
 	void RenderStockTransactionPage(ID3D12GraphicsCommandList* pd3dCommandList, CCamera* pCamera,
 		UINT nMoney, const SHOP_TEXT_RENDER_CONTEXT& textContext);
@@ -307,6 +316,8 @@ private:
 	XMFLOAT4 GetFinancialCategoryButtonRectangle(int nCategory, float fViewportWidth, float fViewportHeight) const;
 	XMFLOAT4 GetFinancialLeftButtonRectangle(float fViewportWidth, float fViewportHeight) const;
 	XMFLOAT4 GetFinancialRightButtonRectangle(float fViewportWidth, float fViewportHeight) const;
+	XMFLOAT4 GetFinancialApplicationButtonRectangle(float fViewportWidth, float fViewportHeight,
+		UINT nMoney, const SHOP_TEXT_RENDER_CONTEXT& textContext) const;
 	XMFLOAT4 GetStockSlotRectangle(int nIndex, float fViewportWidth, float fViewportHeight) const;
 	XMFLOAT4 GetStockTransactionListRowRectangle(size_t nRow, float fViewportWidth, float fViewportHeight) const;
 	XMFLOAT4 GetStockTransactionScrollThumbRectangle(float fViewportWidth, float fViewportHeight) const;
