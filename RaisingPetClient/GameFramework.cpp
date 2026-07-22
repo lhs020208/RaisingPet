@@ -11,6 +11,55 @@ const char* ERROR_SOUND_KEY = "ErrorSound";
 const char* ERROR_SOUND_FILE_PATH = "Assets\\Sound\\ErrorSound.mp3";
 const char* CLICK_SOUND_KEY = "ClickSound";
 const char* CLICK_SOUND_FILE_PATH = "Assets\\Sound\\ClickSound.mp3";
+
+UINT CalculateFrameworkLocalStatusChecksum(const std::vector<unsigned char>& data)
+{
+	UINT checksum = 2166136261u;
+	for (unsigned char byte : data)
+	{
+		checksum ^= byte;
+		checksum *= 16777619u;
+	}
+	return(checksum);
+}
+
+void TransformFrameworkLocalStatusPayload(std::vector<unsigned char>& data)
+{
+	const unsigned char key[] = { 0x52, 0x50, 0x4C, 0x6F, 0x63, 0x61, 0x6C, 0x53, 0x74, 0x61, 0x74 };
+	unsigned char rolling = 0xC3;
+	for (size_t i = 0; i < data.size(); ++i)
+	{
+		const unsigned char mixedKey = static_cast<unsigned char>(key[i % _countof(key)]
+			+ static_cast<unsigned char>(i * 29) + rolling);
+		data[i] ^= mixedKey;
+		rolling = static_cast<unsigned char>(rolling * 37u + 23u);
+	}
+}
+
+bool ReadFrameworkUInt(const std::vector<unsigned char>& data, size_t& offset, UINT& value)
+{
+	if (offset + 4 > data.size()) return(false);
+	value = static_cast<UINT>(data[offset])
+		| (static_cast<UINT>(data[offset + 1]) << 8)
+		| (static_cast<UINT>(data[offset + 2]) << 16)
+		| (static_cast<UINT>(data[offset + 3]) << 24);
+	offset += 4;
+	return(true);
+}
+
+bool SkipFrameworkBytes(const std::vector<unsigned char>& data, size_t& offset, UINT length)
+{
+	if (offset + length > data.size()) return(false);
+	offset += length;
+	return(true);
+}
+
+float ClampFrameworkVolume(float value)
+{
+	if (value < 0.0f) return(0.0f);
+	if (value > 1.0f) return(1.0f);
+	return(value);
+}
 }
 
 CGameFramework::CGameFramework()
@@ -67,6 +116,7 @@ bool CGameFramework::OnCreate(HINSTANCE hInstance, HWND hMainWnd)
 	m_SoundManager.Initialize();
 	m_SoundManager.LoadSound(ERROR_SOUND_KEY, ERROR_SOUND_FILE_PATH);
 	m_SoundManager.LoadSound(CLICK_SOUND_KEY, CLICK_SOUND_FILE_PATH);
+	LoadDefaultSoundSettingsFromLocalPlayerStatus();
 
 	BuildObjects();
 
@@ -473,14 +523,97 @@ void CGameFramework::ProcessInput()
 	// Keep the native cursor visible and allow it to move while interacting with pets and UI.
 }
 
+void CGameFramework::SetDefaultSoundVolumeScales(float fClickVolume, float fErrorVolume, float fCoinVolume)
+{
+	m_fDefaultClickVolumeScale = ClampFrameworkVolume(fClickVolume);
+	m_fDefaultErrorVolumeScale = ClampFrameworkVolume(fErrorVolume);
+	m_fDefaultCoinVolumeScale = ClampFrameworkVolume(fCoinVolume);
+}
+
 void CGameFramework::PlayErrorSound(float fVolume)
 {
+	if (fVolume < 0.0f) fVolume = m_fDefaultErrorVolumeScale;
 	m_SoundManager.PlaySound(ERROR_SOUND_KEY, fVolume);
 }
 
 void CGameFramework::PlayClickSound(float fVolume)
 {
+	if (fVolume < 0.0f) fVolume = m_fDefaultClickVolumeScale;
 	m_SoundManager.PlaySound(CLICK_SOUND_KEY, fVolume);
+}
+
+void CGameFramework::LoadDefaultSoundSettingsFromLocalPlayerStatus()
+{
+	std::ifstream input("Network\\LocalPlayerStatus.rplps", std::ios::binary);
+	if (!input) return;
+
+	char magic[8] = {};
+	UINT version = 0;
+	UINT payloadSize = 0;
+	UINT checksum = 0;
+	input.read(magic, sizeof(magic));
+	input.read(reinterpret_cast<char*>(&version), sizeof(version));
+	input.read(reinterpret_cast<char*>(&payloadSize), sizeof(payloadSize));
+	input.read(reinterpret_cast<char*>(&checksum), sizeof(checksum));
+	if (!input || memcmp(magic, "RPLPST01", sizeof(magic)) != 0 || version != 1 ||
+		(payloadSize != 12 && payloadSize != 20 && payloadSize != 28 && payloadSize < 36))
+		return;
+
+	std::vector<unsigned char> payload(payloadSize);
+	input.read(reinterpret_cast<char*>(payload.data()), payload.size());
+	if (!input || input.peek() != EOF) return;
+
+	TransformFrameworkLocalStatusPayload(payload);
+	if (CalculateFrameworkLocalStatusChecksum(payload) != checksum) return;
+
+	size_t offset = 0;
+	UINT value = 0;
+	if (!ReadFrameworkUInt(payload, offset, value)) return;
+	if (!ReadFrameworkUInt(payload, offset, value)) return;
+	if (!ReadFrameworkUInt(payload, offset, value)) return;
+	if (payloadSize >= 20)
+	{
+		if (!ReadFrameworkUInt(payload, offset, value)) return;
+		if (!ReadFrameworkUInt(payload, offset, value)) return;
+	}
+	if (payloadSize >= 28)
+	{
+		if (!ReadFrameworkUInt(payload, offset, value)) return;
+		if (!ReadFrameworkUInt(payload, offset, value)) return;
+	}
+	if (payloadSize < 36) return;
+
+	UINT stockNameLength = 0;
+	if (!ReadFrameworkUInt(payload, offset, value)) return;
+	if (!ReadFrameworkUInt(payload, offset, stockNameLength)) return;
+	if (stockNameLength > 150 || !SkipFrameworkBytes(payload, offset, stockNameLength)) return;
+	if (offset >= payload.size()) return;
+
+	UINT activePetNameLength = 0;
+	if (!ReadFrameworkUInt(payload, offset, activePetNameLength)) return;
+	if (activePetNameLength > 150 || !SkipFrameworkBytes(payload, offset, activePetNameLength)) return;
+	if (offset >= payload.size()) return;
+	if (offset + (sizeof(UINT) * 8) > payload.size()) return;
+
+	UINT settingPetMovement = 1;
+	UINT settingPetDrag = 1;
+	UINT settingCoinEffect = 1;
+	UINT settingPetSize = 50;
+	UINT settingVolumes[4] = { 100, 100, 100, 100 };
+	if (!ReadFrameworkUInt(payload, offset, settingPetMovement)) return;
+	if (!ReadFrameworkUInt(payload, offset, settingPetDrag)) return;
+	if (!ReadFrameworkUInt(payload, offset, settingCoinEffect)) return;
+	if (!ReadFrameworkUInt(payload, offset, settingPetSize)) return;
+	for (int i = 0; i < 4; ++i)
+	{
+		if (!ReadFrameworkUInt(payload, offset, settingVolumes[i])) return;
+		if (settingVolumes[i] > 100) settingVolumes[i] = 100;
+	}
+
+	const float masterVolume = static_cast<float>(settingVolumes[0]) / 100.0f;
+	SetDefaultSoundVolumeScales(masterVolume * static_cast<float>(settingVolumes[1]) / 100.0f,
+		masterVolume * static_cast<float>(settingVolumes[2]) / 100.0f,
+		masterVolume * static_cast<float>(settingVolumes[3]) / 100.0f);
 }
 
 void CGameFramework::AnimateObjects()

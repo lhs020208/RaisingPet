@@ -881,6 +881,7 @@ void CGameScene::LoadOrCreateLocalPlayerStatus()
 {
 	if (!LoadLocalPlayerStatus())
 		SaveLocalPlayerStatus();
+	ApplyShopSettingsToFramework();
 }
 
 bool CGameScene::LoadLocalPlayerStatus()
@@ -923,6 +924,9 @@ bool CGameScene::LoadLocalPlayerStatus()
 	std::string stockNameUtf8;
 	UINT activePetNameLength = 0;
 	std::string activePetName;
+	bool settingPetOptions[3] = { true, true, true };
+	UINT settingPetSizePercent = 50;
+	UINT settingVolumePercents[4] = { 100, 100, 100, 100 };
 	if (!ReadUInt(payload, offset, money) || !ReadUInt(payload, offset, pay)
 		|| !ReadUInt(payload, offset, maxPossession))
 		return(false);
@@ -945,6 +949,22 @@ bool CGameScene::LoadLocalPlayerStatus()
 			if (activePetNameLength > 150 || !ReadBytes(payload, offset, activePetNameLength, activePetName))
 				return(false);
 		}
+		if (offset < payload.size())
+		{
+			UINT settingValues[8] = {};
+			if (offset + (sizeof(UINT) * 8) > payload.size()) return(false);
+			for (int i = 0; i < 8; ++i)
+			{
+				if (!ReadUInt(payload, offset, settingValues[i]))
+					return(false);
+			}
+			settingPetOptions[0] = settingValues[0] != 0;
+			settingPetOptions[1] = settingValues[1] != 0;
+			settingPetOptions[2] = settingValues[2] != 0;
+			settingPetSizePercent = settingValues[3];
+			for (int i = 0; i < 4; ++i)
+				settingVolumePercents[i] = settingValues[4 + i];
+		}
 		if (offset != payload.size()) return(false);
 	}
 	if (pay == 0) pay = 1;
@@ -961,6 +981,8 @@ bool CGameScene::LoadLocalPlayerStatus()
 	m_nFinancialProgressCounts[1] = loanProgressCount;
 	const std::wstring stockName = Utf8ToWideString(stockNameUtf8);
 	m_ShopUI.SetStockIssued(stockIssued != 0, stockName);
+	m_ShopUI.SetSettingValues(settingPetOptions, settingPetSizePercent, settingVolumePercents);
+	ApplyShopSettingsToFramework();
 
 	UINT activePetIndex = 0;
 	if (!activePetName.empty())
@@ -1003,7 +1025,11 @@ void CGameScene::SaveLocalPlayerStatus() const
 	std::vector<unsigned char> payload;
 	const std::string stockNameUtf8 = WideStringToUtf8(m_ShopUI.GetStockName());
 	const std::string activePetName = activePet->GetName();
-	payload.reserve(40 + stockNameUtf8.size() + activePetName.size());
+	bool settingPetOptions[3] = { true, true, true };
+	UINT settingPetSizePercent = 50;
+	UINT settingVolumePercents[4] = { 100, 100, 100, 100 };
+	m_ShopUI.GetSettingValues(settingPetOptions, settingPetSizePercent, settingVolumePercents);
+	payload.reserve(72 + stockNameUtf8.size() + activePetName.size());
 	AppendUInt(payload, m_nMoney);
 	AppendUInt(payload, activePet->GetPay());
 	AppendUInt(payload, activePet->GetMaxPossession());
@@ -1016,6 +1042,11 @@ void CGameScene::SaveLocalPlayerStatus() const
 	payload.insert(payload.end(), stockNameUtf8.begin(), stockNameUtf8.end());
 	AppendUInt(payload, static_cast<UINT>(activePetName.size()));
 	payload.insert(payload.end(), activePetName.begin(), activePetName.end());
+	for (int i = 0; i < 3; ++i)
+		AppendUInt(payload, settingPetOptions[i] ? 1 : 0);
+	AppendUInt(payload, settingPetSizePercent);
+	for (int i = 0; i < 4; ++i)
+		AppendUInt(payload, settingVolumePercents[i]);
 	const UINT checksum = CalculateLocalPlayerStatusChecksum(payload);
 	TransformLocalPlayerStatusPayload(payload);
 
@@ -1036,6 +1067,15 @@ void CGameScene::SaveLocalPlayerStatus() const
 	if (!output) return;
 
 	MoveFileExA(tempPath, path, MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH);
+}
+
+void CGameScene::ApplyShopSettingsToFramework() const
+{
+	if (!g_pFramework) return;
+	g_pFramework->SetDefaultSoundVolumeScales(
+		m_ShopUI.GetClickVolumeScale(),
+		m_ShopUI.GetErrorVolumeScale(),
+		m_ShopUI.GetCoinVolumeScale());
 }
 
 void CGameScene::AnimateCoinEffects(float fElapsedTime)
@@ -1195,6 +1235,11 @@ void CGameScene::OnProcessingMouseMessage(HWND hWnd, UINT nMessageID, WPARAM wPa
 	const bool bShopMessageProcessed = m_ShopUI.OnProcessingMouseMessage(hWnd, nMessageID, wParam, lParam,
 		m_nMoney, m_vPetResources.size(), m_nActivePetIndex, GetShopTextRenderContext(),
 		g_pFramework->GetNetworkManager().IsConnected());
+	if (m_ShopUI.ConsumeSettingChangeRequest())
+	{
+		ApplyShopSettingsToFramework();
+		SaveLocalPlayerStatus();
+	}
 	size_t nConfirmedPetIndex = 0;
 	if (m_ShopUI.ConsumePetConfirmationRequest(nConfirmedPetIndex))
 		ChangeActivePet(nConfirmedPetIndex);

@@ -75,6 +75,7 @@ private:
 	void LoadOrCreateLocalPlayerStatus();
 	bool LoadLocalPlayerStatus();
 	void SaveLocalPlayerStatus() const;
+	void ApplyShopSettingsToFramework() const;
 	void SyncMoneyToServer() const;
 	void ApplyServerMoneyChange(UINT nMoney);
 	void ApplyFinancialProgressToShopUI();

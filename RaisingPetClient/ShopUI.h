@@ -120,6 +120,9 @@ public:
 	float GetClickVolumeScale() const;
 	float GetErrorVolumeScale() const;
 	float GetCoinVolumeScale() const;
+	void GetSettingValues(bool bPetOptions[3], UINT& nPetSizePercent, UINT nVolumePercents[4]) const;
+	void SetSettingValues(const bool bPetOptions[3], UINT nPetSizePercent, const UINT nVolumePercents[4]);
+	bool ConsumeSettingChangeRequest();
 
 private:
 	struct UI_IMAGE_RESOURCE
@@ -229,6 +232,7 @@ private:
 	bool m_bSettingPetOptions[3] = { true, true, true };
 	UINT m_nSettingPetSizePercent = 50;
 	UINT m_nSettingVolumePercents[4] = { 100, 100, 100, 100 };
+	bool m_bPendingSettingChangeRequest = false;
 	int m_nDraggingSettingSlider = -1;
 	size_t m_nPetScrollOffset = 0;
 	size_t m_nCachedPetCount = 0;

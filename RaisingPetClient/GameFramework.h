@@ -57,8 +57,10 @@ public:
 	void RequestSceneChange(SCENE_TYPE sceneType) { m_SceneManager.RequestSceneChange(sceneType); }
 	CClientNetworkManager& GetNetworkManager() { return m_NetworkManager; }
 	CFmodSoundManager& GetSoundManager() { return m_SoundManager; }
-	void PlayErrorSound(float fVolume = 1.0f);
-	void PlayClickSound(float fVolume = 1.0f);
+	void SetDefaultSoundVolumeScales(float fClickVolume, float fErrorVolume, float fCoinVolume);
+	float GetDefaultCoinVolumeScale() const { return m_fDefaultCoinVolumeScale; }
+	void PlayErrorSound(float fVolume = -1.0f);
+	void PlayClickSound(float fVolume = -1.0f);
 	void QueueDirectWriteText(const std::wstring& text, const XMFLOAT4& rectangle, float fontSize,
 		UINT color = 0xFF000000, bool horizontalCenter = false, bool verticalCenter = true);
 	void QueueDirectWriteSolidRectangle(const XMFLOAT4& rectangle, UINT color = 0xFF000000);
@@ -66,6 +68,7 @@ public:
 		float maxHeight, float& measuredWidth, float& measuredHeight);
 private:
 	void ProcessSceneChange();
+	void LoadDefaultSoundSettingsFromLocalPlayerStatus();
 	HINSTANCE					m_hInstance;
 	HWND						m_hWnd; 
 
@@ -110,6 +113,9 @@ private:
 	CClientNetworkManager		m_NetworkManager;
 	CFmodSoundManager			m_SoundManager;
 	CCamera						*m_pCamera = NULL;
+	float						m_fDefaultClickVolumeScale = 1.0f;
+	float						m_fDefaultErrorVolumeScale = 1.0f;
+	float						m_fDefaultCoinVolumeScale = 1.0f;
 
 	POINT						m_ptOldCursorPos;
 	bool						m_bMouseTransparent = false;

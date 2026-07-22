@@ -205,6 +205,35 @@ float CShopUI::GetCoinVolumeScale() const
 	return(GetMasterVolumeScale() * static_cast<float>(m_nSettingVolumePercents[3]) / 100.0f);
 }
 
+void CShopUI::GetSettingValues(bool petOptions[3], UINT& petSizePercent, UINT volumePercents[4]) const
+{
+	for (int i = 0; i < 3; ++i)
+		petOptions[i] = m_bSettingPetOptions[i];
+	petSizePercent = m_nSettingPetSizePercent;
+	for (int i = 0; i < 4; ++i)
+		volumePercents[i] = m_nSettingVolumePercents[i];
+}
+
+void CShopUI::SetSettingValues(const bool petOptions[3], UINT petSizePercent,
+	const UINT volumePercents[4])
+{
+	for (int i = 0; i < 3; ++i)
+		m_bSettingPetOptions[i] = petOptions[i];
+	if (petSizePercent < 10) petSizePercent = 10;
+	if (petSizePercent > 100) petSizePercent = 100;
+	m_nSettingPetSizePercent = petSizePercent;
+	for (int i = 0; i < 4; ++i)
+		m_nSettingVolumePercents[i] = (volumePercents[i] > 100) ? 100 : volumePercents[i];
+	m_bPendingSettingChangeRequest = false;
+}
+
+bool CShopUI::ConsumeSettingChangeRequest()
+{
+	if (!m_bPendingSettingChangeRequest) return(false);
+	m_bPendingSettingChangeRequest = false;
+	return(true);
+}
+
 void CShopUI::PlayUiClickSound() const
 {
 	g_pFramework->PlayClickSound(GetClickVolumeScale());

@@ -10,11 +10,20 @@ void CShopUI::UpdateSettingSliderFromCursor(int sliderIndex, float x, float widt
 	const float clampedRatio = min(max(ratio, 0.0f), 1.0f);
 	if (sliderIndex == 0)
 	{
-		m_nSettingPetSizePercent = 10u + static_cast<UINT>(clampedRatio * 90.0f + 0.5f);
+		const UINT newPetSizePercent = 10u + static_cast<UINT>(clampedRatio * 90.0f + 0.5f);
+		if (m_nSettingPetSizePercent != newPetSizePercent)
+		{
+			m_nSettingPetSizePercent = newPetSizePercent;
+			m_bPendingSettingChangeRequest = true;
+		}
 		return;
 	}
-	m_nSettingVolumePercents[sliderIndex - 1] =
-		static_cast<UINT>(clampedRatio * 100.0f + 0.5f);
+	const UINT newVolumePercent = static_cast<UINT>(clampedRatio * 100.0f + 0.5f);
+	if (m_nSettingVolumePercents[sliderIndex - 1] != newVolumePercent)
+	{
+		m_nSettingVolumePercents[sliderIndex - 1] = newVolumePercent;
+		m_bPendingSettingChangeRequest = true;
+	}
 }
 
 bool CShopUI::ProcessSettingBoardClick(HWND hWnd, float x, float y, float width, float height)
@@ -43,6 +52,7 @@ bool CShopUI::ProcessSettingBoardClick(HWND hWnd, float x, float y, float width,
 			m_xmf2SettingBoardOffset.x, m_xmf2SettingBoardOffset.y))) continue;
 		PlayUiClickSound();
 		m_bSettingPetOptions[i] = !m_bSettingPetOptions[i];
+		m_bPendingSettingChangeRequest = true;
 		return(true);
 	}
 	for (int i = 0; i < 5; ++i)
