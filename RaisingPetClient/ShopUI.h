@@ -270,6 +270,9 @@ private:
 		UINT nMoney, size_t nPetCount, size_t nActivePetIndex,
 		const SHOP_TEXT_RENDER_CONTEXT& textContext, bool bNetworkConnected);
 	void SpawnNetworkErrorLog(float fViewportWidth, float fViewportHeight, int nSlotIndex);
+	void SpawnNetworkErrorLogAtNetworkIcon(float fViewportWidth, float fViewportHeight);
+	bool IsNetworkRequiredPage() const;
+	void ReturnToShopMenuAfterNetworkDisconnected(float fViewportWidth, float fViewportHeight);
 	void RenderStockIssueErrorLogs(ID3D12GraphicsCommandList* pd3dCommandList, CCamera* pCamera);
 	void DeactivateShop(float fViewportWidth, float fViewportHeight, size_t nActivePetIndex);
 	void ResetSelectedPet(size_t nActivePetIndex, size_t nPetCount);

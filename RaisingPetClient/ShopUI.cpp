@@ -293,6 +293,23 @@ XMFLOAT4 GetShopNetworkErrorLogRectangle(int slotIndex, float width, float heigh
 	return(XMFLOAT4(centerX - logWidth * 0.5f, top, centerX + logWidth * 0.5f, top + logHeight));
 }
 
+XMFLOAT4 GetShopNetworkIconErrorLogRectangle(float width, float height,
+	float offsetX = 0.0f, float offsetY = 0.0f)
+{
+	const XMFLOAT4 board = GetShopBoardRectangle(width, height, offsetX, offsetY);
+	const XMFLOAT4 icon = GetShopNetworkIconRectangle(width, height, offsetX, offsetY);
+	const float boardWidth = board.z - board.x;
+	const float logWidth = boardWidth * 0.58f;
+	const float logHeight = logWidth * (133.0f / 1756.0f);
+	const float margin = 20.0f;
+	float left = ((icon.x + icon.z) * 0.5f) - (logWidth * 0.5f);
+	float top = icon.y - logHeight - 12.0f;
+	if (left < board.x + margin) left = board.x + margin;
+	if (left + logWidth > board.z - margin) left = board.z - margin - logWidth;
+	if (top < board.y + margin) top = icon.w + 12.0f;
+	return(XMFLOAT4(left, top, left + logWidth, top + logHeight));
+}
+
 XMFLOAT4 GetPetContentPanelRectangle(bool rightPanel, float width, float height,
 	float offsetX = 0.0f, float offsetY = 0.0f)
 {
@@ -2002,6 +2019,8 @@ void CShopUI::Render(ID3D12GraphicsCommandList* commandList, CCamera* camera, UI
 	RebuildPetScrollMetricsIfNeeded(pets.size());
 	const float width = camera->m_d3dViewport.Width;
 	const float height = camera->m_d3dViewport.Height;
+	if (m_bShopActive && !networkConnected && IsNetworkRequiredPage())
+		ReturnToShopMenuAfterNetworkDisconnected(width, height);
 	if (m_bShopActive)
 	{
 		RenderUiImage(commandList, camera, m_ShopBoardResource,
@@ -2680,6 +2699,54 @@ void CShopUI::SpawnNetworkErrorLog(float width, float height, int slotIndex)
 	m_NetworkErrorLogs.push_back(log);
 }
 
+void CShopUI::SpawnNetworkErrorLogAtNetworkIcon(float width, float height)
+{
+	SHOP_NETWORK_ERROR_LOG log;
+	log.rectangle = GetShopNetworkIconErrorLogRectangle(width, height,
+		m_xmf2ShopBoardOffset.x, m_xmf2ShopBoardOffset.y);
+	log.fElapsedTime = 0.0f;
+	m_NetworkErrorLogs.clear();
+	m_NetworkErrorLogs.push_back(log);
+}
+
+bool CShopUI::IsNetworkRequiredPage() const
+{
+	switch (m_eShopPage)
+	{
+	case SHOP_PAGE::BANK:
+	case SHOP_PAGE::STOCK_MENU:
+	case SHOP_PAGE::STOCK_TRANSACTION:
+	case SHOP_PAGE::STOCK_CANT_PUBLISH:
+	case SHOP_PAGE::STOCK_MANAGEMENT:
+	case SHOP_PAGE::STOCK_SEE_MYGRAPH:
+	case SHOP_PAGE::STOCK_SEE_TARGET_GRAPH:
+		return(true);
+	default:
+		return(false);
+	}
+}
+
+void CShopUI::ReturnToShopMenuAfterNetworkDisconnected(float width, float height)
+{
+	m_eShopPage = SHOP_PAGE::SHOP_MENU;
+	m_nSelectedShopSlot = -1;
+	m_nPressedEnhanceButton = -1;
+	m_bShopBoardDragging = false;
+	m_bPetScrollDragging = false;
+	m_bStockNameInputActive = false;
+	m_bStockIssueButtonPressed = false;
+	m_bStockTransactionQuantityInputActive = false;
+	m_nPendingFinancialCategory = -1;
+	m_nPendingFinancialProductIndex = -1;
+	m_bPendingStockIssueRequest = false;
+	m_bPendingStockManagementInfoRequest = false;
+	m_bPendingStockTransactionListRequest = false;
+	m_nPendingStockTradeAction = -1;
+	m_nPendingStockTradeStockId = 0;
+	m_nPendingStockTradeQuantity = 0;
+	SpawnNetworkErrorLogAtNetworkIcon(width, height);
+}
+
 void CShopUI::RenderStockIssueErrorLogs(ID3D12GraphicsCommandList* commandList, CCamera* camera)
 {
 	if (m_bPendingStockIssueErrorLog && camera)
@@ -3133,6 +3200,12 @@ bool CShopUI::OnProcessingMouseMessage(HWND hWnd, UINT message, WPARAM wParam, L
 	if (message == WM_MOUSEWHEEL) ScreenToClient(hWnd, &cursor);
 	const float x = static_cast<float>(cursor.x);
 	const float y = static_cast<float>(cursor.y);
+	if (m_bShopActive && !networkConnected && IsNetworkRequiredPage())
+	{
+		ReturnToShopMenuAfterNetworkDisconnected(width, height);
+		ReleaseCapture();
+		return(true);
+	}
 	switch (message)
 	{
 	case WM_MOUSEWHEEL:
