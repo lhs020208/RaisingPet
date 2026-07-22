@@ -95,7 +95,11 @@ bool ReadBytes(const std::vector<unsigned char>& data, size_t& offset, UINT leng
 constexpr float PET_DRAG_MIN_X = -45.0f;
 constexpr float PET_DRAG_MAX_X = 45.0f;
 constexpr float PET_DRAG_MIN_Y = -28.0f;
-constexpr float PET_DRAG_MAX_Y = 15.0f;
+constexpr float PET_DRAG_FALLBACK_MAX_Y = 15.0f;
+constexpr float PET_DRAG_SEARCH_MAX_Y = 80.0f;
+constexpr float PET_POSSESSION_TEXT_WORLD_GAP = 1.0f;
+constexpr float PET_POSSESSION_TEXT_TOP_OFFSET = 36.0f;
+constexpr float PET_POSSESSION_TEXT_SCREEN_MARGIN = 4.0f;
 constexpr float PET_CLICK_DRAG_THRESHOLD_SQ = 16.0f;
 const char* COIN_SOUND_KEY = "CoinSound";
 const char* COIN_SOUND_FILE_PATH = "Assets\\Sound\\CoinSound.mp3";
@@ -107,14 +111,6 @@ float ClampFloat(float value, float minimumValue, float maximumValue)
 	if (value < minimumValue) return(minimumValue);
 	if (value > maximumValue) return(maximumValue);
 	return(value);
-}
-
-XMFLOAT3 ClampPetDragPosition(const XMFLOAT3& position)
-{
-	return(XMFLOAT3(
-		ClampFloat(position.x, PET_DRAG_MIN_X, PET_DRAG_MAX_X),
-		ClampFloat(position.y, PET_DRAG_MIN_Y, PET_DRAG_MAX_Y),
-		position.z));
 }
 
 UINT CalculateCoinCount(UINT nPossession, UINT nMaxPossession)
@@ -633,6 +629,7 @@ void CGameScene::Render(ID3D12GraphicsCommandList* pd3dCommandList, CCamera* pCa
 		if (petResource.pPet && petResource.pd3dSrvDescriptorHeap)
 		{
 			petResource.pPet->SetScale(m_ShopUI.GetPetSizeScale());
+			ClampPetToCurrentDragBounds(petResource.pPet, pCamera);
 			ID3D12DescriptorHeap* ppd3dPetDescriptorHeaps[] = { petResource.pd3dSrvDescriptorHeap };
 			pd3dCommandList->SetDescriptorHeaps(1, ppd3dPetDescriptorHeaps);
 			pd3dCommandList->SetGraphicsRootDescriptorTable(3,
@@ -684,7 +681,7 @@ void CGameScene::RenderPetPossessionText(ID3D12GraphicsCommandList* pd3dCommandL
 
 	const BoundingOrientedBox& boundingBox = pPet->m_xmOOBB;
 	XMFLOAT3 xmf3Anchor(boundingBox.Center.x,
-		boundingBox.Center.y + boundingBox.Extents.y + 1.0f,
+		boundingBox.Center.y + boundingBox.Extents.y + PET_POSSESSION_TEXT_WORLD_GAP,
 		boundingBox.Center.z);
 	XMMATRIX xmmtxViewProjection = XMLoadFloat4x4(&pCamera->m_xmf4x4View)
 		* XMLoadFloat4x4(&pCamera->m_xmf4x4Projection);
@@ -700,7 +697,7 @@ void CGameScene::RenderPetPossessionText(ID3D12GraphicsCommandList* pd3dCommandL
 	const float fAnchorX = (xmf3Ndc.x * 0.5f + 0.5f) * fViewportWidth;
 	const float fAnchorY = (0.5f - xmf3Ndc.y * 0.5f) * fViewportHeight;
 	float fCursorX = fAnchorX - (fTextWidth * 0.5f);
-	const float fTextTop = fAnchorY - 36.0f;
+	const float fTextTop = fAnchorY - PET_POSSESSION_TEXT_TOP_OFFSET;
 
 	pd3dCommandList->SetPipelineState(m_pd3dTextPipelineState);
 	pd3dCommandList->SetGraphicsRoot32BitConstant(5, 0x00FFC000, 0);
@@ -744,6 +741,77 @@ void CGameScene::RenderPetPossessionText(ID3D12GraphicsCommandList* pd3dCommandL
 		fCursorX = fGlyphLeft + (pGlyph->fPixelWidth * fGlyphScale) + fGlyphGap;
 	}
 }
+
+float CGameScene::CalculatePetMaxDragY(CPet* pPet, const XMFLOAT3& xmf3Position, CCamera* pCamera) const
+{
+	if (!pPet || !pCamera || pCamera->m_d3dViewport.Width <= 0.0f || pCamera->m_d3dViewport.Height <= 0.0f)
+		return(PET_DRAG_FALLBACK_MAX_Y);
+
+	const XMFLOAT3 xmf3CurrentPosition = pPet->GetPosition();
+	const float fPetTopOffset = (pPet->m_xmOOBB.Center.y + pPet->m_xmOOBB.Extents.y) - xmf3CurrentPosition.y;
+	const XMMATRIX xmmtxViewProjection = XMLoadFloat4x4(&pCamera->m_xmf4x4View)
+		* XMLoadFloat4x4(&pCamera->m_xmf4x4Projection);
+	const float fViewportHeight = pCamera->m_d3dViewport.Height;
+
+	auto IsPossessionTextInsideTop = [&](float fPetY) -> bool
+	{
+		const XMFLOAT3 xmf3Anchor(
+			xmf3Position.x,
+			fPetY + fPetTopOffset + PET_POSSESSION_TEXT_WORLD_GAP,
+			xmf3Position.z);
+		const XMVECTOR xmvAnchor = XMVector3TransformCoord(XMLoadFloat3(&xmf3Anchor), xmmtxViewProjection);
+		XMFLOAT3 xmf3Ndc;
+		XMStoreFloat3(&xmf3Ndc, xmvAnchor);
+		if (xmf3Ndc.z < 0.0f || xmf3Ndc.z > 1.0f) return(false);
+
+		const float fAnchorY = (0.5f - xmf3Ndc.y * 0.5f) * fViewportHeight;
+		const float fTextTop = fAnchorY - PET_POSSESSION_TEXT_TOP_OFFSET;
+		return(fTextTop >= PET_POSSESSION_TEXT_SCREEN_MARGIN);
+	};
+
+	if (!IsPossessionTextInsideTop(PET_DRAG_MIN_Y))
+		return(PET_DRAG_MIN_Y);
+	if (IsPossessionTextInsideTop(PET_DRAG_SEARCH_MAX_Y))
+		return(PET_DRAG_SEARCH_MAX_Y);
+
+	float fLow = PET_DRAG_MIN_Y;
+	float fHigh = PET_DRAG_SEARCH_MAX_Y;
+	for (int i = 0; i < 24; ++i)
+	{
+		const float fMiddle = (fLow + fHigh) * 0.5f;
+		if (IsPossessionTextInsideTop(fMiddle))
+			fLow = fMiddle;
+		else
+			fHigh = fMiddle;
+	}
+	return(fLow);
+}
+
+XMFLOAT3 CGameScene::ClampPetDragPosition(CPet* pPet, const XMFLOAT3& xmf3Position, CCamera* pCamera) const
+{
+	XMFLOAT3 xmf3ClampedPosition(
+		ClampFloat(xmf3Position.x, PET_DRAG_MIN_X, PET_DRAG_MAX_X),
+		xmf3Position.y,
+		xmf3Position.z);
+	const float fMaxY = CalculatePetMaxDragY(pPet, xmf3ClampedPosition, pCamera);
+	xmf3ClampedPosition.y = ClampFloat(xmf3Position.y, PET_DRAG_MIN_Y, fMaxY);
+	return(xmf3ClampedPosition);
+}
+
+void CGameScene::ClampPetToCurrentDragBounds(CPet* pPet, CCamera* pCamera)
+{
+	if (!pPet) return;
+
+	const XMFLOAT3 xmf3Position = pPet->GetPosition();
+	const XMFLOAT3 xmf3ClampedPosition = ClampPetDragPosition(pPet, xmf3Position, pCamera);
+	if (fabsf(xmf3Position.x - xmf3ClampedPosition.x) > 0.001f
+		|| fabsf(xmf3Position.y - xmf3ClampedPosition.y) > 0.001f)
+	{
+		pPet->SetPosition(xmf3ClampedPosition);
+		pPet->UpdateBoundingBox();
+	}
+}
+
 void CGameScene::OnProcessingKeyboardMessage(HWND hWnd, UINT nMessageID, WPARAM wParam, LPARAM lParam)
 {
 	extern CGameFramework* g_pFramework;
@@ -1192,7 +1260,7 @@ void CGameScene::OnProcessingMouseMessage(HWND hWnd, UINT nMessageID, WPARAM wPa
 						xmf3WorldPosition.x + m_xmf3PetDragOffset.x,
 						xmf3WorldPosition.y + m_xmf3PetDragOffset.y,
 						m_fPetDragPlaneZ);
-					xmf3PetPosition = ClampPetDragPosition(xmf3PetPosition);
+					xmf3PetPosition = ClampPetDragPosition(m_pMousePressedPet, xmf3PetPosition, m_pLastPickCamera);
 					m_pMousePressedPet->SetPosition(xmf3PetPosition);
 					m_pMousePressedPet->UpdateBoundingBox();
 				}
@@ -1336,6 +1404,8 @@ void CGameScene::ChangeActivePet(size_t petIndex)
 
 	selectedResource.pPet->CopyRuntimeStateFrom(*currentResource.pPet);
 	m_nActivePetIndex = static_cast<UINT>(petIndex);
+	selectedResource.pPet->SetScale(m_ShopUI.GetPetSizeScale());
+	ClampPetToCurrentDragBounds(selectedResource.pPet, m_pLastPickCamera);
 	m_pPointedPet = NULL;
 	m_pMousePressedPet = NULL;
 	m_bPetDragCandidate = false;
@@ -1555,6 +1625,7 @@ void CGameScene::Animate(float fElapsedTime)
 		if (pActivePet)
 		{
 			pActivePet->SetScale(m_ShopUI.GetPetSizeScale());
+			ClampPetToCurrentDragBounds(pActivePet, m_pLastPickCamera);
 			if (m_ShopUI.IsPetMovementEnabled())
 			{
 				if (!m_bPetDragging)
@@ -1570,7 +1641,7 @@ void CGameScene::Animate(float fElapsedTime)
 			{
 				XMFLOAT3 petPosition = pActivePet->GetPosition();
 				petPosition.y = PET_DRAG_MIN_Y;
-				pActivePet->SetPosition(petPosition);
+				pActivePet->SetPosition(ClampPetDragPosition(pActivePet, petPosition, m_pLastPickCamera));
 				pActivePet->UpdateBoundingBox();
 			}
 			if (pActivePet->ConsumeAutoCollectRequest())

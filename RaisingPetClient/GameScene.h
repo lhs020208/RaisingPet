@@ -71,6 +71,9 @@ private:
 	void RenderCoinEffects(ID3D12GraphicsCommandList* pd3dCommandList, CCamera* pCamera);
 	void ChangeActivePet(size_t nPetIndex);
 	void EnhanceActivePet(int nEnhancementType);
+	float CalculatePetMaxDragY(CPet* pPet, const XMFLOAT3& xmf3Position, CCamera* pCamera) const;
+	XMFLOAT3 ClampPetDragPosition(CPet* pPet, const XMFLOAT3& xmf3Position, CCamera* pCamera) const;
+	void ClampPetToCurrentDragBounds(CPet* pPet, CCamera* pCamera);
 	SHOP_TEXT_RENDER_CONTEXT GetShopTextRenderContext();
 	void LoadOrCreateLocalPlayerStatus();
 	bool LoadLocalPlayerStatus();
