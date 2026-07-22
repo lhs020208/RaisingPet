@@ -200,6 +200,16 @@
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Release|x64'">true</ExcludedFromBuild>
     </FxCompile>
   </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="ShopUI.Internal.h" />
+    <None Include="ShopUI.Resources.cpp" />
+    <None Include="ShopUI.Pages.cpp" />
+    <None Include="ShopUI.Render.cpp" />
+    <None Include="ShopUI.Layout.cpp" />
+    <None Include="ShopUI.State.cpp" />
+    <None Include="ShopUI.FinancialAndLogs.cpp" />
+    <None Include="ShopUI.Input.cpp" />
+  </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
   </ImportGroup>

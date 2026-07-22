@@ -88,12 +88,12 @@
     <ClInclude Include="GameScene.h">
       <Filter>Code\Scene</Filter>
     </ClInclude>
-	<ClInclude Include="LoginScene.h">
-	  <Filter>Code\Scene</Filter>
-	</ClInclude>
-	<ClInclude Include="SceneManager.h">
-	  <Filter>Code\Scene</Filter>
-	</ClInclude>
+    <ClInclude Include="LoginScene.h">
+      <Filter>Code\Scene</Filter>
+    </ClInclude>
+    <ClInclude Include="SceneManager.h">
+      <Filter>Code\Scene</Filter>
+    </ClInclude>
     <ClInclude Include="ShopUI.h">
       <Filter>Code\Scene</Filter>
     </ClInclude>
@@ -117,9 +117,9 @@
     <ClCompile Include="Mesh.cpp">
       <Filter>Code\Mesh</Filter>
     </ClCompile>
-	<ClCompile Include="MeshBinLoader.cpp">
-	  <Filter>Code\Mesh</Filter>
-	</ClCompile>
+    <ClCompile Include="MeshBinLoader.cpp">
+      <Filter>Code\Mesh</Filter>
+    </ClCompile>
     <ClCompile Include="Camera.cpp">
       <Filter>Code\Camera</Filter>
     </ClCompile>
@@ -141,12 +141,12 @@
     <ClCompile Include="GameScene.cpp">
       <Filter>Code\Scene</Filter>
     </ClCompile>
-	<ClCompile Include="LoginScene.cpp">
-	  <Filter>Code\Scene</Filter>
-	</ClCompile>
-	<ClCompile Include="SceneManager.cpp">
-	  <Filter>Code\Scene</Filter>
-	</ClCompile>
+    <ClCompile Include="LoginScene.cpp">
+      <Filter>Code\Scene</Filter>
+    </ClCompile>
+    <ClCompile Include="SceneManager.cpp">
+      <Filter>Code\Scene</Filter>
+    </ClCompile>
     <ClCompile Include="ShopUI.cpp">
       <Filter>Code\Scene</Filter>
     </ClCompile>
@@ -168,5 +168,31 @@
     <FxCompile Include="Shaders.hlsl">
       <Filter>Code\Shader</Filter>
     </FxCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="ShopUI.Internal.h">
+      <Filter>Code\Scene</Filter>
+    </ClInclude>
+    <None Include="ShopUI.Resources.cpp">
+      <Filter>Code\Scene</Filter>
+    </None>
+    <None Include="ShopUI.Pages.cpp">
+      <Filter>Code\Scene</Filter>
+    </None>
+    <None Include="ShopUI.Render.cpp">
+      <Filter>Code\Scene</Filter>
+    </None>
+    <None Include="ShopUI.Layout.cpp">
+      <Filter>Code\Scene</Filter>
+    </None>
+    <None Include="ShopUI.State.cpp">
+      <Filter>Code\Scene</Filter>
+    </None>
+    <None Include="ShopUI.FinancialAndLogs.cpp">
+      <Filter>Code\Scene</Filter>
+    </None>
+    <None Include="ShopUI.Input.cpp">
+      <Filter>Code\Scene</Filter>
+    </None>
   </ItemGroup>
 </Project>

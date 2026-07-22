@@ -19,4 +19,21 @@
       <Filter>소스 파일</Filter>
     </ClCompile>
   </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="RaisingPetServerInternal.h">
+      <Filter>헤더 파일</Filter>
+    </ClInclude>
+    <None Include="RaisingPetServerDatabase.cpp">
+      <Filter>소스 파일</Filter>
+    </None>
+    <None Include="RaisingPetServerPackets.cpp">
+      <Filter>소스 파일</Filter>
+    </None>
+    <None Include="RaisingPetServerAdmin.cpp">
+      <Filter>소스 파일</Filter>
+    </None>
+    <None Include="RaisingPetServerClient.cpp">
+      <Filter>소스 파일</Filter>
+    </None>
+  </ItemGroup>
 </Project>
