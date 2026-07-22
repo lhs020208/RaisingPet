@@ -63,6 +63,26 @@ bool IsAccountTextValid(const std::string& text)
 	return(true);
 }
 
+std::string WideStringToUtf8(const std::wstring& text)
+{
+	if (text.empty()) return(std::string());
+	const int requiredBytes = WideCharToMultiByte(CP_UTF8, 0, text.c_str(),
+		static_cast<int>(text.size()), NULL, 0, NULL, NULL);
+	if (requiredBytes <= 0) return(std::string());
+	std::string result(requiredBytes, '\0');
+	WideCharToMultiByte(CP_UTF8, 0, text.c_str(), static_cast<int>(text.size()),
+		&result[0], requiredBytes, NULL, NULL);
+	return(result);
+}
+
+bool IsBlankWideText(const std::wstring& text)
+{
+	for (wchar_t ch : text)
+		if (!(ch == L' ' || ch == L'\t' || ch == L'\r' || ch == L'\n'))
+			return(false);
+	return(true);
+}
+
 XMFLOAT4 GetBoardRectangle(float width, float height)
 {
 	float boardWidth = min(width * 0.82f, 900.0f);
@@ -110,6 +130,63 @@ XMFLOAT4 GetLoginFrameRectangle(float width, float height)
 	const float frameWidth = boardWidth * 0.69f;
 	return(XMFLOAT4(left, top, left + frameWidth,
 		top + frameWidth * (1208.0f / 1906.0f)));
+}
+
+XMFLOAT4 GetNicknameFrameRectangle(float width, float height)
+{
+	return(GetLoginFrameRectangle(width, height));
+}
+
+XMFLOAT4 GetNicknameLabelRectangle(float width, float height)
+{
+	const XMFLOAT4 frame = GetNicknameFrameRectangle(width, height);
+	const float frameWidth = frame.z - frame.x;
+	const float frameHeight = frame.w - frame.y;
+	const float labelWidth = frameWidth * 0.18f;
+	const float labelHeight = labelWidth * (236.0f / 463.0f);
+	const float left = frame.x + frameWidth * 0.035f;
+	const float centerY = frame.y + frameHeight * 0.50f;
+	return(XMFLOAT4(left, centerY - labelHeight * 0.5f,
+		left + labelWidth, centerY + labelHeight * 0.5f));
+}
+
+XMFLOAT4 GetNicknameTextFrameRectangle(float width, float height)
+{
+	const XMFLOAT4 frame = GetNicknameFrameRectangle(width, height);
+	const XMFLOAT4 label = GetNicknameLabelRectangle(width, height);
+	const float frameWidth = frame.z - frame.x;
+	const float textWidth = frameWidth * 0.64f;
+	const float textHeight = textWidth * (156.0f / 1254.0f);
+	const float left = label.z + frameWidth * 0.015f;
+	const float centerY = (label.y + label.w) * 0.5f;
+	return(XMFLOAT4(left, centerY - textHeight * 0.5f,
+		left + textWidth, centerY + textHeight * 0.5f));
+}
+
+XMFLOAT4 GetStartButtonRectangle(float width, float height)
+{
+	const XMFLOAT4 board = GetBoardRectangle(width, height);
+	const float boardWidth = board.z - board.x;
+	const float boardHeight = board.w - board.y;
+	const float buttonWidth = boardWidth * 0.17f;
+	const float buttonHeight = buttonWidth * (217.0f / 447.0f);
+	const float left = board.x + boardWidth * 0.775f;
+	const float top = board.y + boardHeight * 0.48f;
+	return(XMFLOAT4(left, top, left + buttonWidth, top + buttonHeight));
+}
+
+XMFLOAT4 GetNicknameFailLogRectangle(float width, float height)
+{
+	const XMFLOAT4 board = GetBoardRectangle(width, height);
+	const XMFLOAT4 startButton = GetStartButtonRectangle(width, height);
+	const float boardWidth = board.z - board.x;
+	const float boardHeight = board.w - board.y;
+	const float logWidth = boardWidth * 0.48f;
+	const float logHeight = logWidth * (133.0f / 1757.0f);
+	const float centerX = (startButton.x + startButton.z) * 0.5f;
+	const float top = startButton.y - logHeight - boardHeight * 0.035f;
+	return(XMFLOAT4(centerX - logWidth * 0.5f, top,
+		centerX + logWidth * 0.5f, top + logHeight));
 }
 
 XMFLOAT4 GetLoginActionButtonRectangle(int buttonIndex, float width, float height)
@@ -387,8 +464,10 @@ void CLoginScene::BuildObjects(ID3D12Device* device, ID3D12GraphicsCommandList* 
 	loadImage(L"Assets/Image/Shop/PageTitle.dds", m_PageTitle);
 	loadImage(L"Assets/Image/Shop/ShopCloseIcon.dds", m_CloseIcon);
 	loadImage(L"Assets/Image/Login/LoginFrame.dds", m_LoginFrame);
+	loadImage(L"Assets/Image/Login/RegisterFrame.dds", m_RegisterFrame);
 	loadImage(L"Assets/Image/Login/IDLog.dds", m_IdLog);
 	loadImage(L"Assets/Image/Login/PasswordLog.dds", m_PasswordLog);
+	loadImage(L"Assets/Image/Login/NameLog.dds", m_NameLog);
 	loadImage(L"Assets/Image/Login/TextFrame.dds", m_TextFrame);
 	loadImage(L"Assets/Image/Login/LoginButton.dds", m_LoginButton);
 	loadImage(L"Assets/Image/Login/GuestButton.dds", m_GuestButton);
@@ -404,6 +483,8 @@ void CLoginScene::BuildObjects(ID3D12Device* device, ID3D12GraphicsCommandList* 
 	loadImage(L"Assets/Image/Login/LoadingText3.dds", m_LoadingTexts[2]);
 	loadImage(L"Assets/Image/Login/DirectStartButton.dds", m_DirectStartButton);
 	loadImage(L"Assets/Image/Login/LoginBackButton.dds", m_LoginBackButton);
+	loadImage(L"Assets/Image/Login/StartButton.dds", m_StartButton);
+	loadImage(L"Assets/Image/Login/NameGenFailLog.dds", m_NameGenFailLog);
 	loadImage(L"Assets/Image/Login/PasswordHideIcon.dds", m_PasswordHideIcon);
 	loadImage(L"Assets/Image/Login/PasswordHideCheckBox.dds", m_PasswordHideCheckBox);
 	for (const GLYPH_METRIC& metric : gGlyphMetrics)
@@ -446,11 +527,11 @@ void CLoginScene::ReleaseObjects()
 	if (m_pd3dRotatingUiPipelineState) m_pd3dRotatingUiPipelineState->Release();
 	m_pd3dRotatingUiPipelineState = NULL;
 	UI_IMAGE_RESOURCE* resources[] = { &m_ShopBoard, &m_PageTitle, &m_CloseIcon, &m_LoginFrame,
-		&m_IdLog, &m_PasswordLog, &m_TextFrame, &m_LoginButton, &m_GuestButton,
+		&m_RegisterFrame, &m_IdLog, &m_PasswordLog, &m_NameLog, &m_TextFrame, &m_LoginButton, &m_GuestButton,
 		&m_RegisterButton, &m_TextCursor, &m_LoginErrorLog, &m_LoginErrorLog2,
 		&m_RegisterSuccessLog, &m_RegisterFailLog, &m_LoginLoading, &m_LoadingTexts[0],
 		&m_LoadingTexts[1], &m_LoadingTexts[2], &m_DirectStartButton, &m_LoginBackButton,
-		&m_PasswordHideIcon, &m_PasswordHideCheckBox };
+		&m_StartButton, &m_NameGenFailLog, &m_PasswordHideIcon, &m_PasswordHideCheckBox };
 	for (UI_IMAGE_RESOURCE* resource : resources)
 	{
 		if (resource->pd3dTexture) resource->pd3dTexture->Release();
@@ -472,11 +553,11 @@ void CLoginScene::ReleaseObjects()
 void CLoginScene::ReleaseUploadBuffers()
 {
 	UI_IMAGE_RESOURCE* resources[] = { &m_ShopBoard, &m_PageTitle, &m_CloseIcon, &m_LoginFrame,
-		&m_IdLog, &m_PasswordLog, &m_TextFrame, &m_LoginButton, &m_GuestButton,
+		&m_RegisterFrame, &m_IdLog, &m_PasswordLog, &m_NameLog, &m_TextFrame, &m_LoginButton, &m_GuestButton,
 		&m_RegisterButton, &m_TextCursor, &m_LoginErrorLog, &m_LoginErrorLog2,
 		&m_RegisterSuccessLog, &m_RegisterFailLog, &m_LoginLoading, &m_LoadingTexts[0],
 		&m_LoadingTexts[1], &m_LoadingTexts[2], &m_DirectStartButton, &m_LoginBackButton,
-		&m_PasswordHideIcon, &m_PasswordHideCheckBox };
+		&m_StartButton, &m_NameGenFailLog, &m_PasswordHideIcon, &m_PasswordHideCheckBox };
 	for (UI_IMAGE_RESOURCE* resource : resources)
 	{
 		if (!resource->pd3dTextureUploadBuffer) continue;
@@ -538,7 +619,9 @@ void CLoginScene::RenderPageTitle(ID3D12GraphicsCommandList* commandList, CCamer
 	RenderUiImage(commandList, camera, m_PageTitle, titleRect);
 	if (g_pFramework)
 	{
-		g_pFramework->QueueDirectWriteText(L"\uB85C\uADF8\uC778", titleRect,
+		const wchar_t* titleText = (m_eLoginPage == LOGIN_PAGE::NICKNAME)
+			? L"\uD68C\uC6D0\uAC00\uC785" : L"\uB85C\uADF8\uC778";
+		g_pFramework->QueueDirectWriteText(titleText, titleRect,
 			(titleRect.w - titleRect.y) * 0.48f, 0xFF000000, true, true);
 	}
 }
@@ -616,6 +699,36 @@ void CLoginScene::RenderTextField(ID3D12GraphicsCommandList* commandList, CCamer
 	}
 }
 
+void CLoginScene::RenderNicknameTextField(ID3D12GraphicsCommandList* commandList, CCamera* camera,
+	const XMFLOAT4& rectangle)
+{
+	if (!camera || !g_pFramework) return;
+	const float frameHeight = rectangle.w - rectangle.y;
+	const float padding = frameHeight * 0.30f;
+	const float fontSize = frameHeight * 0.58f;
+	const XMFLOAT4 textRect(rectangle.x + padding, rectangle.y,
+		rectangle.z - padding, rectangle.w);
+	g_pFramework->QueueDirectWriteText(m_Nickname, textRect, fontSize,
+		0xFF000000, false, true);
+
+	if (m_nActiveTextField == 2 && m_fCursorBlinkElapsed < 0.5f)
+	{
+		float measuredWidth = 0.0f;
+		float measuredHeight = 0.0f;
+		const std::wstring leftText = m_Nickname.substr(0,
+			min(m_nNicknameCursorIndex, m_Nickname.size()));
+		g_pFramework->MeasureDirectWriteText(leftText, fontSize,
+			textRect.z - textRect.x, textRect.w - textRect.y,
+			measuredWidth, measuredHeight);
+		const float caretHeight = frameHeight * 0.62f;
+		const float caretWidth = max(2.0f, caretHeight * (7.0f / 112.0f));
+		const float caretX = textRect.x + measuredWidth - 2.0f;
+		const float caretTop = (rectangle.y + rectangle.w - caretHeight) * 0.5f;
+		RenderUiImage(commandList, camera, m_TextCursor,
+			XMFLOAT4(caretX, caretTop, caretX + caretWidth, caretTop + caretHeight));
+	}
+}
+
 void CLoginScene::ResetCursorBlink()
 {
 	m_fCursorBlinkElapsed = 0.0f;
@@ -656,6 +769,52 @@ void CLoginScene::MoveCursorFromClick(int fieldIndex, float x, const XMFLOAT4& r
 	m_CursorIndices[fieldIndex] = nearestIndex;
 }
 
+void CLoginScene::MoveNicknameCursorFromClick(float x, const XMFLOAT4& rectangle)
+{
+	if (!g_pFramework)
+	{
+		m_nNicknameCursorIndex = m_Nickname.size();
+		return;
+	}
+	const float frameHeight = rectangle.w - rectangle.y;
+	const float padding = frameHeight * 0.30f;
+	const float fontSize = frameHeight * 0.58f;
+	const float textLeft = rectangle.x + padding;
+	if (m_Nickname.empty() || x <= textLeft)
+	{
+		m_nNicknameCursorIndex = 0;
+		return;
+	}
+
+	float totalWidth = 0.0f;
+	float measuredHeight = 0.0f;
+	g_pFramework->MeasureDirectWriteText(m_Nickname, fontSize,
+		rectangle.z - rectangle.x - padding * 2.0f, rectangle.w - rectangle.y,
+		totalWidth, measuredHeight);
+	if (x >= textLeft + totalWidth)
+	{
+		m_nNicknameCursorIndex = m_Nickname.size();
+		return;
+	}
+
+	size_t nearestIndex = 0;
+	float nearestDistance = fabsf(x - textLeft);
+	for (size_t i = 1; i <= m_Nickname.size(); ++i)
+	{
+		float widthToIndex = 0.0f;
+		g_pFramework->MeasureDirectWriteText(m_Nickname.substr(0, i), fontSize,
+			rectangle.z - rectangle.x - padding * 2.0f, rectangle.w - rectangle.y,
+			widthToIndex, measuredHeight);
+		const float distance = fabsf(x - (textLeft + widthToIndex));
+		if (distance < nearestDistance)
+		{
+			nearestDistance = distance;
+			nearestIndex = i;
+		}
+	}
+	m_nNicknameCursorIndex = nearestIndex;
+}
+
 void CLoginScene::SpawnLoginErrorLog(float viewportWidth, float viewportHeight, int type)
 {
 	LOGIN_ERROR_LOG log;
@@ -665,12 +824,30 @@ void CLoginScene::SpawnLoginErrorLog(float viewportWidth, float viewportHeight, 
 	m_LoginErrorLogs.push_back(log);
 }
 
+void CLoginScene::SpawnNicknameFailLog(float viewportWidth, float viewportHeight)
+{
+	LOGIN_ERROR_LOG log;
+	log.rectangle = GetNicknameFailLogRectangle(viewportWidth, viewportHeight);
+	log.elapsedTime = 0.0f;
+	log.type = 4;
+	m_LoginErrorLogs.push_back(log);
+}
+
 void CLoginScene::EnterLoadingPage()
 {
 	m_eLoginPage = LOGIN_PAGE::LOADING;
 	m_nActiveTextField = -1;
 	m_LoginErrorLogs.clear();
 	m_fLoadingElapsedTime = 0.0f;
+}
+
+void CLoginScene::EnterNicknamePage()
+{
+	m_eLoginPage = LOGIN_PAGE::NICKNAME;
+	m_nActiveTextField = 2;
+	m_nNicknameCursorIndex = m_Nickname.size();
+	m_LoginErrorLogs.clear();
+	ResetCursorBlink();
 }
 
 void CLoginScene::ReturnToInputPageWithLoginFailure(float viewportWidth, float viewportHeight)
@@ -820,6 +997,28 @@ void CLoginScene::RenderRegisterPage(ID3D12GraphicsCommandList* commandList, CCa
 	RenderUiImage(commandList, camera, m_CloseIcon, GetCloseRectangle(width, height));
 }
 
+void CLoginScene::RenderNicknamePage(ID3D12GraphicsCommandList* commandList, CCamera* camera,
+	float width, float height)
+{
+	const XMFLOAT4 frame = GetNicknameFrameRectangle(width, height);
+	RenderUiImage(commandList, camera, m_RegisterFrame, frame);
+	RenderUiImage(commandList, camera, m_NameLog, GetNicknameLabelRectangle(width, height));
+	RenderUiImage(commandList, camera, m_TextFrame, GetNicknameTextFrameRectangle(width, height));
+	RenderNicknameTextField(commandList, camera, GetNicknameTextFrameRectangle(width, height));
+	RenderUiImage(commandList, camera, m_StartButton, GetStartButtonRectangle(width, height));
+	RenderUiImage(commandList, camera, m_CloseIcon, GetCloseRectangle(width, height));
+	for (const LOGIN_ERROR_LOG& log : m_LoginErrorLogs)
+	{
+		const float alphaRatio = max(0.0f, 1.0f - log.elapsedTime);
+		const UINT alpha = max(1u, static_cast<UINT>(alphaRatio * 255.0f + 0.5f));
+		const float moveY = -20.0f * log.elapsedTime;
+		RenderUiImage(commandList, camera, m_NameGenFailLog,
+			XMFLOAT4(log.rectangle.x, log.rectangle.y + moveY,
+				log.rectangle.z, log.rectangle.w + moveY),
+			(alpha << 24) | 0x00FFFFFF);
+	}
+}
+
 void CLoginScene::Render(ID3D12GraphicsCommandList* commandList, CCamera* camera)
 {
 	if (!camera) return;
@@ -832,7 +1031,9 @@ void CLoginScene::Render(ID3D12GraphicsCommandList* commandList, CCamera* camera
 	m_fLastViewportHeight = height;
 	RenderUiImage(commandList, camera, m_ShopBoard, GetBoardRectangle(width, height));
 	RenderPageTitle(commandList, camera, width, height);
-	if (m_eLoginPage == LOGIN_PAGE::REGISTER)
+	if (m_eLoginPage == LOGIN_PAGE::NICKNAME)
+		RenderNicknamePage(commandList, camera, width, height);
+	else if (m_eLoginPage == LOGIN_PAGE::REGISTER)
 		RenderRegisterPage(commandList, camera, width, height);
 	else if (m_eLoginPage == LOGIN_PAGE::LOADING)
 		RenderLoadingPage(commandList, camera, width, height);
@@ -897,6 +1098,36 @@ void CLoginScene::OnProcessingMouseMessage(HWND hWnd, UINT message, WPARAM wPara
 			g_pFramework->RequestSceneChange(SCENE_TYPE::GAME);
 		}
 		else if (PointInRectangle(x, y, GetBoardRectangle(width, height)))
+		{
+			m_bBoardDragging = true;
+			m_xmf2BoardDragLastCursor = XMFLOAT2(x, y);
+			SetCapture(hWnd);
+		}
+		return;
+	}
+	if (m_eLoginPage == LOGIN_PAGE::NICKNAME)
+	{
+		if (PointInRectangle(x, y, GetStartButtonRectangle(width, height)))
+		{
+			const std::string nicknameUtf8 = WideStringToUtf8(m_Nickname);
+			if (IsBlankWideText(m_Nickname) || nicknameUtf8.empty() || nicknameUtf8.size() > 96 ||
+				!g_pFramework->GetNetworkManager().SendNicknameSetupRequest(nicknameUtf8))
+			{
+				m_LoginErrorLogs.clear();
+				SpawnNicknameFailLog(width, height);
+			}
+			return;
+		}
+		const XMFLOAT4 nicknameTextFrame = GetNicknameTextFrameRectangle(width, height);
+		if (PointInRectangle(x, y, nicknameTextFrame))
+		{
+			m_nActiveTextField = 2;
+			MoveNicknameCursorFromClick(x, nicknameTextFrame);
+			ResetCursorBlink();
+			return;
+		}
+		m_nActiveTextField = -1;
+		if (PointInRectangle(x, y, GetBoardRectangle(width, height)))
 		{
 			m_bBoardDragging = true;
 			m_xmf2BoardDragLastCursor = XMFLOAT2(x, y);
@@ -993,6 +1224,76 @@ void CLoginScene::OnProcessingKeyboardMessage(HWND hWnd, UINT message, WPARAM wP
 		}
 		return;
 	}
+	if (m_eLoginPage == LOGIN_PAGE::NICKNAME)
+	{
+		if (m_nActiveTextField != 2) return;
+		m_nNicknameCursorIndex = min(m_nNicknameCursorIndex, m_Nickname.size());
+
+		if (message == WM_CHAR)
+		{
+			const wchar_t ch = static_cast<wchar_t>(wParam);
+			if (ch == L'\b')
+			{
+				if (m_nNicknameCursorIndex == 0) return;
+				m_Nickname.erase(m_nNicknameCursorIndex - 1, 1);
+				--m_nNicknameCursorIndex;
+				ResetCursorBlink();
+				return;
+			}
+			if (ch < 0x20 || ch == 0x7F) return;
+
+			std::wstring candidate = m_Nickname;
+			candidate.insert(candidate.begin() + m_nNicknameCursorIndex, ch);
+			const std::string candidateUtf8 = WideStringToUtf8(candidate);
+			if (candidateUtf8.empty() || candidateUtf8.size() > 96) return;
+
+			RECT client;
+			GetClientRect(hWnd, &client);
+			const XMFLOAT4 frame = GetNicknameTextFrameRectangle(
+				static_cast<float>(client.right), static_cast<float>(client.bottom));
+			const float frameHeight = frame.w - frame.y;
+			const float padding = frameHeight * 0.30f;
+			const float fontSize = frameHeight * 0.58f;
+			float measuredWidth = 0.0f;
+			float measuredHeight = 0.0f;
+			if (g_pFramework && g_pFramework->MeasureDirectWriteText(candidate, fontSize,
+				frame.z - frame.x - padding * 2.0f, frame.w - frame.y,
+				measuredWidth, measuredHeight) &&
+				measuredWidth > frame.z - frame.x - padding * 2.0f)
+				return;
+
+			m_Nickname.swap(candidate);
+			++m_nNicknameCursorIndex;
+			ResetCursorBlink();
+			return;
+		}
+
+		if (message != WM_KEYDOWN) return;
+		switch (wParam)
+		{
+		case VK_LEFT:
+			if (m_nNicknameCursorIndex > 0) --m_nNicknameCursorIndex;
+			break;
+		case VK_RIGHT:
+			if (m_nNicknameCursorIndex < m_Nickname.size()) ++m_nNicknameCursorIndex;
+			break;
+		case VK_HOME:
+			m_nNicknameCursorIndex = 0;
+			break;
+		case VK_END:
+			m_nNicknameCursorIndex = m_Nickname.size();
+			break;
+		case VK_DELETE:
+			if (m_nNicknameCursorIndex < m_Nickname.size())
+				m_Nickname.erase(m_nNicknameCursorIndex, 1);
+			else return;
+			break;
+		default:
+			return;
+		}
+		ResetCursorBlink();
+		return;
+	}
 	if (m_eLoginPage != LOGIN_PAGE::INPUT) return;
 	if (m_nActiveTextField < 0) return;
 	std::string& text = (m_nActiveTextField == 0) ? m_LoginId : m_LoginPassword;
@@ -1065,14 +1366,16 @@ void CLoginScene::Animate(float elapsedTime)
 
 	CLIENT_AUTH_REQUEST request = CLIENT_AUTH_REQUEST::NONE;
 	CLIENT_AUTH_RESULT result = CLIENT_AUTH_RESULT::SERVER_ERROR;
-	if (g_pFramework->GetNetworkManager().ConsumeAuthResult(request, result))
+	bool hasLoggedIn = false;
+	if (g_pFramework->GetNetworkManager().ConsumeAuthResult(request, result, hasLoggedIn))
 	{
 		if (request == CLIENT_AUTH_REQUEST::LOGIN)
 		{
 			if (result == CLIENT_AUTH_RESULT::SUCCESS)
 			{
 				SaveAccountInformation();
-				g_pFramework->RequestSceneChange(SCENE_TYPE::GAME);
+				if (hasLoggedIn) g_pFramework->RequestSceneChange(SCENE_TYPE::GAME);
+				else EnterNicknamePage();
 			}
 			else
 			{
@@ -1088,6 +1391,18 @@ void CLoginScene::Animate(float elapsedTime)
 				m_fLastViewportWidth, m_fLastViewportHeight,
 				(result == CLIENT_AUTH_RESULT::SUCCESS)
 				? REGISTER_RESULT::SUCCESS : REGISTER_RESULT::FAILURE);
+		}
+		else if (request == CLIENT_AUTH_REQUEST::NICKNAME_SETUP)
+		{
+			if (result == CLIENT_AUTH_RESULT::SUCCESS)
+			{
+				g_pFramework->RequestSceneChange(SCENE_TYPE::GAME);
+			}
+			else
+			{
+				m_LoginErrorLogs.clear();
+				SpawnNicknameFailLog(m_fLastViewportWidth, m_fLastViewportHeight);
+			}
 		}
 	}
 

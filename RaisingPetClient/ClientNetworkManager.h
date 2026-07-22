@@ -14,7 +14,8 @@ enum class CLIENT_AUTH_REQUEST
 {
 	NONE,
 	REGISTER,
-	LOGIN
+	LOGIN,
+	NICKNAME_SETUP
 };
 
 enum class CLIENT_AUTH_RESULT
@@ -171,6 +172,7 @@ public:
 
 	bool StartRegister(const std::string& id, const std::string& password);
 	bool StartLogin(const std::string& id, const std::string& password);
+	bool SendNicknameSetupRequest(const std::string& nicknameUtf8);
 	bool SendMoneyUpdate(unsigned int money);
 	bool SendSavingsJoinRequest(unsigned int nProductId);
 	bool SendLoanApplyRequest(unsigned int nProductId);
@@ -181,7 +183,8 @@ public:
 		unsigned int nStockId, unsigned int nQuantity);
 	void Disconnect();
 
-	bool ConsumeAuthResult(CLIENT_AUTH_REQUEST& request, CLIENT_AUTH_RESULT& result);
+	bool ConsumeAuthResult(CLIENT_AUTH_REQUEST& request, CLIENT_AUTH_RESULT& result,
+		bool& bHasLoggedIn);
 	bool ConsumeServerMoneyChange(std::int64_t& deltaMoney, unsigned int& finalMoney);
 	bool ConsumeFinancialApplicationResult(CLIENT_FINANCIAL_APPLICATION_RESULT& result);
 	bool ConsumeFinancialCompletion(CLIENT_FINANCIAL_COMPLETION& completion);
@@ -206,6 +209,7 @@ private:
 	void AuthThread(CLIENT_AUTH_REQUEST request, std::string id, std::string password);
 	SERVER_INFORMATION LoadServerInformation() const;
 	void StoreResult(CLIENT_AUTH_REQUEST request, CLIENT_AUTH_RESULT result);
+	void StoreResult(CLIENT_AUTH_REQUEST request, CLIENT_AUTH_RESULT result, bool bHasLoggedIn);
 	void CloseSocket();
 
 	std::thread m_WorkerThread;
@@ -213,6 +217,7 @@ private:
 	SOCKET m_Socket = INVALID_SOCKET;
 	CLIENT_AUTH_REQUEST m_CompletedRequest = CLIENT_AUTH_REQUEST::NONE;
 	CLIENT_AUTH_RESULT m_CompletedResult = CLIENT_AUTH_RESULT::SERVER_ERROR;
+	bool m_bCompletedLoginHasLoggedIn = false;
 	bool m_bHasCompletedResult = false;
 	std::vector<std::pair<std::int64_t, unsigned int>> m_ServerMoneyChanges;
 	std::vector<CLIENT_FINANCIAL_APPLICATION_RESULT> m_FinancialApplicationResults;

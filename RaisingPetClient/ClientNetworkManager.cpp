@@ -35,6 +35,8 @@ enum class PacketType : std::uint16_t
 	StockTransactionListResponse = 19,
 	StockTradeRequest = 20,
 	StockTradeResponse = 21,
+	NicknameSetupRequest = 22,
+	NicknameSetupResponse = 23,
 };
 
 std::uint16_t ReadUInt16(const char* data)
@@ -150,6 +152,20 @@ std::vector<char> MakeStockIssueRequestPacket(const std::string& stockNameUtf8)
 	return(packet);
 }
 
+std::vector<char> MakeNicknameSetupRequestPacket(const std::string& nicknameUtf8)
+{
+	std::vector<char> packet;
+	const std::uint16_t nicknameLength = static_cast<std::uint16_t>(nicknameUtf8.size());
+	const std::uint16_t packetSize = static_cast<std::uint16_t>(
+		4 + sizeof(std::uint16_t) + nicknameLength);
+	packet.reserve(packetSize);
+	WriteUInt16(packet, packetSize);
+	WriteUInt16(packet, static_cast<std::uint16_t>(PacketType::NicknameSetupRequest));
+	WriteUInt16(packet, nicknameLength);
+	packet.insert(packet.end(), nicknameUtf8.begin(), nicknameUtf8.end());
+	return(packet);
+}
+
 std::vector<char> MakeStockManagementInfoRequestPacket()
 {
 	std::vector<char> packet;
@@ -211,6 +227,7 @@ bool ReceiveAll(SOCKET socket, char* buffer, int size)
 }
 
 bool ProcessPersistentPacketBuffer(std::vector<char>& receiveBuffer,
+	std::vector<std::pair<CLIENT_AUTH_REQUEST, CLIENT_AUTH_RESULT>>& authResults,
 	std::vector<std::pair<std::int64_t, unsigned int>>& moneyChanges,
 	std::vector<CLIENT_FINANCIAL_APPLICATION_RESULT>& financialResults,
 	std::vector<CLIENT_FINANCIAL_COMPLETION>& financialCompletions,
@@ -489,6 +506,12 @@ bool ProcessPersistentPacketBuffer(std::vector<char>& receiveBuffer,
 			result.nFinalMoney = static_cast<unsigned int>(finalValue);
 			stockTradeResults.push_back(result);
 		}
+		else if (packetType == static_cast<std::uint16_t>(PacketType::NicknameSetupResponse))
+		{
+			if (payloadSize != 1) return(false);
+			authResults.push_back({ CLIENT_AUTH_REQUEST::NICKNAME_SETUP,
+				static_cast<CLIENT_AUTH_RESULT>(static_cast<unsigned char>(payload[0])) });
+		}
 
 		receiveBuffer.erase(receiveBuffer.begin(), receiveBuffer.begin() + packetSize);
 	}
@@ -516,6 +539,19 @@ bool CClientNetworkManager::StartRegister(const std::string& id, const std::stri
 bool CClientNetworkManager::StartLogin(const std::string& id, const std::string& password)
 {
 	return(StartAuthRequest(CLIENT_AUTH_REQUEST::LOGIN, id, password));
+}
+
+bool CClientNetworkManager::SendNicknameSetupRequest(const std::string& nicknameUtf8)
+{
+	if (!m_bConnected.load() || nicknameUtf8.empty() || nicknameUtf8.size() > 96)
+		return(false);
+	for (unsigned char ch : nicknameUtf8)
+		if (ch < 0x20 || ch == 0x7F) return(false);
+	const std::vector<char> packet = MakeNicknameSetupRequestPacket(nicknameUtf8);
+
+	std::lock_guard<std::mutex> lock(m_Mutex);
+	if (m_Socket == INVALID_SOCKET) return(false);
+	return(SendAll(m_Socket, packet));
 }
 
 bool CClientNetworkManager::SendMoneyUpdate(unsigned int money)
@@ -603,6 +639,7 @@ bool CClientNetworkManager::StartAuthRequest(CLIENT_AUTH_REQUEST request,
 		std::lock_guard<std::mutex> lock(m_Mutex);
 		m_bHasCompletedResult = false;
 		m_CompletedRequest = CLIENT_AUTH_REQUEST::NONE;
+		m_bCompletedLoginHasLoggedIn = false;
 		m_ServerMoneyChanges.clear();
 		m_FinancialApplicationResults.clear();
 		m_FinancialCompletions.clear();
@@ -630,12 +667,13 @@ void CClientNetworkManager::Disconnect()
 }
 
 bool CClientNetworkManager::ConsumeAuthResult(CLIENT_AUTH_REQUEST& request,
-	CLIENT_AUTH_RESULT& result)
+	CLIENT_AUTH_RESULT& result, bool& hasLoggedIn)
 {
 	std::lock_guard<std::mutex> lock(m_Mutex);
 	if (!m_bHasCompletedResult) return(false);
 	request = m_CompletedRequest;
 	result = m_CompletedResult;
+	hasLoggedIn = m_bCompletedLoginHasLoggedIn;
 	m_bHasCompletedResult = false;
 	return(true);
 }
@@ -757,9 +795,16 @@ CClientNetworkManager::SERVER_INFORMATION CClientNetworkManager::LoadServerInfor
 
 void CClientNetworkManager::StoreResult(CLIENT_AUTH_REQUEST request, CLIENT_AUTH_RESULT result)
 {
+	StoreResult(request, result, false);
+}
+
+void CClientNetworkManager::StoreResult(CLIENT_AUTH_REQUEST request, CLIENT_AUTH_RESULT result,
+	bool hasLoggedIn)
+{
 	std::lock_guard<std::mutex> lock(m_Mutex);
 	m_CompletedRequest = request;
 	m_CompletedResult = result;
+	m_bCompletedLoginHasLoggedIn = hasLoggedIn;
 	m_bHasCompletedResult = true;
 }
 
@@ -860,10 +905,26 @@ void CClientNetworkManager::AuthThread(CLIENT_AUTH_REQUEST request,
 		m_bBusy.store(false);
 		return;
 	}
+	if (request == CLIENT_AUTH_REQUEST::REGISTER && payload.size() != 1)
+	{
+		CloseSocket();
+		StoreResult(request, CLIENT_AUTH_RESULT::SERVER_ERROR);
+		m_bBusy.store(false);
+		return;
+	}
+	if (request == CLIENT_AUTH_REQUEST::LOGIN && (payload.size() < 1 || payload.size() > 2))
+	{
+		CloseSocket();
+		StoreResult(request, CLIENT_AUTH_RESULT::SERVER_ERROR);
+		m_bBusy.store(false);
+		return;
+	}
 
 	const CLIENT_AUTH_RESULT result = static_cast<CLIENT_AUTH_RESULT>(
 		static_cast<unsigned char>(payload[0]));
-	StoreResult(request, result);
+	const bool hasLoggedIn = (request == CLIENT_AUTH_REQUEST::LOGIN && payload.size() >= 2)
+		? (payload[1] != 0) : true;
+	StoreResult(request, result, hasLoggedIn);
 
 	if (request != CLIENT_AUTH_REQUEST::LOGIN || result != CLIENT_AUTH_RESULT::SUCCESS)
 	{
@@ -893,6 +954,7 @@ void CClientNetworkManager::AuthThread(CLIENT_AUTH_REQUEST request,
 			persistentReceiveBuffer.insert(persistentReceiveBuffer.end(),
 				discardBuffer.data(), discardBuffer.data() + received);
 
+			std::vector<std::pair<CLIENT_AUTH_REQUEST, CLIENT_AUTH_RESULT>> authResults;
 			std::vector<std::pair<std::int64_t, unsigned int>> moneyChanges;
 			std::vector<CLIENT_FINANCIAL_APPLICATION_RESULT> financialResults;
 			std::vector<CLIENT_FINANCIAL_COMPLETION> financialCompletions;
@@ -902,17 +964,24 @@ void CClientNetworkManager::AuthThread(CLIENT_AUTH_REQUEST request,
 			std::vector<CLIENT_STOCK_MANAGEMENT_INFO> stockManagementInfos;
 			std::vector<std::vector<CLIENT_STOCK_TRANSACTION_INFO>> stockTransactionLists;
 			std::vector<CLIENT_STOCK_TRADE_APPLICATION_RESULT> stockTradeResults;
-			if (!ProcessPersistentPacketBuffer(persistentReceiveBuffer,
+			if (!ProcessPersistentPacketBuffer(persistentReceiveBuffer, authResults,
 				moneyChanges, financialResults, financialCompletions, financialActiveStatuses,
 				stockIssueResults, stockIssueStatuses, stockManagementInfos,
 				stockTransactionLists, stockTradeResults)) break;
-			if (!moneyChanges.empty() || !financialResults.empty() ||
+			if (!authResults.empty() || !moneyChanges.empty() || !financialResults.empty() ||
 				!financialCompletions.empty() || !financialActiveStatuses.empty() ||
 				!stockIssueResults.empty() || !stockIssueStatuses.empty() ||
 				!stockManagementInfos.empty() || !stockTransactionLists.empty() ||
 				!stockTradeResults.empty())
 			{
 				std::lock_guard<std::mutex> lock(m_Mutex);
+				if (!authResults.empty())
+				{
+					m_CompletedRequest = authResults.back().first;
+					m_CompletedResult = authResults.back().second;
+					m_bCompletedLoginHasLoggedIn = false;
+					m_bHasCompletedResult = true;
+				}
 				m_ServerMoneyChanges.insert(m_ServerMoneyChanges.end(),
 					moneyChanges.begin(), moneyChanges.end());
 				m_FinancialApplicationResults.insert(m_FinancialApplicationResults.end(),

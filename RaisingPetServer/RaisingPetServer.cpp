@@ -9,6 +9,7 @@
 #include <array>
 #include <chrono>
 #include <cmath>
+#include <cstdlib>
 #include <cstdint>
 #include <iostream>
 #include <mutex>
@@ -59,6 +60,8 @@ enum class PacketType : std::uint16_t {
 	StockTransactionListResponse = 19,
 	StockTradeRequest = 20,
 	StockTradeResponse = 21,
+	NicknameSetupRequest = 22,
+	NicknameSetupResponse = 23,
 	AdminLoginRequest = 100,
 	AdminLoginResponse = 101,
 };
@@ -248,6 +251,13 @@ struct AuthRequest {
 	std::string password;
 };
 
+bool IsUtf8DisplayTextValid(const std::string& text, std::size_t maxBytes);
+
+struct LoginPlayerResult {
+	AuthResult result = AuthResult::ServerError;
+	bool hasLoggedIn = false;
+};
+
 struct ClientSession {
 	SOCKET socket = INVALID_SOCKET;
 	std::string addressText;
@@ -320,8 +330,9 @@ public:
 		const std::string escapedId = Escape(id);
 		const std::string escapedPassword = Escape(password);
 		const std::string query =
-			"INSERT INTO `Player` (`PlayerID`, `Password`, `IsOnline`, `IsActive`, `Money`) VALUES ('" +
-			escapedId + "', '" + escapedPassword + "', FALSE, FALSE, 0)";
+			"INSERT INTO `Player` (`PlayerID`, `Password`, `Nickname`, `HasLoggedIn`, "
+			"`IsOnline`, `IsActive`, `Money`) VALUES ('" +
+			escapedId + "', '" + escapedPassword + "', NULL, FALSE, FALSE, FALSE, 0)";
 
 		if (mysql_query(connection_, query.c_str()) == 0) return AuthResult::Success;
 		if (mysql_errno(connection_) == ER_DUP_ENTRY) return AuthResult::AlreadyExists;
@@ -330,42 +341,77 @@ public:
 		return AuthResult::DatabaseError;
 	}
 
-	AuthResult LoginPlayer(const std::string& id, const std::string& password) {
+	LoginPlayerResult LoginPlayer(const std::string& id, const std::string& password) {
+		LoginPlayerResult loginResult;
 		if (!IsAccountTextValid(id, 32) || !IsAccountTextValid(password, 64))
-			return AuthResult::InvalidFormat;
+		{
+			loginResult.result = AuthResult::InvalidFormat;
+			return loginResult;
+		}
 
 		const std::string escapedId = Escape(id);
 		const std::string query =
-			"SELECT `Password` FROM `Player` WHERE `PlayerID` = '" + escapedId + "' LIMIT 1";
+			"SELECT `Password`, `HasLoggedIn` FROM `Player` WHERE `PlayerID` = '" +
+			escapedId + "' LIMIT 1";
 		if (mysql_query(connection_, query.c_str()) != 0) {
 			std::cerr << "LoginPlayer select failed: " << mysql_error(connection_) << '\n';
-			return AuthResult::DatabaseError;
+			loginResult.result = AuthResult::DatabaseError;
+			return loginResult;
 		}
 
 		MYSQL_RES* result = mysql_store_result(connection_);
 		if (!result) {
 			std::cerr << "LoginPlayer store result failed: " << mysql_error(connection_) << '\n';
-			return AuthResult::DatabaseError;
+			loginResult.result = AuthResult::DatabaseError;
+			return loginResult;
 		}
 
 		MYSQL_ROW row = mysql_fetch_row(result);
 		if (!row) {
 			mysql_free_result(result);
-			return AuthResult::NotFound;
+			loginResult.result = AuthResult::NotFound;
+			return loginResult;
 		}
 
 		const std::string storedPassword = row[0] ? row[0] : "";
+		loginResult.hasLoggedIn = row[1] && std::atoi(row[1]) != 0;
 		mysql_free_result(result);
-		if (storedPassword != password) return AuthResult::WrongPassword;
+		if (storedPassword != password) {
+			loginResult.result = AuthResult::WrongPassword;
+			return loginResult;
+		}
 
 		const std::string update =
 			"UPDATE `Player` SET `IsOnline` = TRUE WHERE `PlayerID` = '" + escapedId + "'";
 		if (mysql_query(connection_, update.c_str()) != 0) {
 			std::cerr << "LoginPlayer update failed: " << mysql_error(connection_) << '\n';
-			return AuthResult::DatabaseError;
+			loginResult.result = AuthResult::DatabaseError;
+			return loginResult;
 		}
 
-		return AuthResult::Success;
+		loginResult.result = AuthResult::Success;
+		return loginResult;
+	}
+
+	AuthResult SetupPlayerNickname(const std::string& id, const std::string& nickname) {
+		if (!IsAccountTextValid(id, 32) || !IsUtf8DisplayTextValid(nickname, 96))
+			return AuthResult::InvalidFormat;
+
+		const std::string escapedId = Escape(id);
+		const std::string escapedNickname = Escape(nickname);
+		const std::string update =
+			"UPDATE `Player` SET `Nickname` = '" + escapedNickname +
+			"', `HasLoggedIn` = TRUE WHERE `PlayerID` = '" + escapedId + "'";
+
+		if (mysql_query(connection_, update.c_str()) == 0)
+		{
+			if (mysql_affected_rows(connection_) == 1) return AuthResult::Success;
+			return AuthResult::NotFound;
+		}
+		if (mysql_errno(connection_) == ER_DUP_ENTRY) return AuthResult::AlreadyExists;
+
+		std::cerr << "SetupPlayerNickname failed: " << mysql_error(connection_) << '\n';
+		return AuthResult::DatabaseError;
 	}
 
 	void SetPlayerOffline(const std::string& id) {
@@ -2493,6 +2539,26 @@ bool ParseStockIssueRequest(const std::vector<char>& payload, std::string& stock
 	return true;
 }
 
+bool IsUtf8DisplayTextValid(const std::string& text, std::size_t maxBytes) {
+	if (text.empty() || text.size() > maxBytes) return false;
+	bool hasNonWhitespace = false;
+	for (unsigned char ch : text) {
+		if (ch < 0x20 || ch == 0x7F) return false;
+		if (!(ch == ' ' || ch == '\t' || ch == '\r' || ch == '\n'))
+			hasNonWhitespace = true;
+	}
+	return hasNonWhitespace;
+}
+
+bool ParseNicknameSetupRequest(const std::vector<char>& payload, std::string& nickname) {
+	if (payload.size() < sizeof(std::uint16_t)) return false;
+	const std::uint16_t nicknameLength = ReadUInt16(payload.data());
+	if (payload.size() != sizeof(std::uint16_t) + nicknameLength) return false;
+	nickname.assign(payload.data() + sizeof(std::uint16_t),
+		payload.data() + sizeof(std::uint16_t) + nicknameLength);
+	return IsUtf8DisplayTextValid(nickname, 96);
+}
+
 bool ParseStockTradeRequest(const std::vector<char>& payload,
 	StockTradeAction& action, std::uint32_t& stockId, std::uint32_t& quantity) {
 	constexpr std::size_t expectedSize = 1 + sizeof(std::uint32_t) + sizeof(std::uint32_t);
@@ -2515,7 +2581,27 @@ std::vector<char> MakePacketWithResult(PacketType type, AuthResult result) {
 }
 
 std::vector<char> MakeAuthResponse(PacketType type, AuthResult result) {
-	return MakePacketWithResult(type, result);
+	std::vector<char> packet;
+	const bool includeFirstLoginState = (type == PacketType::LoginResponse);
+	const std::uint16_t packetSize = static_cast<std::uint16_t>(
+		sizeof(PacketHeader) + 1 + (includeFirstLoginState ? 1 : 0));
+	packet.reserve(packetSize);
+	WriteUInt16(packet, packetSize);
+	WriteUInt16(packet, static_cast<std::uint16_t>(type));
+	packet.push_back(static_cast<char>(result));
+	if (includeFirstLoginState) packet.push_back(0);
+	return packet;
+}
+
+std::vector<char> MakeLoginResponse(AuthResult result, bool hasLoggedIn) {
+	std::vector<char> packet;
+	const std::uint16_t packetSize = static_cast<std::uint16_t>(sizeof(PacketHeader) + 2);
+	packet.reserve(packetSize);
+	WriteUInt16(packet, packetSize);
+	WriteUInt16(packet, static_cast<std::uint16_t>(PacketType::LoginResponse));
+	packet.push_back(static_cast<char>(result));
+	packet.push_back(hasLoggedIn ? 1 : 0);
+	return packet;
 }
 
 std::vector<char> MakeMoneyChangedPacket(std::int64_t delta, std::uint64_t finalMoney) {
@@ -3392,6 +3478,18 @@ void CloseSession(Database& database, ClientSession& session) {
 
 void ProcessPacket(Database& database, ClientSession& session,
 	PacketType packetType, const std::vector<char>& payload) {
+	if (packetType == PacketType::NicknameSetupRequest) {
+		AuthResult result = AuthResult::NotFound;
+		std::string nickname;
+		if (!session.authenticated) result = AuthResult::WrongPassword;
+		else if (!ParseNicknameSetupRequest(payload, nickname)) result = AuthResult::InvalidFormat;
+		else result = database.SetupPlayerNickname(session.playerId, nickname);
+		QueuePacket(session, MakePacketWithResult(PacketType::NicknameSetupResponse, result));
+		std::cout << "[Nickname] " << (session.authenticated ? session.playerId : "<unauthenticated>")
+			<< " result=" << static_cast<int>(result) << '\n';
+		return;
+	}
+
 	if (packetType == PacketType::MoneyUpdate) {
 		if (!session.authenticated || payload.size() != sizeof(std::uint64_t)) return;
 		const std::uint64_t money = ReadUInt64(payload.data());
@@ -3547,13 +3645,13 @@ void ProcessPacket(Database& database, ClientSession& session,
 	}
 
 	if (packetType == PacketType::LoginRequest) {
-		const AuthResult result = database.LoginPlayer(request.id, request.password);
-		if (result == AuthResult::Success) {
+		const LoginPlayerResult loginResult = database.LoginPlayer(request.id, request.password);
+		if (loginResult.result == AuthResult::Success) {
 			session.authenticated = true;
 			session.playerId = request.id;
 		}
-		QueuePacket(session, MakeAuthResponse(PacketType::LoginResponse, result));
-		if (result == AuthResult::Success) {
+		QueuePacket(session, MakeLoginResponse(loginResult.result, loginResult.hasLoggedIn));
+		if (loginResult.result == AuthResult::Success) {
 			std::vector<FinancialMoneyChange> changes;
 			if (database.ProcessDueFinancialProducts(session.playerId, changes))
 				QueueFinancialChanges(session, changes);
@@ -3577,7 +3675,9 @@ void ProcessPacket(Database& database, ClientSession& session,
 				std::cerr << "[StockManagementInfo] " << session.playerId
 					<< " failed: " << stockInfoFailureReason << '\n';
 		}
-		std::cout << "[Login] " << request.id << " result=" << static_cast<int>(result) << '\n';
+		std::cout << "[Login] " << request.id << " result="
+			<< static_cast<int>(loginResult.result)
+			<< " hasLoggedIn=" << (loginResult.hasLoggedIn ? 1 : 0) << '\n';
 		return;
 	}
 }
@@ -3596,6 +3696,7 @@ bool ProcessReceiveBuffer(Database& database, ClientSession& session) {
 
 		const PacketType packetType = static_cast<PacketType>(packetTypeValue);
 		if (packetType != PacketType::RegisterRequest && packetType != PacketType::LoginRequest &&
+			packetType != PacketType::NicknameSetupRequest &&
 			packetType != PacketType::MoneyUpdate &&
 			packetType != PacketType::SavingsJoinRequest &&
 			packetType != PacketType::LoanApplyRequest &&

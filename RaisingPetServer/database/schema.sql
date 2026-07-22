@@ -10,14 +10,20 @@ USE `RaisingPet`;
 CREATE TABLE `Player` (
     `PlayerID` VARCHAR(32) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
     `Password` VARCHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
+    `Nickname` VARCHAR(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NULL,
+    `HasLoggedIn` BOOLEAN NOT NULL DEFAULT FALSE
+        COMMENT 'TRUE after the player finishes first-time nickname setup',
     `IsOnline` BOOLEAN NOT NULL DEFAULT FALSE,
     `IsActive` BOOLEAN NOT NULL DEFAULT FALSE COMMENT 'Manual activity flag controlled by admin client',
     `Money` BIGINT UNSIGNED NOT NULL DEFAULT 0,
     PRIMARY KEY (`PlayerID`),
+    UNIQUE KEY `UQ_Player_Nickname` (`Nickname`),
     CONSTRAINT `CK_Player_PlayerID`
         CHECK (`PlayerID` REGEXP '^[A-Za-z0-9]+$'),
     CONSTRAINT `CK_Player_Password`
-        CHECK (`Password` REGEXP '^[A-Za-z0-9]+$')
+        CHECK (`Password` REGEXP '^[A-Za-z0-9]+$'),
+    CONSTRAINT `CK_Player_Nickname`
+        CHECK (`Nickname` IS NULL OR CHAR_LENGTH(TRIM(`Nickname`)) > 0)
 ) ENGINE = InnoDB;
 
 CREATE TABLE `InstallmentSavings` (

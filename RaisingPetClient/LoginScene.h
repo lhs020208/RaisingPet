@@ -47,7 +47,8 @@ private:
 	{
 		INPUT,
 		LOADING,
-		REGISTER
+		REGISTER,
+		NICKNAME
 	};
 	enum class REGISTER_RESULT
 	{
@@ -62,8 +63,10 @@ private:
 	UI_IMAGE_RESOURCE m_PageTitle;
 	UI_IMAGE_RESOURCE m_CloseIcon;
 	UI_IMAGE_RESOURCE m_LoginFrame;
+	UI_IMAGE_RESOURCE m_RegisterFrame;
 	UI_IMAGE_RESOURCE m_IdLog;
 	UI_IMAGE_RESOURCE m_PasswordLog;
+	UI_IMAGE_RESOURCE m_NameLog;
 	UI_IMAGE_RESOURCE m_TextFrame;
 	UI_IMAGE_RESOURCE m_LoginButton;
 	UI_IMAGE_RESOURCE m_GuestButton;
@@ -77,13 +80,17 @@ private:
 	UI_IMAGE_RESOURCE m_LoadingTexts[3];
 	UI_IMAGE_RESOURCE m_DirectStartButton;
 	UI_IMAGE_RESOURCE m_LoginBackButton;
+	UI_IMAGE_RESOURCE m_StartButton;
+	UI_IMAGE_RESOURCE m_NameGenFailLog;
 	UI_IMAGE_RESOURCE m_PasswordHideIcon;
 	UI_IMAGE_RESOURCE m_PasswordHideCheckBox;
 	std::vector<GLYPH_RESOURCE> m_Glyphs;
 	std::vector<LOGIN_ERROR_LOG> m_LoginErrorLogs;
 	std::string m_LoginId;
 	std::string m_LoginPassword;
+	std::wstring m_Nickname;
 	size_t m_CursorIndices[2] = { 0, 0 };
+	size_t m_nNicknameCursorIndex = 0;
 	int m_nActiveTextField = -1;
 	float m_fCursorBlinkElapsed = 0.0f;
 	float m_fLoadingElapsedTime = 0.0f;
@@ -108,8 +115,12 @@ private:
 		float fViewportWidth, float fViewportHeight);
 	void RenderRegisterPage(ID3D12GraphicsCommandList* pd3dCommandList, CCamera* pCamera,
 		float fViewportWidth, float fViewportHeight);
+	void RenderNicknamePage(ID3D12GraphicsCommandList* pd3dCommandList, CCamera* pCamera,
+		float fViewportWidth, float fViewportHeight);
 	void RenderTextField(ID3D12GraphicsCommandList* pd3dCommandList, CCamera* pCamera,
 		int nFieldIndex, const XMFLOAT4& rectangle);
+	void RenderNicknameTextField(ID3D12GraphicsCommandList* pd3dCommandList, CCamera* pCamera,
+		const XMFLOAT4& rectangle);
 	GLYPH_RESOURCE* FindGlyph(char ch);
 	float GetGlyphAdvance(char ch, float scale) const;
 	float MeasureText(const std::string& text, size_t characterCount, float scale) const;
@@ -121,6 +132,9 @@ private:
 	void EnterRegisterPage();
 	void ReturnToInputPageWithRegisterResult(float fViewportWidth, float fViewportHeight,
 		REGISTER_RESULT eResult);
+	void EnterNicknamePage();
+	void SpawnNicknameFailLog(float fViewportWidth, float fViewportHeight);
+	void MoveNicknameCursorFromClick(float x, const XMFLOAT4& rectangle);
 	void LoadSavedAccountInformation();
 	void SaveAccountInformation() const;
 };
