@@ -236,9 +236,13 @@ void CShopUI::NotifyFinancialApplicationFailed(int category)
 bool CShopUI::IsPointOver(float x, float y, float width, float height) const
 {
 	if (IsPointInRectangle(x, y, GetShopIconRectangle(width, height))) return(true);
-	if (!m_bShopActive) return(false);
-	return(IsPointInRectangle(x, y,
-		GetShopBoardRectangle(width, height, m_xmf2ShopBoardOffset.x, m_xmf2ShopBoardOffset.y)));
+	if (IsPointInRectangle(x, y, GetSettingIconRectangle(width, height))) return(true);
+	if (m_bShopActive && IsPointInRectangle(x, y,
+		GetShopBoardRectangle(width, height, m_xmf2ShopBoardOffset.x, m_xmf2ShopBoardOffset.y)))
+		return(true);
+	return(m_bSettingActive && IsPointInRectangle(x, y,
+		GetShopBoardRectangle(width, height,
+			m_xmf2SettingBoardOffset.x, m_xmf2SettingBoardOffset.y)));
 }
 
 void CShopUI::DeactivateShop(float width, float height, size_t activePetIndex)

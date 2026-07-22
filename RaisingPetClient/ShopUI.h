@@ -144,6 +144,7 @@ private:
 
 	ID3D12PipelineState* m_pd3dUiImagePipelineState = NULL;
 	UI_IMAGE_RESOURCE m_ShopIconResource;
+	UI_IMAGE_RESOURCE m_SettingIconResource;
 	UI_IMAGE_RESOURCE m_ShopBoardResource;
 	UI_IMAGE_RESOURCE m_PageTitleResource;
 	UI_IMAGE_RESOURCE m_ShopCloseIconResource;
@@ -200,9 +201,17 @@ private:
 	SHOP_PAGE m_eShopPage = SHOP_PAGE::SHOP_MENU;
 	int m_nSelectedShopSlot = -1;
 	bool m_bShopBoardDragging = false;
+	bool m_bSettingActive = false;
+	bool m_bSettingBoardOnTop = false;
+	bool m_bSettingBoardDragging = false;
+	bool m_bBlockShopDirectWriteText = false;
+	bool m_bResetSettingPositionOnNextOpen = false;
 	bool m_bResetShopPositionOnNextOpen = false;
 	XMFLOAT2 m_xmf2ShopBoardOffset = XMFLOAT2(0.0f, 0.0f);
+	XMFLOAT2 m_xmf2SettingBoardOffset = XMFLOAT2(0.0f, 0.0f);
 	XMFLOAT2 m_xmf2ShopDragLastCursor = XMFLOAT2(0.0f, 0.0f);
+	XMFLOAT2 m_xmf2SettingDragLastCursor = XMFLOAT2(0.0f, 0.0f);
+	XMFLOAT4 m_xmf4ShopDirectWriteBlockRectangle = XMFLOAT4(0.0f, 0.0f, 0.0f, 0.0f);
 	size_t m_nPetScrollOffset = 0;
 	size_t m_nCachedPetCount = 0;
 	size_t m_nMaximumPetScrollOffset = 0;
@@ -267,6 +276,10 @@ private:
 	void RenderTextLine(ID3D12GraphicsCommandList* pd3dCommandList, CCamera* pCamera,
 		const std::string& text, float fLeft, float fTop, float fGlyphScale, UINT nColor,
 		const SHOP_TEXT_RENDER_CONTEXT& textContext);
+	void QueueShopDirectWriteText(const std::wstring& text, const XMFLOAT4& rectangle,
+		float fFontSize, UINT nColor = 0xFF000000,
+		bool bHorizontalCenter = false, bool bVerticalCenter = true) const;
+	bool IsShopDirectWriteTextBlocked(const XMFLOAT4& rectangle) const;
 	XMFLOAT4 GetMoneyUiRectangle(float fViewportWidth, float fViewportHeight, UINT nMoney,
 		const SHOP_TEXT_RENDER_CONTEXT& textContext) const;
 	bool ProcessShopUIClick(float x, float y, float fViewportWidth, float fViewportHeight,

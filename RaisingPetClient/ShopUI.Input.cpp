@@ -5,6 +5,27 @@ bool CShopUI::ProcessShopUIClick(float x, float y, float width, float height, UI
 	size_t petCount, size_t activePetIndex, const SHOP_TEXT_RENDER_CONTEXT& context,
 	bool networkConnected)
 {
+	const bool settingIconClicked = IsPointInRectangle(x, y, GetSettingIconRectangle(width, height));
+	if (settingIconClicked)
+	{
+		g_pFramework->PlayClickSound();
+		if (m_bSettingActive)
+		{
+			m_bSettingActive = false;
+			m_bSettingBoardDragging = false;
+		}
+		else
+		{
+			if (m_bResetSettingPositionOnNextOpen)
+			{
+				m_xmf2SettingBoardOffset = XMFLOAT2(0.0f, 0.0f);
+				m_bResetSettingPositionOnNextOpen = false;
+			}
+			m_bSettingActive = true;
+			m_bSettingBoardOnTop = true;
+		}
+		return(true);
+	}
 	const bool iconClicked = IsPointInRectangle(x, y, GetShopIconRectangle(width, height));
 	const bool closeClicked = m_bShopActive && IsPointInRectangle(x, y,
 		GetShopCloseRectangle(width, height, m_xmf2ShopBoardOffset.x, m_xmf2ShopBoardOffset.y));
@@ -20,6 +41,7 @@ bool CShopUI::ProcessShopUIClick(float x, float y, float width, float height, UI
 				m_bResetShopPositionOnNextOpen = false;
 			}
 			m_bShopActive = true;
+			m_bSettingBoardOnTop = false;
 			m_eShopPage = SHOP_PAGE::SHOP_MENU;
 			m_nSelectedShopSlot = -1;
 			m_bStockNameInputActive = false;
@@ -251,6 +273,27 @@ bool CShopUI::IsPointOverClickableButton(float x, float y, float width, float he
 	bool networkConnected) const
 {
 	if (IsPointInRectangle(x, y, GetShopIconRectangle(width, height))) return(true);
+	if (IsPointInRectangle(x, y, GetSettingIconRectangle(width, height))) return(true);
+
+	const XMFLOAT4 shopBoard = GetShopBoardRectangle(width, height,
+		m_xmf2ShopBoardOffset.x, m_xmf2ShopBoardOffset.y);
+	const XMFLOAT4 settingBoard = GetShopBoardRectangle(width, height,
+		m_xmf2SettingBoardOffset.x, m_xmf2SettingBoardOffset.y);
+	const bool inShopBoard = m_bShopActive && IsPointInRectangle(x, y, shopBoard);
+	const bool inSettingBoard = m_bSettingActive && IsPointInRectangle(x, y, settingBoard);
+	const XMFLOAT4 settingClose = GetShopCloseRectangle(width, height,
+		m_xmf2SettingBoardOffset.x, m_xmf2SettingBoardOffset.y);
+
+	if (m_bSettingActive && m_bSettingBoardOnTop && inSettingBoard)
+		return(IsPointInRectangle(x, y, settingClose));
+	if (m_bSettingActive && !m_bShopActive && inSettingBoard)
+		return(IsPointInRectangle(x, y, settingClose));
+	if (m_bSettingActive && m_bShopActive && m_bSettingBoardOnTop && inShopBoard)
+		return(false);
+	if (m_bSettingActive && m_bShopActive && !m_bSettingBoardOnTop
+		&& inSettingBoard && !inShopBoard)
+		return(false);
+
 	if (!m_bShopActive) return(false);
 
 	if (IsPointInRectangle(x, y,
@@ -525,7 +568,96 @@ bool CShopUI::OnProcessingMouseMessage(HWND hWnd, UINT message, WPARAM wParam, L
 		}
 		break;
 	case WM_LBUTTONDOWN:
+	{
 		RebuildPetScrollMetricsIfNeeded(nPetCount);
+		const bool iconClicked = IsPointInRectangle(x, y, GetShopIconRectangle(width, height));
+		const bool settingIconClicked = IsPointInRectangle(x, y, GetSettingIconRectangle(width, height));
+		if (iconClicked || settingIconClicked)
+		{
+			if (ProcessShopUIClick(x, y, width, height, money, nPetCount, activePetIndex, context,
+				networkConnected)) return(true);
+		}
+
+		const XMFLOAT4 shopBoard = GetShopBoardRectangle(width, height,
+			m_xmf2ShopBoardOffset.x, m_xmf2ShopBoardOffset.y);
+		const XMFLOAT4 settingBoard = GetShopBoardRectangle(width, height,
+			m_xmf2SettingBoardOffset.x, m_xmf2SettingBoardOffset.y);
+		const bool inShopBoard = m_bShopActive && IsPointInRectangle(x, y, shopBoard);
+		const bool inSettingBoard = m_bSettingActive && IsPointInRectangle(x, y, settingBoard);
+		if (m_bSettingActive && m_bShopActive)
+		{
+			if (m_bSettingBoardOnTop)
+			{
+				if (inSettingBoard)
+				{
+					const XMFLOAT4 close = GetShopCloseRectangle(width, height,
+						m_xmf2SettingBoardOffset.x, m_xmf2SettingBoardOffset.y);
+					if (IsPointInRectangle(x, y, close))
+					{
+						g_pFramework->PlayClickSound();
+						const float halfWidth = (settingBoard.z - settingBoard.x) * 0.5f;
+						const float halfHeight = (settingBoard.w - settingBoard.y) * 0.5f;
+						m_bResetSettingPositionOnNextOpen = settingBoard.x < -halfWidth
+							|| settingBoard.z > width + halfWidth
+							|| settingBoard.y < -halfHeight
+							|| settingBoard.w > height + halfHeight;
+						m_bSettingActive = false;
+						m_bSettingBoardDragging = false;
+						return(true);
+					}
+					m_bSettingBoardDragging = true;
+					m_xmf2SettingDragLastCursor = XMFLOAT2(x, y);
+					SetCapture(hWnd);
+					return(true);
+				}
+				if (inShopBoard)
+				{
+					m_bSettingBoardOnTop = false;
+					const XMFLOAT4 moneyRect = GetMoneyUiRectangle(width, height, money, context);
+					if (!IsPointInRectangle(x, y, moneyRect))
+					{
+						m_bShopBoardDragging = true;
+						m_xmf2ShopDragLastCursor = XMFLOAT2(x, y);
+						SetCapture(hWnd);
+					}
+					return(true);
+				}
+			}
+			else
+			{
+				if (!inShopBoard && inSettingBoard)
+				{
+					m_bSettingBoardOnTop = true;
+					m_bSettingBoardDragging = true;
+					m_xmf2SettingDragLastCursor = XMFLOAT2(x, y);
+					SetCapture(hWnd);
+					return(true);
+				}
+			}
+		}
+		else if (m_bSettingActive && inSettingBoard)
+		{
+			const XMFLOAT4 close = GetShopCloseRectangle(width, height,
+				m_xmf2SettingBoardOffset.x, m_xmf2SettingBoardOffset.y);
+			if (IsPointInRectangle(x, y, close))
+			{
+				g_pFramework->PlayClickSound();
+				const float halfWidth = (settingBoard.z - settingBoard.x) * 0.5f;
+				const float halfHeight = (settingBoard.w - settingBoard.y) * 0.5f;
+				m_bResetSettingPositionOnNextOpen = settingBoard.x < -halfWidth
+					|| settingBoard.z > width + halfWidth
+					|| settingBoard.y < -halfHeight
+					|| settingBoard.w > height + halfHeight;
+				m_bSettingActive = false;
+				m_bSettingBoardDragging = false;
+				return(true);
+			}
+			m_bSettingBoardDragging = true;
+			m_xmf2SettingDragLastCursor = XMFLOAT2(x, y);
+			SetCapture(hWnd);
+			return(true);
+		}
+
 		if (m_bShopActive && m_eShopPage == SHOP_PAGE::STOCK_MANAGEMENT)
 		{
 			if (!m_bStockIssued &&
@@ -570,17 +702,17 @@ bool CShopUI::OnProcessingMouseMessage(HWND hWnd, UINT message, WPARAM wParam, L
 			networkConnected)) return(true);
 		if (m_bShopActive)
 		{
-			const XMFLOAT4 board = GetShopBoardRectangle(width, height,
-				m_xmf2ShopBoardOffset.x, m_xmf2ShopBoardOffset.y);
 			const XMFLOAT4 moneyRect = GetMoneyUiRectangle(width, height, money, context);
-			if (IsPointInRectangle(x, y, board) && !IsPointInRectangle(x, y, moneyRect))
+			if (IsPointInRectangle(x, y, shopBoard) && !IsPointInRectangle(x, y, moneyRect))
 			{
 				m_bShopBoardDragging = true;
 				m_xmf2ShopDragLastCursor = XMFLOAT2(x, y);
+				SetCapture(hWnd);
 				return(true);
 			}
 		}
 		break;
+	}
 	case WM_MOUSEMOVE:
 		if (m_bPetScrollDragging)
 		{
@@ -632,6 +764,20 @@ bool CShopUI::OnProcessingMouseMessage(HWND hWnd, UINT message, WPARAM wParam, L
 			m_xmf2ShopDragLastCursor = XMFLOAT2(x, y);
 			return(true);
 		}
+		if (m_bSettingBoardDragging)
+		{
+			const bool outside = x < 0.0f || y < 0.0f || x >= width || y >= height;
+			if (!(wParam & MK_LBUTTON) || outside)
+			{
+				m_bSettingBoardDragging = false;
+				if (GetCapture() == hWnd) ReleaseCapture();
+				return(true);
+			}
+			m_xmf2SettingBoardOffset.x += x - m_xmf2SettingDragLastCursor.x;
+			m_xmf2SettingBoardOffset.y += y - m_xmf2SettingDragLastCursor.y;
+			m_xmf2SettingDragLastCursor = XMFLOAT2(x, y);
+			return(true);
+		}
 		break;
 	case WM_LBUTTONUP:
 		if (m_bStockIssueButtonPressed)
@@ -661,8 +807,24 @@ bool CShopUI::OnProcessingMouseMessage(HWND hWnd, UINT message, WPARAM wParam, L
 			if (GetCapture() == hWnd) ReleaseCapture();
 			return(true);
 		}
-		if (m_bPetScrollDragging) { m_bPetScrollDragging = false; return(true); }
-		if (m_bShopBoardDragging) { m_bShopBoardDragging = false; return(true); }
+		if (m_bPetScrollDragging)
+		{
+			m_bPetScrollDragging = false;
+			if (GetCapture() == hWnd) ReleaseCapture();
+			return(true);
+		}
+		if (m_bShopBoardDragging)
+		{
+			m_bShopBoardDragging = false;
+			if (GetCapture() == hWnd) ReleaseCapture();
+			return(true);
+		}
+		if (m_bSettingBoardDragging)
+		{
+			m_bSettingBoardDragging = false;
+			if (GetCapture() == hWnd) ReleaseCapture();
+			return(true);
+		}
 		break;
 	}
 	return(false);

@@ -11,6 +11,22 @@ void CShopUI::Render(ID3D12GraphicsCommandList* commandList, CCamera* camera, UI
 	const float height = camera->m_d3dViewport.Height;
 	if (m_bShopActive && !networkConnected && IsNetworkRequiredPage())
 		ReturnToShopMenuAfterNetworkDisconnected(width, height);
+	m_bBlockShopDirectWriteText = m_bSettingActive && m_bSettingBoardOnTop;
+	m_xmf4ShopDirectWriteBlockRectangle = m_bBlockShopDirectWriteText
+		? GetShopBoardRectangle(width, height,
+			m_xmf2SettingBoardOffset.x, m_xmf2SettingBoardOffset.y)
+		: XMFLOAT4(0.0f, 0.0f, 0.0f, 0.0f);
+	auto renderSettingBoard = [&]()
+	{
+		RenderUiImage(commandList, camera, m_ShopBoardResource,
+			GetShopBoardRectangle(width, height,
+				m_xmf2SettingBoardOffset.x, m_xmf2SettingBoardOffset.y));
+		RenderUiImage(commandList, camera, m_ShopCloseIconResource,
+			GetShopCloseRectangle(width, height,
+				m_xmf2SettingBoardOffset.x, m_xmf2SettingBoardOffset.y));
+	};
+	if (m_bSettingActive && !m_bSettingBoardOnTop)
+		renderSettingBoard();
 	if (m_bShopActive)
 	{
 		RenderUiImage(commandList, camera, m_ShopBoardResource,
@@ -114,6 +130,10 @@ void CShopUI::Render(ID3D12GraphicsCommandList* commandList, CCamera* camera, UI
 		RenderUiImage(commandList, camera, m_ShopCloseIconResource,
 			GetShopCloseRectangle(width, height, m_xmf2ShopBoardOffset.x, m_xmf2ShopBoardOffset.y));
 	}
+	if (m_bSettingActive && m_bSettingBoardOnTop)
+		renderSettingBoard();
+	m_bBlockShopDirectWriteText = false;
+	RenderUiImage(commandList, camera, m_SettingIconResource, GetSettingIconRectangle(width, height));
 	RenderUiImage(commandList, camera, m_ShopIconResource, GetShopIconRectangle(width, height));
 }
 

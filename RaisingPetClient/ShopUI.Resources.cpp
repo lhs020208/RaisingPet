@@ -82,6 +82,7 @@ void CShopUI::BuildObjects(ID3D12Device* device, ID3D12GraphicsCommandList* comm
 	};
 
 	loadImage(L"Assets/Image/Shop/ShopIcon.dds", m_ShopIconResource);
+	loadImage(L"Assets/Image/Setting/SettingIcon.dds", m_SettingIconResource);
 	loadImage(L"Assets/Image/Shop/ShopBoard.dds", m_ShopBoardResource);
 	loadImage(L"Assets/Image/Shop/PageTitle.dds", m_PageTitleResource);
 	loadImage(L"Assets/Image/Shop/ShopCloseIcon.dds", m_ShopCloseIconResource);
@@ -160,7 +161,8 @@ void CShopUI::ReleaseObjects()
 		m_nPreviewPetIndex = static_cast<size_t>(-1);
 	}
 	if (m_pd3dUiImagePipelineState) m_pd3dUiImagePipelineState->Release();
-	UI_IMAGE_RESOURCE* images[] = { &m_ShopIconResource, &m_ShopBoardResource, &m_PageTitleResource,
+	UI_IMAGE_RESOURCE* images[] = { &m_ShopIconResource, &m_SettingIconResource,
+		&m_ShopBoardResource, &m_PageTitleResource,
 		&m_ShopCloseIconResource, &m_ShopBackSpaceIconResource, &m_ShopSlotResources[0],
 		&m_ShopSlotResources[1], &m_ShopSlotResources[2], &m_ShopSlotResources[3],
 		&m_EmptySquareResources[0], &m_EmptySquareResources[1], &m_PetConfirmationButtonResource,
@@ -260,7 +262,8 @@ void CShopUI::Animate(float elapsedTime)
 
 void CShopUI::ReleaseUploadBuffers()
 {
-	UI_IMAGE_RESOURCE* images[] = { &m_ShopIconResource, &m_ShopBoardResource, &m_PageTitleResource,
+	UI_IMAGE_RESOURCE* images[] = { &m_ShopIconResource, &m_SettingIconResource,
+		&m_ShopBoardResource, &m_PageTitleResource,
 		&m_ShopCloseIconResource, &m_ShopBackSpaceIconResource, &m_ShopSlotResources[0],
 		&m_ShopSlotResources[1], &m_ShopSlotResources[2], &m_ShopSlotResources[3],
 		&m_EmptySquareResources[0], &m_EmptySquareResources[1], &m_PetConfirmationButtonResource,
@@ -366,6 +369,22 @@ void CShopUI::RenderTextLine(ID3D12GraphicsCommandList* commandList, CCamera* ca
 	}
 	float textWidth = cursorX - left;
 	if (!text.empty() && text.back() != ' ' && textWidth >= glyphGap) textWidth -= glyphGap;
+}
+
+bool CShopUI::IsShopDirectWriteTextBlocked(const XMFLOAT4& rectangle) const
+{
+	if (!m_bBlockShopDirectWriteText) return(false);
+	const XMFLOAT4& block = m_xmf4ShopDirectWriteBlockRectangle;
+	return(rectangle.x < block.z && rectangle.z > block.x
+		&& rectangle.y < block.w && rectangle.w > block.y);
+}
+
+void CShopUI::QueueShopDirectWriteText(const std::wstring& text, const XMFLOAT4& rectangle,
+	float fontSize, UINT color, bool horizontalCenter, bool verticalCenter) const
+{
+	if (!g_pFramework || IsShopDirectWriteTextBlocked(rectangle)) return;
+	g_pFramework->QueueDirectWriteText(text, rectangle, fontSize,
+		color, horizontalCenter, verticalCenter);
 }
 
 void CShopUI::RenderSolidUiRectangle(ID3D12GraphicsCommandList* commandList, CCamera* camera,

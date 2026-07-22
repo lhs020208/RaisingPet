@@ -224,7 +224,7 @@ void CShopUI::RenderStockTransactionPage(ID3D12GraphicsCommandList* commandList,
 			}
 			const std::wstring text = std::to_wstring(stockIndex + 1) + L". "
 				+ m_StockTransactionInfos[stockIndex].wstrStockName;
-			g_pFramework->QueueDirectWriteText(text,
+			QueueShopDirectWriteText(text,
 				XMFLOAT4(leftPanel.x + 14.0f, leftPanel.y + rowHeight * row,
 					scrollTrack.x - 5.0f, leftPanel.y + rowHeight * (row + 1)),
 				listFontSize, 0xFF000000, false, true);
@@ -281,9 +281,9 @@ void CShopUI::RenderStockTransactionPage(ID3D12GraphicsCommandList* commandList,
 
 	if (g_pFramework)
 	{
-		g_pFramework->QueueDirectWriteText(stockName, titleRect,
+		QueueShopDirectWriteText(stockName, titleRect,
 			(titleRect.w - titleRect.y) * 0.45f, 0xFF000000, true, true);
-		g_pFramework->QueueDirectWriteText(issuerId,
+		QueueShopDirectWriteText(issuerId,
 			XMFLOAT4(issuerRect.x + (issuerRect.z - issuerRect.x) * 0.31f, issuerRect.y,
 				issuerRect.z - 5.0f, issuerRect.w),
 			(issuerRect.w - issuerRect.y) * 0.42f, 0xFF000000, true, true);
@@ -294,7 +294,7 @@ void CShopUI::RenderStockTransactionPage(ID3D12GraphicsCommandList* commandList,
 		const UINT priceTextColor = priceUpOrSame ? 0xFFFF0000 : 0xFF0070C0;
 		const float priceTop = graphRect.y + (graphRect.w - graphRect.y) * 0.79f;
 		const float priceBottom = graphRect.w - (graphRect.w - graphRect.y) * 0.04f;
-		g_pFramework->QueueDirectWriteText(hasSelectedStock ? FormatStockPrice(currentPrice) : emptyText,
+		QueueShopDirectWriteText(hasSelectedStock ? FormatStockPrice(currentPrice) : emptyText,
 			XMFLOAT4(graphRect.x + (graphRect.z - graphRect.x) * 0.28f, priceTop,
 				graphRect.x + (graphRect.z - graphRect.x) * 0.50f, priceBottom),
 			(priceBottom - priceTop) * 0.66f, hasSelectedStock ? priceTextColor : 0xFF000000,
@@ -307,13 +307,13 @@ void CShopUI::RenderStockTransactionPage(ID3D12GraphicsCommandList* commandList,
 			RenderUiImage(commandList, camera,
 				priceUpOrSame ? m_StockUpMarkResource : m_StockDownMarkResource,
 				XMFLOAT4(markLeft, markTop, markLeft + markSize, markTop + markSize));
-			g_pFramework->QueueDirectWriteText(FormatStockPriceChangeText(currentPrice, previousPrice),
+			QueueShopDirectWriteText(FormatStockPriceChangeText(currentPrice, previousPrice),
 				XMFLOAT4(markLeft + markSize + 2.0f, priceTop, graphRect.z - 3.0f, priceBottom),
 				(priceBottom - priceTop) * 0.42f, priceTextColor, false, true);
 		}
 		else
 		{
-			g_pFramework->QueueDirectWriteText(emptyText,
+			QueueShopDirectWriteText(emptyText,
 				XMFLOAT4(graphRect.x + (graphRect.z - graphRect.x) * 0.60f, priceTop,
 					graphRect.z - 3.0f, priceBottom),
 				(priceBottom - priceTop) * 0.54f, 0xFF000000, false, true);
@@ -331,11 +331,11 @@ void CShopUI::RenderStockTransactionPage(ID3D12GraphicsCommandList* commandList,
 		for (int i = 0; i < 3; ++i)
 		{
 			const float y = labelTop + descLine * i;
-			g_pFramework->QueueDirectWriteText(labels[i],
+			QueueShopDirectWriteText(labels[i],
 				XMFLOAT4(labelLeft, y, valueLeft, y + descLine),
 				descFont, 0xFF000000, false, true);
 			const std::wstring valueText = L":" + values[i] + (hasSelectedStock ? L"\uC8FC" : L"");
-			g_pFramework->QueueDirectWriteText(valueText,
+			QueueShopDirectWriteText(valueText,
 				XMFLOAT4(valueLeft, y, descriptionRect.x + descWidth * 0.60f, y + descLine),
 				descFont, 0xFF000000, false, true);
 		}
@@ -348,7 +348,7 @@ void CShopUI::RenderStockTransactionPage(ID3D12GraphicsCommandList* commandList,
 			descriptionRect.y + descHeight * 0.55f,
 			descriptionRect.x + descWidth * 0.94f,
 			descriptionRect.y + descHeight * 0.86f);
-		g_pFramework->QueueDirectWriteText(hasSelectedStock
+		QueueShopDirectWriteText(hasSelectedStock
 			? std::to_wstring(m_nStockTransactionOrderQuantity) : emptyText,
 			quantityRect, (quantityRect.w - quantityRect.y) * 0.68f, 0xFF000000, true, true);
 		if (hasSelectedStock && m_bStockTransactionQuantityInputActive
@@ -357,13 +357,13 @@ void CShopUI::RenderStockTransactionPage(ID3D12GraphicsCommandList* commandList,
 				m_nStockTransactionOrderQuantity, (quantityRect.w - quantityRect.y) * 0.68f);
 		if (hasSelectedStock)
 		{
-			g_pFramework->QueueDirectWriteText(L"\uC8FC",
+			QueueShopDirectWriteText(L"\uC8FC",
 				XMFLOAT4(quantityRect.z, quantityRect.y, descriptionRect.z, quantityRect.w),
 				(quantityRect.w - quantityRect.y) * 0.60f, 0xFF000000, true, true);
 		}
 		const UINT64 totalPrice = static_cast<UINT64>(m_nStockTransactionOrderQuantity)
 			* static_cast<UINT64>(hasSelectedStock ? selectedStock.nCurrentPrice : 0);
-		g_pFramework->QueueDirectWriteText(hasSelectedStock
+		QueueShopDirectWriteText(hasSelectedStock
 			? ToWideString(FormatPossessionTwoDecimals(
 				static_cast<UINT>((totalPrice > UINT_MAX) ? UINT_MAX : totalPrice)))
 			: emptyText,
@@ -409,7 +409,7 @@ void CShopUI::RenderStockManagementPage(ID3D12GraphicsCommandList* commandList, 
 			inputRect.z - textPaddingX, inputRect.w);
 		if (!m_wstrStockName.empty())
 		{
-			g_pFramework->QueueDirectWriteText(m_wstrStockName, textRect, fontSize,
+			QueueShopDirectWriteText(m_wstrStockName, textRect, fontSize,
 				0xFF000000, false, true);
 		}
 		if (m_bStockNameInputActive && m_fStockNameCursorBlinkElapsed < 0.5f)
@@ -478,7 +478,7 @@ void CShopUI::RenderStockManagementPage(ID3D12GraphicsCommandList* commandList, 
 		const float priceFontSize = boardHeight * 0.041f;
 		const float currentPriceLeft = chartRect.x + (chartRect.z - chartRect.x) * 0.17f;
 		const float currentPriceRight = chartRect.x + (chartRect.z - chartRect.x) * 0.44f;
-		g_pFramework->QueueDirectWriteText(FormatStockPrice(currentPrice),
+		QueueShopDirectWriteText(FormatStockPrice(currentPrice),
 			XMFLOAT4(currentPriceLeft, priceTop, currentPriceRight, priceBottom),
 			priceFontSize, priceTextColor, false, true);
 		const float markSize = (priceBottom - priceTop) * 0.62f;
@@ -487,7 +487,7 @@ void CShopUI::RenderStockManagementPage(ID3D12GraphicsCommandList* commandList, 
 		RenderUiImage(commandList, camera,
 			priceUpOrSame ? m_StockUpMarkResource : m_StockDownMarkResource,
 			XMFLOAT4(markLeft, markTop, markLeft + markSize, markTop + markSize));
-		g_pFramework->QueueDirectWriteText(FormatStockPriceChangeText(currentPrice, previousPrice),
+		QueueShopDirectWriteText(FormatStockPriceChangeText(currentPrice, previousPrice),
 			XMFLOAT4(markLeft + markSize + 3.0f, priceTop, chartRect.z - 3.0f, priceBottom),
 			boardHeight * 0.0245f, priceTextColor, false, true);
 
@@ -504,11 +504,11 @@ void CShopUI::RenderStockManagementPage(ID3D12GraphicsCommandList* commandList, 
 			const std::wstring holderRankText = std::to_wstring(i + 1) + L". " + holderName;
 			const std::wstring holderQuantityText = L":" + std::to_wstring(holder.nQuantity) + L"\uC8FC";
 			const float holderFontSize = boardHeight * ((i == 0) ? 0.044f : 0.037f);
-			g_pFramework->QueueDirectWriteText(holderRankText,
+			QueueShopDirectWriteText(holderRankText,
 				XMFLOAT4(holderTextLeft, holderTextTop + holderLineHeight * i,
 					holderQuantityLeft, holderTextTop + holderLineHeight * (i + 1)),
 				holderFontSize, holderColors[i], false, true);
-			g_pFramework->QueueDirectWriteText(holderQuantityText,
+			QueueShopDirectWriteText(holderQuantityText,
 				XMFLOAT4(holderQuantityLeft, holderTextTop + holderLineHeight * i,
 					holderTextRight, holderTextTop + holderLineHeight * (i + 1)),
 				holderFontSize, holderColors[i], false, true);
@@ -540,9 +540,9 @@ void CShopUI::RenderStockManagementPage(ID3D12GraphicsCommandList* commandList, 
 				splitX - cellPaddingX, table.w);
 			const XMFLOAT4 valueRect(splitX + cellPaddingX, table.y,
 				table.z - cellPaddingX, table.w);
-			g_pFramework->QueueDirectWriteText(tableLabels[i], labelRect,
+			QueueShopDirectWriteText(tableLabels[i], labelRect,
 				boardHeight * 0.030f, 0xFF000000, true, true);
-			g_pFramework->QueueDirectWriteText(tableValues[i], valueRect,
+			QueueShopDirectWriteText(tableValues[i], valueRect,
 				boardHeight * 0.027f, 0xFF000000, true, true);
 		}
 	}
@@ -818,7 +818,7 @@ void CShopUI::RenderStockGraphPage(ID3D12GraphicsCommandList* commandList, CCame
 		const UINT value = static_cast<UINT>(minimumPrice
 			+ static_cast<UINT64>(maximumPrice - minimumPrice) * i / 4);
 		const float y = plotBottom - plotHeight * ratio;
-		g_pFramework->QueueDirectWriteText(FormatStockPrice(value),
+		QueueShopDirectWriteText(FormatStockPrice(value),
 			XMFLOAT4(labelLeft, y - axisFontSize, labelRight, y + axisFontSize),
 			axisFontSize, 0xFFFFFFFF, false, true);
 	}
@@ -835,7 +835,7 @@ void CShopUI::RenderStockGraphPage(ID3D12GraphicsCommandList* commandList, CCame
 		const float newY = priceToY(price.nNewPrice);
 		if (price.nPreviousPrice == price.nNewPrice)
 		{
-			g_pFramework->QueueDirectWriteText(FormatGraphTimeLabel(price.wstrChangedTime),
+			QueueShopDirectWriteText(FormatGraphTimeLabel(price.wstrChangedTime),
 				XMFLOAT4(centerX - slotWidth * 0.5f, timeTop,
 					centerX + slotWidth * 0.5f, timeTop + boardHeight * 0.04f),
 				boardHeight * 0.020f, 0xFFFFFFFF, true, true);
@@ -846,7 +846,7 @@ void CShopUI::RenderStockGraphPage(ID3D12GraphicsCommandList* commandList, CCame
 		const UINT barColor = (price.nNewPrice >= price.nPreviousPrice) ? 0x00FF0000 : 0x000070C0;
 		RenderSolidUiRectangle(commandList, camera, barLeft, top,
 			barRight, max(bottom, top + 2.0f), barColor, context);
-		g_pFramework->QueueDirectWriteText(FormatGraphTimeLabel(price.wstrChangedTime),
+		QueueShopDirectWriteText(FormatGraphTimeLabel(price.wstrChangedTime),
 			XMFLOAT4(centerX - slotWidth * 0.5f, timeTop,
 				centerX + slotWidth * 0.5f, timeTop + boardHeight * 0.04f),
 			boardHeight * 0.020f, 0xFFFFFFFF, true, true);
@@ -879,7 +879,7 @@ void CShopUI::RenderStockGraphPage(ID3D12GraphicsCommandList* commandList, CCame
 	auto drawInfo = [&](const std::wstring& text, int line, bool center = false)
 	{
 		const float y = infoTop + infoLine * line;
-		g_pFramework->QueueDirectWriteText(text,
+		QueueShopDirectWriteText(text,
 			XMFLOAT4(infoLeft, y, infoRight, y + infoLine),
 			infoFont, 0xFFFFFFFF, center, true);
 	};
@@ -912,17 +912,17 @@ void CShopUI::RenderStockGraphPage(ID3D12GraphicsCommandList* commandList, CCame
 			receiptRect.y + receiptHeight * 0.53f,
 			receiptRect.z - receiptWidth * 0.07f,
 			receiptRect.y + receiptHeight * 0.93f);
-		g_pFramework->QueueDirectWriteText(std::to_wstring(m_nStockTransactionOrderQuantity),
+		QueueShopDirectWriteText(std::to_wstring(m_nStockTransactionOrderQuantity),
 			quantityRect, (quantityRect.w - quantityRect.y) * 0.82f, 0xFF000000, true, true);
 		if (m_bStockTransactionQuantityInputActive)
 			RenderStockQuantityCursor(commandList, camera, quantityRect,
 				m_nStockTransactionOrderQuantity, (quantityRect.w - quantityRect.y) * 0.82f);
-		g_pFramework->QueueDirectWriteText(L"주",
+		QueueShopDirectWriteText(L"주",
 			XMFLOAT4(quantityRect.z, quantityRect.y, receiptRect.z, quantityRect.w),
 			(quantityRect.w - quantityRect.y) * 0.72f, 0xFF000000, true, true);
 		const UINT64 totalPrice64 = static_cast<UINT64>(m_nStockTransactionOrderQuantity)
 			* static_cast<UINT64>(currentPrice);
-		g_pFramework->QueueDirectWriteText(ToWideString(FormatPossessionTwoDecimals(
+		QueueShopDirectWriteText(ToWideString(FormatPossessionTwoDecimals(
 			static_cast<UINT>((totalPrice64 > UINT_MAX) ? UINT_MAX : totalPrice64))),
 			priceRect, (priceRect.w - priceRect.y) * 0.72f, 0xFF000000, true, true);
 
@@ -973,7 +973,7 @@ void CShopUI::RenderPageTitle(ID3D12GraphicsCommandList* commandList, CCamera* c
 	}
 	if (g_pFramework)
 	{
-		g_pFramework->QueueDirectWriteText(titleText, titleRect,
+		QueueShopDirectWriteText(titleText, titleRect,
 			(titleRect.w - titleRect.y) * 0.48f, 0xFF000000, true, true);
 	}
 }

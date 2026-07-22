@@ -208,6 +208,15 @@ XMFLOAT4 GetShopIconRectangle(float width, float height)
 	return(XMFLOAT4(right - gShopUiLayout.fIconSize, bottom - gShopUiLayout.fIconSize, right, bottom));
 }
 
+XMFLOAT4 GetSettingIconRectangle(float width, float height)
+{
+	const XMFLOAT4 shopIcon = GetShopIconRectangle(width, height);
+	const float gap = 12.0f;
+	const float iconSize = shopIcon.z - shopIcon.x;
+	return(XMFLOAT4(shopIcon.x - gap - iconSize, shopIcon.y,
+		shopIcon.x - gap, shopIcon.w));
+}
+
 XMFLOAT4 GetShopBoardRectangle(float width, float height, float offsetX = 0.0f, float offsetY = 0.0f)
 {
 	float boardWidth = width * gShopUiLayout.fBoardWidthRatio;
