@@ -392,6 +392,29 @@ void CPet::SetMovementAiPaused(bool bPaused)
 	}
 }
 
+void CPet::StopMovementAndFaceFront()
+{
+	m_bMovementAiPaused = true;
+	m_MoveState = MOVE_STATE::STOP;
+	m_fMoveDirection = 0.0f;
+	m_fCurrentMoveSpeed = 0.0f;
+	m_fSpeedStart = 0.0f;
+	m_fSpeedTarget = 0.0f;
+	m_fSpeedElapsedTime = 0.0f;
+	m_bSpeedTransitioning = false;
+	m_fCurrentYaw = 0.0f;
+	m_fRotationStartYaw = 0.0f;
+	m_fRotationTargetYaw = 0.0f;
+	m_fRotationElapsedTime = 0.0f;
+	m_bRotating = false;
+	m_fStateRemainingTime = GetRandomStateDuration(MOVE_STATE::STOP);
+
+	XMFLOAT4X4 rotationTransform;
+	XMStoreFloat4x4(&rotationTransform, XMMatrixIdentity());
+	SetRotationTransform(&rotationTransform);
+	UpdateBoundingBox();
+}
+
 void CPet::DecideNextState()
 {
 	const float positionX = GetPosition().x;

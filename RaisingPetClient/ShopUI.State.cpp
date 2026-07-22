@@ -185,6 +185,36 @@ void CShopUI::QueueStockTradeRequest(int action)
 	m_bStockTransactionQuantityInputActive = false;
 }
 
+float CShopUI::GetMasterVolumeScale() const
+{
+	return(static_cast<float>(m_nSettingVolumePercents[0]) / 100.0f);
+}
+
+float CShopUI::GetClickVolumeScale() const
+{
+	return(GetMasterVolumeScale() * static_cast<float>(m_nSettingVolumePercents[1]) / 100.0f);
+}
+
+float CShopUI::GetErrorVolumeScale() const
+{
+	return(GetMasterVolumeScale() * static_cast<float>(m_nSettingVolumePercents[2]) / 100.0f);
+}
+
+float CShopUI::GetCoinVolumeScale() const
+{
+	return(GetMasterVolumeScale() * static_cast<float>(m_nSettingVolumePercents[3]) / 100.0f);
+}
+
+void CShopUI::PlayUiClickSound() const
+{
+	g_pFramework->PlayClickSound(GetClickVolumeScale());
+}
+
+void CShopUI::PlayUiErrorSound() const
+{
+	g_pFramework->PlayErrorSound(GetErrorVolumeScale());
+}
+
 void CShopUI::SetFinancialProductActive(int category, int productIndex, UINT durationSeconds)
 {
 	if (category < 0 || category >= 2 || productIndex < 0 || productIndex >= 10) return;

@@ -741,7 +741,7 @@ bool CShopUI::ProcessStockMenuClick(float x, float y, float width, float height)
 {
 	if (IsPointInRectangle(x, y, GetStockSlotRectangle(0, width, height)))
 	{
-		g_pFramework->PlayClickSound();
+		PlayUiClickSound();
 		m_eShopPage = SHOP_PAGE::STOCK_TRANSACTION;
 		m_bStockNameInputActive = false;
 		m_bStockTransactionQuantityInputActive = false;
@@ -750,7 +750,7 @@ bool CShopUI::ProcessStockMenuClick(float x, float y, float width, float height)
 	}
 	if (IsPointInRectangle(x, y, GetStockSlotRectangle(1, width, height)))
 	{
-		g_pFramework->PlayClickSound();
+		PlayUiClickSound();
 		m_eShopPage = m_bStockCreationAvailable ? SHOP_PAGE::STOCK_MANAGEMENT : SHOP_PAGE::STOCK_CANT_PUBLISH;
 		m_bStockNameInputActive = false;
 		if (m_eShopPage == SHOP_PAGE::STOCK_MANAGEMENT)

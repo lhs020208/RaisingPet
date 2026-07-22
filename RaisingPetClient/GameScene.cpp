@@ -848,10 +848,11 @@ void CGameScene::PlayCoinCollectionSounds(UINT nPossessionBeforeCollection, UINT
 		COIN_SOUND_MAX_PLAY_COUNT);
 	if (nCoinSoundCount == 0) return;
 
+	const float fVolume = m_ShopUI.GetCoinVolumeScale();
 	for (UINT i = 0; i < nCoinSoundCount; ++i)
 	{
 		g_pFramework->GetSoundManager().PlaySoundDelayed(
-			COIN_SOUND_KEY, static_cast<float>(i) * COIN_SOUND_DELAY_INTERVAL);
+			COIN_SOUND_KEY, static_cast<float>(i) * COIN_SOUND_DELAY_INTERVAL, fVolume);
 	}
 }
 
@@ -863,7 +864,8 @@ void CGameScene::CollectPetPossession(CPet* pPet)
 		+ ", Pet Possession: " + std::to_string(nPossessionBeforeCollection) + "\n";
 	OutputDebugStringA(strDebugMessage.c_str());
 
-	SpawnCoinEffects(pPet, nPossessionBeforeCollection);
+	if (m_ShopUI.IsCoinEffectEnabled())
+		SpawnCoinEffects(pPet, nPossessionBeforeCollection);
 	PlayCoinCollectionSounds(nPossessionBeforeCollection, pPet->GetMaxPossession());
 	m_nMoney += nPossessionBeforeCollection;
 	pPet->GetNowPossession(0);
@@ -1112,7 +1114,7 @@ void CGameScene::OnProcessingMouseMessage(HWND hWnd, UINT nMessageID, WPARAM wPa
 	{
 		if (m_pMousePressedPet)
 		{
-			m_pMousePressedPet->SetMovementAiPaused(false);
+			m_pMousePressedPet->SetMovementAiPaused(!m_ShopUI.IsPetMovementEnabled());
 			if (bCollectIfClick)
 				CollectPetPossession(m_pMousePressedPet);
 		}
@@ -1162,6 +1164,29 @@ void CGameScene::OnProcessingMouseMessage(HWND hWnd, UINT nMessageID, WPARAM wPa
 			const float fDeltaY = fMouseY - m_xmf2PetMouseDown.y;
 			const bool bCollectIfClick = !m_bPetDragging
 				&& (fDeltaX * fDeltaX + fDeltaY * fDeltaY) < PET_CLICK_DRAG_THRESHOLD_SQ;
+			FinishPetMouseInteraction(bCollectIfClick);
+			return;
+		}
+	}
+
+	if (m_pMousePressedPet && !m_bPetDragCandidate && !m_bPetDragging
+		&& !m_ShopUI.IsPetDragEnabled())
+	{
+		if (nMessageID == WM_MOUSEMOVE)
+		{
+			if (!(wParam & MK_LBUTTON))
+			{
+				FinishPetMouseInteraction(false);
+				return;
+			}
+			return;
+		}
+		else if (nMessageID == WM_LBUTTONUP)
+		{
+			const float fDeltaX = fMouseX - m_xmf2PetMouseDown.x;
+			const float fDeltaY = fMouseY - m_xmf2PetMouseDown.y;
+			const bool bCollectIfClick =
+				(fDeltaX * fDeltaX + fDeltaY * fDeltaY) < PET_CLICK_DRAG_THRESHOLD_SQ;
 			FinishPetMouseInteraction(bCollectIfClick);
 			return;
 		}
@@ -1227,26 +1252,29 @@ void CGameScene::OnProcessingMouseMessage(HWND hWnd, UINT nMessageID, WPARAM wPa
 	if (nMessageID == WM_LBUTTONDOWN && m_pPointedPet)
 	{
 		m_pMousePressedPet = m_pPointedPet;
-		m_bPetDragCandidate = true;
+		m_bPetDragCandidate = m_ShopUI.IsPetDragEnabled();
 		m_bPetDragging = false;
 		m_xmf2PetMouseDown = XMFLOAT2(fMouseX, fMouseY);
 
-		const XMFLOAT3 xmf3PetPosition = m_pMousePressedPet->GetPosition();
-		m_fPetDragPlaneZ = xmf3PetPosition.z;
-		XMFLOAT3 xmf3WorldPosition;
-		if (GetMouseWorldPositionOnZPlane(static_cast<int>(fMouseX), static_cast<int>(fMouseY),
-			m_pLastPickCamera, m_fPetDragPlaneZ, xmf3WorldPosition))
+		if (m_bPetDragCandidate)
 		{
-			m_xmf3PetDragOffset = XMFLOAT3(
-				xmf3PetPosition.x - xmf3WorldPosition.x,
-				xmf3PetPosition.y - xmf3WorldPosition.y,
-				0.0f);
+			const XMFLOAT3 xmf3PetPosition = m_pMousePressedPet->GetPosition();
+			m_fPetDragPlaneZ = xmf3PetPosition.z;
+			XMFLOAT3 xmf3WorldPosition;
+			if (GetMouseWorldPositionOnZPlane(static_cast<int>(fMouseX), static_cast<int>(fMouseY),
+				m_pLastPickCamera, m_fPetDragPlaneZ, xmf3WorldPosition))
+			{
+				m_xmf3PetDragOffset = XMFLOAT3(
+					xmf3PetPosition.x - xmf3WorldPosition.x,
+					xmf3PetPosition.y - xmf3WorldPosition.y,
+					0.0f);
+			}
+			else
+			{
+				m_xmf3PetDragOffset = XMFLOAT3(0.0f, 0.0f, 0.0f);
+			}
+			m_pMousePressedPet->SetMovementAiPaused(true);
 		}
-		else
-		{
-			m_xmf3PetDragOffset = XMFLOAT3(0.0f, 0.0f, 0.0f);
-		}
-		m_pMousePressedPet->SetMovementAiPaused(true);
 		SetCapture(hWnd);
 		return;
 	}
@@ -1480,7 +1508,24 @@ void CGameScene::Animate(float fElapsedTime)
 		CPet* pActivePet = m_vPetResources[m_nActivePetIndex].pPet;
 		if (pActivePet)
 		{
-			pActivePet->Animate(fElapsedTime);
+			if (m_ShopUI.IsPetMovementEnabled())
+			{
+				if (!m_bPetDragging)
+					pActivePet->SetMovementAiPaused(false);
+				pActivePet->Animate(fElapsedTime);
+			}
+			else
+			{
+				pActivePet->StopMovementAndFaceFront();
+				pActivePet->Animate(fElapsedTime);
+			}
+			if (!m_ShopUI.IsPetDragEnabled())
+			{
+				XMFLOAT3 petPosition = pActivePet->GetPosition();
+				petPosition.y = PET_DRAG_MIN_Y;
+				pActivePet->SetPosition(petPosition);
+				pActivePet->UpdateBoundingBox();
+			}
 			if (pActivePet->ConsumeAutoCollectRequest())
 				CollectPetPossession(pActivePet);
 		}

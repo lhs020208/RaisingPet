@@ -473,14 +473,14 @@ void CGameFramework::ProcessInput()
 	// Keep the native cursor visible and allow it to move while interacting with pets and UI.
 }
 
-void CGameFramework::PlayErrorSound()
+void CGameFramework::PlayErrorSound(float fVolume)
 {
-	m_SoundManager.PlaySound(ERROR_SOUND_KEY);
+	m_SoundManager.PlaySound(ERROR_SOUND_KEY, fVolume);
 }
 
-void CGameFramework::PlayClickSound()
+void CGameFramework::PlayClickSound(float fVolume)
 {
-	m_SoundManager.PlaySound(CLICK_SOUND_KEY);
+	m_SoundManager.PlaySound(CLICK_SOUND_KEY, fVolume);
 }
 
 void CGameFramework::AnimateObjects()

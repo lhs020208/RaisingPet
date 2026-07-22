@@ -25,7 +25,7 @@ bool CShopUI::ProcessSettingBoardClick(HWND hWnd, float x, float y, float width,
 		m_xmf2SettingBoardOffset.x, m_xmf2SettingBoardOffset.y);
 	if (IsPointInRectangle(x, y, close))
 	{
-		g_pFramework->PlayClickSound();
+		PlayUiClickSound();
 		const float halfWidth = (board.z - board.x) * 0.5f;
 		const float halfHeight = (board.w - board.y) * 0.5f;
 		m_bResetSettingPositionOnNextOpen = board.x < -halfWidth
@@ -41,7 +41,7 @@ bool CShopUI::ProcessSettingBoardClick(HWND hWnd, float x, float y, float width,
 	{
 		if (!IsPointInRectangle(x, y, GetSettingCheckBoxRectangle(i, width, height,
 			m_xmf2SettingBoardOffset.x, m_xmf2SettingBoardOffset.y))) continue;
-		g_pFramework->PlayClickSound();
+		PlayUiClickSound();
 		m_bSettingPetOptions[i] = !m_bSettingPetOptions[i];
 		return(true);
 	}
@@ -52,7 +52,7 @@ bool CShopUI::ProcessSettingBoardClick(HWND hWnd, float x, float y, float width,
 		const XMFLOAT4 handle = GetSettingSliderHandleRectangle(i, GetSettingSliderRatio(i),
 			width, height, m_xmf2SettingBoardOffset.x, m_xmf2SettingBoardOffset.y);
 		if (!IsPointInRectangle(x, y, bar) && !IsPointInRectangle(x, y, handle)) continue;
-		g_pFramework->PlayClickSound();
+		PlayUiClickSound();
 		UpdateSettingSliderFromCursor(i, x, width, height);
 		m_nDraggingSettingSlider = i;
 		SetCapture(hWnd);
@@ -71,7 +71,7 @@ bool CShopUI::ProcessShopUIClick(float x, float y, float width, float height, UI
 	const bool settingIconClicked = IsPointInRectangle(x, y, GetSettingIconRectangle(width, height));
 	if (settingIconClicked)
 	{
-		g_pFramework->PlayClickSound();
+		PlayUiClickSound();
 		if (m_bSettingActive)
 		{
 			m_bSettingActive = false;
@@ -95,7 +95,7 @@ bool CShopUI::ProcessShopUIClick(float x, float y, float width, float height, UI
 		GetShopCloseRectangle(width, height, m_xmf2ShopBoardOffset.x, m_xmf2ShopBoardOffset.y));
 	if (iconClicked || closeClicked)
 	{
-		g_pFramework->PlayClickSound();
+		PlayUiClickSound();
 		if (m_bShopActive) DeactivateShop(width, height, activePetIndex);
 		else
 		{
@@ -117,7 +117,7 @@ bool CShopUI::ProcessShopUIClick(float x, float y, float width, float height, UI
 	if (IsPointInRectangle(x, y,
 		GetShopBackRectangle(width, height, m_xmf2ShopBoardOffset.x, m_xmf2ShopBoardOffset.y)))
 	{
-		g_pFramework->PlayClickSound();
+		PlayUiClickSound();
 		if (m_eShopPage == SHOP_PAGE::SHOP_MENU) DeactivateShop(width, height, activePetIndex);
 		else if (m_eShopPage == SHOP_PAGE::STOCK_SEE_MYGRAPH)
 		{
@@ -168,7 +168,7 @@ bool CShopUI::ProcessShopUIClick(float x, float y, float width, float height, UI
 				SpawnNetworkErrorLog(width, height, i);
 				return(true);
 			}
-			g_pFramework->PlayClickSound();
+			PlayUiClickSound();
 			switch (i)
 			{
 			case 0: m_eShopPage = SHOP_PAGE::PET_CHANGE; break;
@@ -196,7 +196,7 @@ bool CShopUI::ProcessShopUIClick(float x, float y, float width, float height, UI
 		{
 			if (m_nSelectedPetIndex < petCount)
 			{
-				g_pFramework->PlayClickSound();
+				PlayUiClickSound();
 				m_nPendingConfirmedPetIndex = m_nSelectedPetIndex;
 			}
 			return(true);
@@ -232,7 +232,7 @@ bool CShopUI::ProcessShopUIClick(float x, float y, float width, float height, UI
 		if (IsPointInRectangle(x, y, GetStockGraphButtonRectangle(width, height)))
 		{
 			if (!m_bStockIssued) return(true);
-			g_pFramework->PlayClickSound();
+			PlayUiClickSound();
 			m_eShopPage = SHOP_PAGE::STOCK_SEE_MYGRAPH;
 			m_bStockNameInputActive = false;
 			m_bStockIssueButtonPressed = false;
@@ -251,7 +251,7 @@ bool CShopUI::ProcessShopUIClick(float x, float y, float width, float height, UI
 		{
 			if (!IsStockTradeButtonDisabled(0, money))
 			{
-				g_pFramework->PlayClickSound();
+				PlayUiClickSound();
 				QueueStockTradeRequest(0);
 			}
 			return(true);
@@ -262,7 +262,7 @@ bool CShopUI::ProcessShopUIClick(float x, float y, float width, float height, UI
 		{
 			if (!IsStockTradeButtonDisabled(1, money))
 			{
-				g_pFramework->PlayClickSound();
+				PlayUiClickSound();
 				QueueStockTradeRequest(1);
 			}
 			return(true);
@@ -270,7 +270,7 @@ bool CShopUI::ProcessShopUIClick(float x, float y, float width, float height, UI
 		if (!m_StockTransactionInfos.empty()
 			&& IsPointInRectangle(x, y, GetStockTransactionGraphButtonRectangle(width, height)))
 		{
-			g_pFramework->PlayClickSound();
+			PlayUiClickSound();
 			m_eShopPage = SHOP_PAGE::STOCK_SEE_TARGET_GRAPH;
 			m_bStockTransactionQuantityInputActive = false;
 			return(true);
@@ -304,7 +304,7 @@ bool CShopUI::ProcessShopUIClick(float x, float y, float width, float height, UI
 		{
 			if (!IsStockTradeButtonDisabled(0, money))
 			{
-				g_pFramework->PlayClickSound();
+				PlayUiClickSound();
 				QueueStockTradeRequest(0);
 			}
 			return(true);
@@ -315,7 +315,7 @@ bool CShopUI::ProcessShopUIClick(float x, float y, float width, float height, UI
 		{
 			if (!IsStockTradeButtonDisabled(1, money))
 			{
-				g_pFramework->PlayClickSound();
+				PlayUiClickSound();
 				QueueStockTradeRequest(1);
 			}
 			return(true);
@@ -843,7 +843,7 @@ bool CShopUI::OnProcessingMouseMessage(HWND hWnd, UINT message, WPARAM wParam, L
 				&& IsPointInRectangle(x, y, GetStockIssuanceButtonRectangle(width, height))
 				&& !m_wstrStockName.empty())
 			{
-				g_pFramework->PlayClickSound();
+				PlayUiClickSound();
 				m_wstrPendingStockIssueName = m_wstrStockName;
 				m_bPendingStockIssueRequest = true;
 			}
@@ -857,7 +857,7 @@ bool CShopUI::OnProcessingMouseMessage(HWND hWnd, UINT message, WPARAM wParam, L
 			if (m_bShopActive && m_eShopPage == SHOP_PAGE::PET_ENHANCE
 				&& IsPointInRectangle(x, y, GetEnhanceButtonRectangle(pressedButton, width, height)))
 			{
-				g_pFramework->PlayClickSound();
+				PlayUiClickSound();
 				m_nPendingEnhancementType = pressedButton;
 			}
 			if (GetCapture() == hWnd) ReleaseCapture();

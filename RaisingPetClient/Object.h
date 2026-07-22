@@ -75,6 +75,7 @@ public:
 	void AnimateWithoutMovement(float fTimeElapsed);
 	void CopyRuntimeStateFrom(const CPet& sourcePet);
 	void SetMovementAiPaused(bool bPaused);
+	void StopMovementAndFaceFront();
 	bool IsMovementAiPaused() const { return m_bMovementAiPaused; }
 
 private:

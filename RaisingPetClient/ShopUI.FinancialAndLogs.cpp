@@ -7,7 +7,7 @@ bool CShopUI::ProcessFinancialClick(float x, float y, float width, float height,
 	for (int category = 0; category < 2; ++category)
 	{
 		if (!IsPointInRectangle(x, y, GetFinancialCategoryButtonRectangle(category, width, height))) continue;
-		g_pFramework->PlayClickSound();
+		PlayUiClickSound();
 		m_nFinancialCategory = category;
 		return(true);
 	}
@@ -18,7 +18,7 @@ bool CShopUI::ProcessFinancialClick(float x, float y, float width, float height,
 		int& index = m_nFinancialProductIndices[m_nFinancialCategory];
 		if (index > 0)
 		{
-			g_pFramework->PlayClickSound();
+			PlayUiClickSound();
 			--index;
 		}
 		return(true);
@@ -29,7 +29,7 @@ bool CShopUI::ProcessFinancialClick(float x, float y, float width, float height,
 		int& index = m_nFinancialProductIndices[m_nFinancialCategory];
 		if (index < 9 && index < m_nFinancialMaximumProductIndices[m_nFinancialCategory])
 		{
-			g_pFramework->PlayClickSound();
+			PlayUiClickSound();
 			++index;
 		}
 		return(true);
@@ -38,7 +38,7 @@ bool CShopUI::ProcessFinancialClick(float x, float y, float width, float height,
 	{
 		if (!IsFinancialApplicationButtonDisabled(money))
 		{
-			g_pFramework->PlayClickSound();
+			PlayUiClickSound();
 			m_nPendingFinancialCategory = m_nFinancialCategory;
 			m_nPendingFinancialProductIndex = m_nFinancialProductIndices[m_nFinancialCategory];
 		}
@@ -91,7 +91,7 @@ void CShopUI::RenderFinancialFailLogs(ID3D12GraphicsCommandList* commandList, CC
 			m_FinancialFailLogs[category].clear();
 			m_FinancialFailLogs[category].push_back(log);
 			m_bPendingFinancialFailLog[category] = false;
-			g_pFramework->PlayErrorSound();
+			PlayUiErrorSound();
 		}
 
 		for (const SHOP_NETWORK_ERROR_LOG& log : m_FinancialFailLogs[category])
@@ -115,7 +115,7 @@ void CShopUI::SpawnNetworkErrorLog(float width, float height, int slotIndex)
 	log.fElapsedTime = 0.0f;
 	m_NetworkErrorLogs.clear();
 	m_NetworkErrorLogs.push_back(log);
-	g_pFramework->PlayErrorSound();
+	PlayUiErrorSound();
 }
 
 void CShopUI::SpawnNetworkErrorLogAtNetworkIcon(float width, float height)
@@ -126,7 +126,7 @@ void CShopUI::SpawnNetworkErrorLogAtNetworkIcon(float width, float height)
 	log.fElapsedTime = 0.0f;
 	m_NetworkErrorLogs.clear();
 	m_NetworkErrorLogs.push_back(log);
-	g_pFramework->PlayErrorSound();
+	PlayUiErrorSound();
 }
 
 bool CShopUI::IsNetworkRequiredPage() const
@@ -189,7 +189,7 @@ void CShopUI::RenderStockIssueErrorLogs(ID3D12GraphicsCommandList* commandList, 
 		m_StockIssueErrorLogs.clear();
 		m_StockIssueErrorLogs.push_back(log);
 		m_bPendingStockIssueErrorLog = false;
-		g_pFramework->PlayErrorSound();
+		PlayUiErrorSound();
 	}
 
 	for (const SHOP_NETWORK_ERROR_LOG& log : m_StockIssueErrorLogs)
@@ -243,7 +243,7 @@ void CShopUI::RenderStockTradeFailLogs(ID3D12GraphicsCommandList* commandList, C
 			m_StockTradeFailLogs[action].clear();
 			m_StockTradeFailLogs[action].push_back(log);
 			m_bPendingStockTradeFailLog[action] = false;
-			g_pFramework->PlayErrorSound();
+			PlayUiErrorSound();
 		}
 
 		UI_IMAGE_RESOURCE& resource = (action == 0)

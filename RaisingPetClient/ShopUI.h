@@ -113,6 +113,13 @@ public:
 	void SetStockTransactionInfos(const std::vector<SHOP_STOCK_TRANSACTION_INFO>& infos);
 	bool IsStockIssued() const { return m_bStockIssued; }
 	const std::wstring& GetStockName() const { return m_wstrStockName; }
+	bool IsPetMovementEnabled() const { return m_bSettingPetOptions[0]; }
+	bool IsPetDragEnabled() const { return m_bSettingPetOptions[1]; }
+	bool IsCoinEffectEnabled() const { return m_bSettingPetOptions[2]; }
+	float GetMasterVolumeScale() const;
+	float GetClickVolumeScale() const;
+	float GetErrorVolumeScale() const;
+	float GetCoinVolumeScale() const;
 
 private:
 	struct UI_IMAGE_RESOURCE
@@ -374,4 +381,6 @@ private:
 		const SHOP_TEXT_RENDER_CONTEXT& textContext) const;
 	bool IsStockTradeButtonDisabled(int nAction, UINT nMoney) const;
 	void QueueStockTradeRequest(int nAction);
+	void PlayUiClickSound() const;
+	void PlayUiErrorSound() const;
 };
