@@ -432,7 +432,7 @@ bool ProcessPersistentPacketBuffer(std::vector<char>& receiveBuffer,
 				cursor += stockNameLength;
 				const std::uint16_t issuerIdLength = ReadUInt16(cursor);
 				cursor += sizeof(std::uint16_t);
-				if (issuerIdLength > 32 || cursor + issuerIdLength + sizeof(std::uint64_t) * 2
+				if (issuerIdLength > 96 || cursor + issuerIdLength + sizeof(std::uint64_t) * 2
 					+ sizeof(std::uint32_t) * 3 > end) return(false);
 				info.strIssuerId.assign(cursor, cursor + issuerIdLength);
 				cursor += issuerIdLength;

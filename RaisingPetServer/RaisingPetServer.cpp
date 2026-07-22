@@ -184,6 +184,7 @@ struct PlayerLoanSeeInfo {
 
 struct PlayerSeeInfo {
 	std::string playerId;
+	std::string nickname;
 	std::uint64_t money = 0;
 	bool isOnline = false;
 	bool isActive = false;
@@ -233,6 +234,7 @@ struct StockTransactionInfo {
 	std::uint32_t stockId = 0;
 	std::string stockName;
 	std::string issuerId;
+	std::string issuerNickname;
 	std::uint64_t currentPrice = kInitialStockPrice;
 	std::uint64_t previousPrice = kInitialStockPrice;
 	std::uint32_t saleableQuantity = 0;
@@ -999,7 +1001,8 @@ public:
 
 		const std::string escapedId = Escape(id);
 		const std::string query =
-			"SELECT `PlayerID`, `Money`, `IsOnline`, `IsActive` FROM `Player` WHERE `PlayerID` = '" +
+			"SELECT `PlayerID`, COALESCE(`Nickname`, ''), `Money`, `IsOnline`, `IsActive` "
+			"FROM `Player` WHERE `PlayerID` = '" +
 			escapedId + "' LIMIT 1";
 		if (mysql_query(connection_, query.c_str()) != 0) {
 			failureReason = std::string("failed to select player: ") + mysql_error(connection_);
@@ -1018,9 +1021,10 @@ public:
 			return false;
 		}
 		info.playerId = row[0] ? row[0] : "";
-		info.money = row[1] ? std::stoull(row[1]) : 0;
-		info.isOnline = row[2] && std::string(row[2]) != "0";
-		info.isActive = row[3] && std::string(row[3]) != "0";
+		info.nickname = row[1] ? row[1] : "";
+		info.money = row[2] ? std::stoull(row[2]) : 0;
+		info.isOnline = row[3] && std::string(row[3]) != "0";
+		info.isActive = row[4] && std::string(row[4]) != "0";
 		mysql_free_result(result);
 
 		if (detail && !LoadSeeFinancialDetails(escapedId, info, failureReason))
@@ -1031,7 +1035,7 @@ public:
 	bool LoadAllPlayerSeeInfos(bool detail, bool onlineOnly, bool sortByMoney,
 		std::vector<PlayerSeeInfo>& infos, std::string& failureReason) {
 		infos.clear();
-		std::string query = "SELECT `PlayerID`, `Money`, `IsOnline`, `IsActive` FROM `Player`";
+		std::string query = "SELECT `PlayerID`, COALESCE(`Nickname`, ''), `Money`, `IsOnline`, `IsActive` FROM `Player`";
 		if (onlineOnly) query += " WHERE `IsOnline` = TRUE";
 		if (sortByMoney) query += " ORDER BY `Money` DESC, `PlayerID` ASC";
 
@@ -1049,9 +1053,10 @@ public:
 		while ((row = mysql_fetch_row(result)) != nullptr) {
 			PlayerSeeInfo info;
 			info.playerId = row[0] ? row[0] : "";
-			info.money = row[1] ? std::stoull(row[1]) : 0;
-			info.isOnline = row[2] && std::string(row[2]) != "0";
-			info.isActive = row[3] && std::string(row[3]) != "0";
+			info.nickname = row[1] ? row[1] : "";
+			info.money = row[2] ? std::stoull(row[2]) : 0;
+			info.isOnline = row[3] && std::string(row[3]) != "0";
+			info.isActive = row[4] && std::string(row[4]) != "0";
 			infos.push_back(info);
 		}
 		mysql_free_result(result);
@@ -1244,7 +1249,8 @@ public:
 
 		const std::string escapedId = Escape(id);
 		const std::string query =
-			"SELECT `S`.`StockID`, `S`.`StockName`, `S`.`IssuerID`, `S`.`CurrentPrice`, "
+			"SELECT `S`.`StockID`, `S`.`StockName`, `S`.`IssuerID`, "
+			"COALESCE(NULLIF(`P`.`Nickname`, ''), `S`.`IssuerID`), `S`.`CurrentPrice`, "
 			"COALESCE((SELECT `SP`.`PreviousPrice` FROM `StockPrice` `SP` "
 			"WHERE `SP`.`StockID` = `S`.`StockID` "
 			"ORDER BY `SP`.`ChangedTime` DESC, `SP`.`StockPriceID` DESC LIMIT 1), `S`.`CurrentPrice`), "
@@ -1255,7 +1261,9 @@ public:
 			"COALESCE((SELECT `ST`.`Quantity` FROM `StockTrade` `ST` "
 			"WHERE `ST`.`StockID` = `S`.`StockID` "
 			"ORDER BY `ST`.`TradeTime` DESC, `ST`.`TradeID` DESC LIMIT 1), 0) "
-			"FROM `Stock` `S` WHERE `S`.`IssuerID` <> '" + escapedId + "' "
+			"FROM `Stock` `S` "
+			"JOIN `Player` `P` ON `P`.`PlayerID` = `S`.`IssuerID` "
+			"WHERE `S`.`IssuerID` <> '" + escapedId + "' "
 			"ORDER BY `S`.`StockID` ASC";
 		if (mysql_query(connection_, query.c_str()) != 0) {
 			failureReason = std::string("failed to select stock transaction infos: ") + mysql_error(connection_);
@@ -1273,11 +1281,12 @@ public:
 			info.stockId = row[0] ? static_cast<std::uint32_t>(std::stoul(row[0])) : 0;
 			info.stockName = row[1] ? row[1] : "";
 			info.issuerId = row[2] ? row[2] : "";
-			info.currentPrice = row[3] ? std::stoull(row[3]) : kInitialStockPrice;
-			info.previousPrice = row[4] ? std::stoull(row[4]) : info.currentPrice;
-			const std::uint64_t saleable = row[5] ? std::stoull(row[5]) : 0;
-			const std::uint64_t myQuantity = row[6] ? std::stoull(row[6]) : 0;
-			const std::uint64_t recentTrade = row[7] ? std::stoull(row[7]) : 0;
+			info.issuerNickname = row[3] ? row[3] : info.issuerId;
+			info.currentPrice = row[4] ? std::stoull(row[4]) : kInitialStockPrice;
+			info.previousPrice = row[5] ? std::stoull(row[5]) : info.currentPrice;
+			const std::uint64_t saleable = row[6] ? std::stoull(row[6]) : 0;
+			const std::uint64_t myQuantity = row[7] ? std::stoull(row[7]) : 0;
+			const std::uint64_t recentTrade = row[8] ? std::stoull(row[8]) : 0;
 			info.saleableQuantity = static_cast<std::uint32_t>(
 				(saleable > UINT_MAX) ? UINT_MAX : saleable);
 			info.myQuantity = static_cast<std::uint32_t>(
@@ -2766,17 +2775,19 @@ std::vector<char> MakeStockTransactionListResponse(const std::vector<StockTransa
 	const std::uint8_t stockCount = static_cast<std::uint8_t>(std::min<size_t>(infos.size(), 20));
 	std::uint16_t variableSize = 0;
 	std::uint16_t stockNameLengths[20] = {};
-	std::uint16_t issuerIdLengths[20] = {};
+	std::uint16_t issuerDisplayNameLengths[20] = {};
 	std::uint8_t recentPriceCounts[20] = {};
 	std::uint16_t recentTimeLengths[20][10] = {};
 	std::uint16_t fixedRecentSize = 0;
 	for (std::uint8_t i = 0; i < stockCount; ++i) {
 		stockNameLengths[i] = static_cast<std::uint16_t>(
 			std::min<size_t>(infos[i].stockName.size(), 150));
-		issuerIdLengths[i] = static_cast<std::uint16_t>(
-			std::min<size_t>(infos[i].issuerId.size(), 32));
+		const std::string& issuerDisplayName = infos[i].issuerNickname.empty()
+			? infos[i].issuerId : infos[i].issuerNickname;
+		issuerDisplayNameLengths[i] = static_cast<std::uint16_t>(
+			std::min<size_t>(issuerDisplayName.size(), 96));
 		variableSize = static_cast<std::uint16_t>(
-			variableSize + stockNameLengths[i] + issuerIdLengths[i]);
+			variableSize + stockNameLengths[i] + issuerDisplayNameLengths[i]);
 		recentPriceCounts[i] = static_cast<std::uint8_t>(
 			std::min<size_t>(infos[i].recentPrices.size(), 10));
 		for (std::uint8_t priceIndex = 0; priceIndex < recentPriceCounts[i]; ++priceIndex) {
@@ -2805,9 +2816,11 @@ std::vector<char> MakeStockTransactionListResponse(const std::vector<StockTransa
 		WriteUInt16(packet, stockNameLengths[i]);
 		packet.insert(packet.end(), info.stockName.begin(),
 			info.stockName.begin() + stockNameLengths[i]);
-		WriteUInt16(packet, issuerIdLengths[i]);
-		packet.insert(packet.end(), info.issuerId.begin(),
-			info.issuerId.begin() + issuerIdLengths[i]);
+		const std::string& issuerDisplayName = info.issuerNickname.empty()
+			? info.issuerId : info.issuerNickname;
+		WriteUInt16(packet, issuerDisplayNameLengths[i]);
+		packet.insert(packet.end(), issuerDisplayName.begin(),
+			issuerDisplayName.begin() + issuerDisplayNameLengths[i]);
 		WriteUInt64(packet, info.currentPrice);
 		WriteUInt64(packet, info.previousPrice);
 		WriteUInt32(packet, info.saleableQuantity);
@@ -3006,7 +3019,9 @@ std::string OnlineText(bool online) {
 void AppendBasicPlayerSeeLine(std::ostringstream& output, const PlayerSeeInfo& info,
 	bool includeOnline, int index) {
 	if (index > 0) output << index << ". ";
-	output << "ID: " << info.playerId << " | Money: " << info.money;
+	output << "ID: " << info.playerId
+		<< " | Nickname: " << (info.nickname.empty() ? "-" : info.nickname)
+		<< " | Money: " << info.money;
 	if (includeOnline) output << " | Online: " << OnlineText(info.isOnline);
 	output << " | Active: " << OnlineText(info.isActive);
 }
@@ -3015,6 +3030,7 @@ void AppendDetailedPlayerSeeLines(std::ostringstream& output, const PlayerSeeInf
 	bool includeOnline, int index) {
 	if (index > 0) output << "[" << index << "] ";
 	output << "ID: " << info.playerId << '\n';
+	output << "  Nickname: " << (info.nickname.empty() ? "-" : info.nickname) << '\n';
 	output << "  Money: " << info.money << '\n';
 	if (includeOnline) output << "  Online: " << OnlineText(info.isOnline) << '\n';
 	output << "  Active: " << OnlineText(info.isActive) << '\n';

@@ -14,12 +14,12 @@ ALTER TABLE Player
 -- Existing test accounts do not have nickname/first-login consistency.
 -- Clear them after child rows so the new flow starts cleanly.
 SET FOREIGN_KEY_CHECKS = 0;
-DELETE FROM StockPrice;
-DELETE FROM StockTrade;
-DELETE FROM StockSale;
-DELETE FROM StockHolding;
-DELETE FROM Stock;
-DELETE FROM PlayerLoan;
-DELETE FROM PlayerSavings;
-DELETE FROM Player;
+TRUNCATE TABLE StockPrice;
+TRUNCATE TABLE StockTrade;
+TRUNCATE TABLE StockSale;
+TRUNCATE TABLE StockHolding;
+TRUNCATE TABLE Stock;
+TRUNCATE TABLE PlayerLoan;
+TRUNCATE TABLE PlayerSavings;
+TRUNCATE TABLE Player;
 SET FOREIGN_KEY_CHECKS = 1;
