@@ -93,6 +93,11 @@
     <Link>
       <SubSystem>Windows</SubSystem>
     </Link>
+    <PostBuildEvent>
+      <Command>copy /Y "$(ProjectDir)External\FMOD\lib\x64\fmodL.dll" "$(OutDir)"
+if not exist "$(OutDir)Assets\Sound\" mkdir "$(OutDir)Assets\Sound\"
+copy /Y "$(ProjectDir)Assets\Sound\CoinSound.mp3" "$(OutDir)Assets\Sound\"</Command>
+    </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <ClCompile>
@@ -135,14 +140,19 @@
       <OptimizeReferences>true</OptimizeReferences>
     </Link>
     <PostBuildEvent>
-      <Command>
-      </Command>
+      <Command>copy /Y "$(ProjectDir)External\FMOD\lib\x64\fmod.dll" "$(OutDir)"
+if not exist "$(OutDir)Assets\Sound\" mkdir "$(OutDir)Assets\Sound\"
+copy /Y "$(ProjectDir)Assets\Sound\CoinSound.mp3" "$(OutDir)Assets\Sound\"
+if exist "$(ProjectDir)Executable\" copy /Y "$(ProjectDir)External\FMOD\lib\x64\fmod.dll" "$(ProjectDir)Executable\"
+if exist "$(ProjectDir)Executable\" if not exist "$(ProjectDir)Executable\Assets\Sound\" mkdir "$(ProjectDir)Executable\Assets\Sound\"
+if exist "$(ProjectDir)Executable\" copy /Y "$(ProjectDir)Assets\Sound\CoinSound.mp3" "$(ProjectDir)Executable\Assets\Sound\"</Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="Camera.h" />
     <ClInclude Include="ClientNetworkManager.h" />
     <ClInclude Include="D2DTextRenderer.h" />
+    <ClInclude Include="FmodSoundManager.h" />
     <ClInclude Include="GameScene.h" />
     <ClInclude Include="LoginScene.h" />
     <ClInclude Include="SceneManager.h" />
@@ -165,6 +175,7 @@
     <ClCompile Include="ClientNetworkManager.cpp" />
     <ClCompile Include="D2DTextRenderer.cpp" />
     <ClCompile Include="DDSTextureLoader12.cpp" />
+    <ClCompile Include="FmodSoundManager.cpp" />
     <ClCompile Include="GameFramework.cpp" />
     <ClCompile Include="GameScene.cpp" />
     <ClCompile Include="LoginScene.cpp" />

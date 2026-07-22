@@ -97,6 +97,10 @@ constexpr float PET_DRAG_MAX_X = 45.0f;
 constexpr float PET_DRAG_MIN_Y = -28.0f;
 constexpr float PET_DRAG_MAX_Y = 15.0f;
 constexpr float PET_CLICK_DRAG_THRESHOLD_SQ = 16.0f;
+const char* COIN_SOUND_KEY = "CoinSound";
+const char* COIN_SOUND_FILE_PATH = "Assets\\Sound\\CoinSound.mp3";
+constexpr float COIN_SOUND_DELAY_INTERVAL = 0.035f;
+constexpr UINT COIN_SOUND_MAX_PLAY_COUNT = 5;
 
 float ClampFloat(float value, float minimumValue, float maximumValue)
 {
@@ -111,6 +115,16 @@ XMFLOAT3 ClampPetDragPosition(const XMFLOAT3& position)
 		ClampFloat(position.x, PET_DRAG_MIN_X, PET_DRAG_MAX_X),
 		ClampFloat(position.y, PET_DRAG_MIN_Y, PET_DRAG_MAX_Y),
 		position.z));
+}
+
+UINT CalculateCoinCount(UINT nPossession, UINT nMaxPossession)
+{
+	if (nPossession == 0 || nMaxPossession == 0) return(0);
+
+	UINT nCoinCount = static_cast<UINT>((static_cast<UINT64>(nPossession) * 10
+		+ nMaxPossession - 1) / nMaxPossession);
+	if (nCoinCount > 10) nCoinCount = 10;
+	return(nCoinCount);
 }
 
 bool GetMouseWorldPositionOnZPlane(int xClient, int yClient, CCamera* pCamera,
@@ -535,6 +549,7 @@ void CGameScene::BuildObjects(ID3D12Device* pd3dDevice, ID3D12GraphicsCommandLis
 	pd3dDevice->CreateShaderResourceView(m_pd3dCoinTexture, &coinSrvDesc,
 		m_pd3dCoinSrvDescriptorHeap->GetCPUDescriptorHandleForHeapStart());
 	m_ShopUI.BuildObjects(pd3dDevice, pd3dCommandList, m_pd3dGraphicsRootSignature, m_vPetResources.size());
+	g_pFramework->GetSoundManager().LoadSound(COIN_SOUND_KEY, COIN_SOUND_FILE_PATH);
 }
 
 void CGameScene::ReleaseObjects()
@@ -797,9 +812,7 @@ void CGameScene::SpawnCoinEffects(CPet* pPet, UINT nPossessionBeforeCollection)
 	const UINT nMaxPossession = pPet->GetMaxPossession();
 	if (nMaxPossession == 0) return;
 
-	UINT nCoinCount = static_cast<UINT>((static_cast<UINT64>(nPossessionBeforeCollection) * 10
-		+ nMaxPossession - 1) / nMaxPossession);
-	if (nCoinCount > 10) nCoinCount = 10;
+	const UINT nCoinCount = CalculateCoinCount(nPossessionBeforeCollection, nMaxPossession);
 
 	std::uniform_real_distribution<float> angleDistribution(0.0f, XM_PI);
 	std::uniform_real_distribution<float> speedDistribution(9.0f, 11.0f);
@@ -818,6 +831,19 @@ void CGameScene::SpawnCoinEffects(CPet* pPet, UINT nPossessionBeforeCollection)
 	}
 }
 
+void CGameScene::PlayCoinCollectionSounds(UINT nPossessionBeforeCollection, UINT nMaxPossession)
+{
+	const UINT nCoinSoundCount = min(CalculateCoinCount(nPossessionBeforeCollection, nMaxPossession),
+		COIN_SOUND_MAX_PLAY_COUNT);
+	if (nCoinSoundCount == 0) return;
+
+	for (UINT i = 0; i < nCoinSoundCount; ++i)
+	{
+		g_pFramework->GetSoundManager().PlaySoundDelayed(
+			COIN_SOUND_KEY, static_cast<float>(i) * COIN_SOUND_DELAY_INTERVAL);
+	}
+}
+
 void CGameScene::CollectPetPossession(CPet* pPet)
 {
 	if (!pPet) return;
@@ -827,6 +853,7 @@ void CGameScene::CollectPetPossession(CPet* pPet)
 	OutputDebugStringA(strDebugMessage.c_str());
 
 	SpawnCoinEffects(pPet, nPossessionBeforeCollection);
+	PlayCoinCollectionSounds(nPossessionBeforeCollection, pPet->GetMaxPossession());
 	m_nMoney += nPossessionBeforeCollection;
 	pPet->GetNowPossession(0);
 

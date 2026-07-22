@@ -64,6 +64,7 @@ private:
 
 	void RenderPetPossessionText(ID3D12GraphicsCommandList* pd3dCommandList, CCamera* pCamera, CPet* pPet);
 	void CollectPetPossession(CPet* pPet);
+	void PlayCoinCollectionSounds(UINT nPossessionBeforeCollection, UINT nMaxPossession);
 	void SpawnCoinEffects(CPet* pPet, UINT nPossessionBeforeCollection);
 	void AnimateCoinEffects(float fElapsedTime);
 	void RenderCoinEffects(ID3D12GraphicsCommandList* pd3dCommandList, CCamera* pCamera);

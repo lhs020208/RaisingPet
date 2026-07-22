@@ -484,3 +484,12 @@ FodyWeavers.xsd
 RaisingPetClient/Network/AccountInformation.rpacct
 RaisingPetClient/Network/LocalPlayerStatus.rplps
 RaisingPetClient/Network/LocalPlayerStatus.rplps.tmp
+
+# RaisingPet local third-party SDKs
+# Keep the FMOD wrapper/project settings in git, but do not commit the SDK/toolchain bundle.
+# A local FMOD Core API x64 SDK should be placed here when building the client.
+RaisingPetClient/External/FMOD/
+
+# RaisingPet generated runtime copies
+RaisingPetClient/Executable/fmod*.dll
+RaisingPetClient/Executable/Assets/Sound/

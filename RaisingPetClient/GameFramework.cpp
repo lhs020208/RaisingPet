@@ -56,6 +56,7 @@ bool CGameFramework::OnCreate(HINSTANCE hInstance, HWND hMainWnd)
 	CreateDepthStencilView();
 	m_D2DTextRenderer.CreateObjects(m_pd3dDevice, m_pd3dCommandQueue,
 		m_ppd3dSwapChainBackBuffers, m_nSwapChainBuffers);
+	m_SoundManager.Initialize();
 
 	BuildObjects();
 
@@ -365,6 +366,7 @@ void CGameFramework::OnDestroy()
 {
 	m_NetworkManager.Disconnect();
     ReleaseObjects();
+	m_SoundManager.Release();
 	m_D2DTextRenderer.ReleaseObjects();
 
 	::CloseHandle(m_hFenceEvent);
@@ -448,6 +450,7 @@ void CGameFramework::ProcessInput()
 
 void CGameFramework::AnimateObjects()
 {
+	m_SoundManager.Update();
 	CScene* pScene = m_SceneManager.GetCurrentScene();
 	if (pScene) pScene->Animate(m_GameTimer.GetTimeElapsed());
 }

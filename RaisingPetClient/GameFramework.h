@@ -8,6 +8,7 @@
 #include "SceneManager.h"
 #include "ClientNetworkManager.h"
 #include "D2DTextRenderer.h"
+#include "FmodSoundManager.h"
 
 class CGameFramework
 {
@@ -54,6 +55,7 @@ public:
 	ID3D12GraphicsCommandList* GetCommandList() const { return m_pd3dCommandList; }
 	void RequestSceneChange(SCENE_TYPE sceneType) { m_SceneManager.RequestSceneChange(sceneType); }
 	CClientNetworkManager& GetNetworkManager() { return m_NetworkManager; }
+	CFmodSoundManager& GetSoundManager() { return m_SoundManager; }
 	void QueueDirectWriteText(const std::wstring& text, const XMFLOAT4& rectangle, float fontSize,
 		UINT color = 0xFF000000, bool horizontalCenter = false, bool verticalCenter = true);
 	void QueueDirectWriteSolidRectangle(const XMFLOAT4& rectangle, UINT color = 0xFF000000);
@@ -103,6 +105,7 @@ private:
 
 	CSceneManager				m_SceneManager;
 	CClientNetworkManager		m_NetworkManager;
+	CFmodSoundManager			m_SoundManager;
 	CCamera						*m_pCamera = NULL;
 
 	POINT						m_ptOldCursorPos;
