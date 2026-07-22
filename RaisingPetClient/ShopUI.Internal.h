@@ -259,6 +259,87 @@ XMFLOAT4 GetShopPageTitleRectangle(float width, float height, float offsetX = 0.
 		centerX + titleWidth * 0.5f, close.y + titleHeight));
 }
 
+XMFLOAT4 GetSettingContentRectangle(float width, float height, float offsetX = 0.0f, float offsetY = 0.0f)
+{
+	const XMFLOAT4 board = GetShopBoardRectangle(width, height, offsetX, offsetY);
+	const float boardWidth = board.z - board.x;
+	const float boardHeight = board.w - board.y;
+	float contentWidth = boardWidth * 0.92f;
+	float contentHeight = contentWidth * (1577.0f / 2895.0f);
+	const float maximumHeight = boardHeight * 0.78f;
+	if (contentHeight > maximumHeight)
+	{
+		contentHeight = maximumHeight;
+		contentWidth = contentHeight * (2895.0f / 1577.0f);
+	}
+	const float left = (board.x + board.z - contentWidth) * 0.5f;
+	const float top = board.y + boardHeight * 0.15f;
+	return(XMFLOAT4(left, top, left + contentWidth, top + contentHeight));
+}
+
+XMFLOAT4 GetSettingCheckBoxRectangle(int index, float width, float height,
+	float offsetX = 0.0f, float offsetY = 0.0f)
+{
+	const XMFLOAT4 content = GetSettingContentRectangle(width, height, offsetX, offsetY);
+	const float contentWidth = content.z - content.x;
+	const float contentHeight = content.w - content.y;
+	const float size = contentHeight * 0.077f;
+	const float centerX = content.x + contentWidth * 0.268f;
+	const float centersY[3] =
+	{
+		content.y + contentHeight * 0.238f,
+		content.y + contentHeight * 0.407f,
+		content.y + contentHeight * 0.578f
+	};
+	if (index < 0) index = 0;
+	if (index > 2) index = 2;
+	return(XMFLOAT4(centerX - size * 0.5f, centersY[index] - size * 0.5f,
+		centerX + size * 0.5f, centersY[index] + size * 0.5f));
+}
+
+XMFLOAT4 GetSettingSliderBarRectangle(int index, float width, float height,
+	float offsetX = 0.0f, float offsetY = 0.0f)
+{
+	const XMFLOAT4 content = GetSettingContentRectangle(width, height, offsetX, offsetY);
+	const float contentWidth = content.z - content.x;
+	const float contentHeight = content.w - content.y;
+	const float leftRatios[5] = { 0.075f, 0.592f, 0.592f, 0.592f, 0.592f };
+	const float rightRatios[5] = { 0.335f, 0.854f, 0.854f, 0.854f, 0.854f };
+	const float centerYRatios[5] = { 0.835f, 0.315f, 0.493f, 0.666f, 0.835f };
+	if (index < 0) index = 0;
+	if (index > 4) index = 4;
+	const float barHeight = contentHeight * 0.029f;
+	const float centerY = content.y + contentHeight * centerYRatios[index];
+	return(XMFLOAT4(content.x + contentWidth * leftRatios[index], centerY - barHeight * 0.5f,
+		content.x + contentWidth * rightRatios[index], centerY + barHeight * 0.5f));
+}
+
+XMFLOAT4 GetSettingSliderHandleRectangle(int index, float ratio, float width, float height,
+	float offsetX = 0.0f, float offsetY = 0.0f)
+{
+	if (ratio < 0.0f) ratio = 0.0f;
+	if (ratio > 1.0f) ratio = 1.0f;
+	const XMFLOAT4 bar = GetSettingSliderBarRectangle(index, width, height, offsetX, offsetY);
+	const float size = (bar.w - bar.y) * (116.0f / 47.0f);
+	const float centerX = bar.x + (bar.z - bar.x) * ratio;
+	const float centerY = (bar.y + bar.w) * 0.5f;
+	return(XMFLOAT4(centerX - size * 0.5f, centerY - size * 0.5f,
+		centerX + size * 0.5f, centerY + size * 0.5f));
+}
+
+XMFLOAT4 GetSettingSliderPercentRectangle(int index, float width, float height,
+	float offsetX = 0.0f, float offsetY = 0.0f)
+{
+	const XMFLOAT4 content = GetSettingContentRectangle(width, height, offsetX, offsetY);
+	const XMFLOAT4 bar = GetSettingSliderBarRectangle(index, width, height, offsetX, offsetY);
+	const float contentWidth = content.z - content.x;
+	const float textWidth = contentWidth * 0.11f;
+	const float textHeight = (bar.w - bar.y) * 4.2f;
+	const float left = bar.z + contentWidth * 0.035f;
+	const float centerY = (bar.y + bar.w) * 0.5f;
+	return(XMFLOAT4(left, centerY - textHeight * 0.5f, left + textWidth, centerY + textHeight * 0.5f));
+}
+
 XMFLOAT4 GetShopSlotRectangle(int index, float width, float height, float offsetX = 0.0f, float offsetY = 0.0f)
 {
 	const XMFLOAT4 board = GetShopBoardRectangle(width, height, offsetX, offsetY);

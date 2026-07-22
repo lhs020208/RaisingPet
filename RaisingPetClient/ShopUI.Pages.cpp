@@ -189,6 +189,73 @@ void CShopUI::RenderStockMenuPage(ID3D12GraphicsCommandList* commandList, CCamer
 		RenderUiImage(commandList, camera, m_StockSlotResources[i], GetStockSlotRectangle(i, width, height));
 }
 
+float CShopUI::GetSettingSliderRatio(int sliderIndex) const
+{
+	if (sliderIndex == 0)
+	{
+		const UINT value = min(max(m_nSettingPetSizePercent, 10u), 100u);
+		return(static_cast<float>(value - 10u) / 90.0f);
+	}
+	if (sliderIndex >= 1 && sliderIndex <= 4)
+	{
+		const UINT value = min(m_nSettingVolumePercents[sliderIndex - 1], 100u);
+		return(static_cast<float>(value) / 100.0f);
+	}
+	return(0.0f);
+}
+
+UINT CShopUI::GetSettingSliderPercent(int sliderIndex) const
+{
+	if (sliderIndex == 0) return(min(max(m_nSettingPetSizePercent, 10u), 100u));
+	if (sliderIndex >= 1 && sliderIndex <= 4)
+		return(min(m_nSettingVolumePercents[sliderIndex - 1], 100u));
+	return(0u);
+}
+
+void CShopUI::RenderSettingBoard(ID3D12GraphicsCommandList* commandList, CCamera* camera)
+{
+	if (!camera) return;
+	const float width = camera->m_d3dViewport.Width;
+	const float height = camera->m_d3dViewport.Height;
+	RenderUiImage(commandList, camera, m_ShopBoardResource,
+		GetShopBoardRectangle(width, height,
+			m_xmf2SettingBoardOffset.x, m_xmf2SettingBoardOffset.y));
+
+	const XMFLOAT4 content = GetSettingContentRectangle(width, height,
+		m_xmf2SettingBoardOffset.x, m_xmf2SettingBoardOffset.y);
+	RenderUiImage(commandList, camera, m_SettingsResource, content);
+
+	for (int i = 0; i < 3; ++i)
+	{
+		const XMFLOAT4 checkBox = GetSettingCheckBoxRectangle(i, width, height,
+			m_xmf2SettingBoardOffset.x, m_xmf2SettingBoardOffset.y);
+		RenderUiImage(commandList, camera, m_SettingCheckBoxResource, checkBox,
+			m_bSettingPetOptions[i] ? 0x00BFBFBF : 0x00FFFFFF);
+		if (m_bSettingPetOptions[i])
+			RenderUiImage(commandList, camera, m_SettingCheckResource, checkBox);
+	}
+
+	for (int i = 0; i < 5; ++i)
+	{
+		const XMFLOAT4 bar = GetSettingSliderBarRectangle(i, width, height,
+			m_xmf2SettingBoardOffset.x, m_xmf2SettingBoardOffset.y);
+		RenderUiImage(commandList, camera, m_SettingSliderBarResource, bar);
+		RenderUiImage(commandList, camera, m_SettingSliderHandleResource,
+			GetSettingSliderHandleRectangle(i, GetSettingSliderRatio(i), width, height,
+				m_xmf2SettingBoardOffset.x, m_xmf2SettingBoardOffset.y));
+
+		const XMFLOAT4 percentRect = GetSettingSliderPercentRectangle(i, width, height,
+			m_xmf2SettingBoardOffset.x, m_xmf2SettingBoardOffset.y);
+		QueueSettingDirectWriteText(std::to_wstring(GetSettingSliderPercent(i)) + L"%",
+			percentRect, (percentRect.w - percentRect.y) * 0.52f,
+			0xFF000000, false, true);
+	}
+
+	RenderUiImage(commandList, camera, m_ShopCloseIconResource,
+		GetShopCloseRectangle(width, height,
+			m_xmf2SettingBoardOffset.x, m_xmf2SettingBoardOffset.y));
+}
+
 void CShopUI::RenderStockTransactionPage(ID3D12GraphicsCommandList* commandList, CCamera* camera,
 	UINT money, const SHOP_TEXT_RENDER_CONTEXT& context)
 {

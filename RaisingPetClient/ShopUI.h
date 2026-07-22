@@ -145,6 +145,11 @@ private:
 	ID3D12PipelineState* m_pd3dUiImagePipelineState = NULL;
 	UI_IMAGE_RESOURCE m_ShopIconResource;
 	UI_IMAGE_RESOURCE m_SettingIconResource;
+	UI_IMAGE_RESOURCE m_SettingsResource;
+	UI_IMAGE_RESOURCE m_SettingCheckBoxResource;
+	UI_IMAGE_RESOURCE m_SettingCheckResource;
+	UI_IMAGE_RESOURCE m_SettingSliderBarResource;
+	UI_IMAGE_RESOURCE m_SettingSliderHandleResource;
 	UI_IMAGE_RESOURCE m_ShopBoardResource;
 	UI_IMAGE_RESOURCE m_PageTitleResource;
 	UI_IMAGE_RESOURCE m_ShopCloseIconResource;
@@ -205,6 +210,7 @@ private:
 	bool m_bSettingBoardOnTop = false;
 	bool m_bSettingBoardDragging = false;
 	bool m_bBlockShopDirectWriteText = false;
+	bool m_bBlockSettingDirectWriteText = false;
 	bool m_bResetSettingPositionOnNextOpen = false;
 	bool m_bResetShopPositionOnNextOpen = false;
 	XMFLOAT2 m_xmf2ShopBoardOffset = XMFLOAT2(0.0f, 0.0f);
@@ -212,6 +218,11 @@ private:
 	XMFLOAT2 m_xmf2ShopDragLastCursor = XMFLOAT2(0.0f, 0.0f);
 	XMFLOAT2 m_xmf2SettingDragLastCursor = XMFLOAT2(0.0f, 0.0f);
 	XMFLOAT4 m_xmf4ShopDirectWriteBlockRectangle = XMFLOAT4(0.0f, 0.0f, 0.0f, 0.0f);
+	XMFLOAT4 m_xmf4SettingDirectWriteBlockRectangle = XMFLOAT4(0.0f, 0.0f, 0.0f, 0.0f);
+	bool m_bSettingPetOptions[3] = { true, true, true };
+	UINT m_nSettingPetSizePercent = 50;
+	UINT m_nSettingVolumePercents[4] = { 100, 100, 100, 100 };
+	int m_nDraggingSettingSlider = -1;
 	size_t m_nPetScrollOffset = 0;
 	size_t m_nCachedPetCount = 0;
 	size_t m_nMaximumPetScrollOffset = 0;
@@ -280,6 +291,10 @@ private:
 		float fFontSize, UINT nColor = 0xFF000000,
 		bool bHorizontalCenter = false, bool bVerticalCenter = true) const;
 	bool IsShopDirectWriteTextBlocked(const XMFLOAT4& rectangle) const;
+	void QueueSettingDirectWriteText(const std::wstring& text, const XMFLOAT4& rectangle,
+		float fFontSize, UINT nColor = 0xFF000000,
+		bool bHorizontalCenter = false, bool bVerticalCenter = true) const;
+	bool IsSettingDirectWriteTextBlocked(const XMFLOAT4& rectangle) const;
 	XMFLOAT4 GetMoneyUiRectangle(float fViewportWidth, float fViewportHeight, UINT nMoney,
 		const SHOP_TEXT_RENDER_CONTEXT& textContext) const;
 	bool ProcessShopUIClick(float x, float y, float fViewportWidth, float fViewportHeight,
@@ -321,6 +336,11 @@ private:
 	void RenderStockQuantityCursor(ID3D12GraphicsCommandList* pd3dCommandList, CCamera* pCamera,
 		const XMFLOAT4& rectangle, UINT nQuantity, float fFontSize);
 	void RenderPageTitle(ID3D12GraphicsCommandList* pd3dCommandList, CCamera* pCamera);
+	void RenderSettingBoard(ID3D12GraphicsCommandList* pd3dCommandList, CCamera* pCamera);
+	bool ProcessSettingBoardClick(HWND hWnd, float x, float y, float fViewportWidth, float fViewportHeight);
+	void UpdateSettingSliderFromCursor(int nSliderIndex, float x, float fViewportWidth, float fViewportHeight);
+	float GetSettingSliderRatio(int nSliderIndex) const;
+	UINT GetSettingSliderPercent(int nSliderIndex) const;
 	XMFLOAT4 GetStockChartRectangle(float fViewportWidth, float fViewportHeight) const;
 	XMFLOAT4 GetStockGraphButtonRectangle(float fViewportWidth, float fViewportHeight) const;
 	XMFLOAT4 GetStockNameInputRectangle(float fViewportWidth, float fViewportHeight) const;

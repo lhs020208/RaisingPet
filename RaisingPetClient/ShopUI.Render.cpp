@@ -16,17 +16,13 @@ void CShopUI::Render(ID3D12GraphicsCommandList* commandList, CCamera* camera, UI
 		? GetShopBoardRectangle(width, height,
 			m_xmf2SettingBoardOffset.x, m_xmf2SettingBoardOffset.y)
 		: XMFLOAT4(0.0f, 0.0f, 0.0f, 0.0f);
-	auto renderSettingBoard = [&]()
-	{
-		RenderUiImage(commandList, camera, m_ShopBoardResource,
-			GetShopBoardRectangle(width, height,
-				m_xmf2SettingBoardOffset.x, m_xmf2SettingBoardOffset.y));
-		RenderUiImage(commandList, camera, m_ShopCloseIconResource,
-			GetShopCloseRectangle(width, height,
-				m_xmf2SettingBoardOffset.x, m_xmf2SettingBoardOffset.y));
-	};
+	m_bBlockSettingDirectWriteText = m_bSettingActive && m_bShopActive && !m_bSettingBoardOnTop;
+	m_xmf4SettingDirectWriteBlockRectangle = m_bBlockSettingDirectWriteText
+		? GetShopBoardRectangle(width, height,
+			m_xmf2ShopBoardOffset.x, m_xmf2ShopBoardOffset.y)
+		: XMFLOAT4(0.0f, 0.0f, 0.0f, 0.0f);
 	if (m_bSettingActive && !m_bSettingBoardOnTop)
-		renderSettingBoard();
+		RenderSettingBoard(commandList, camera);
 	if (m_bShopActive)
 	{
 		RenderUiImage(commandList, camera, m_ShopBoardResource,
@@ -131,8 +127,9 @@ void CShopUI::Render(ID3D12GraphicsCommandList* commandList, CCamera* camera, UI
 			GetShopCloseRectangle(width, height, m_xmf2ShopBoardOffset.x, m_xmf2ShopBoardOffset.y));
 	}
 	if (m_bSettingActive && m_bSettingBoardOnTop)
-		renderSettingBoard();
+		RenderSettingBoard(commandList, camera);
 	m_bBlockShopDirectWriteText = false;
+	m_bBlockSettingDirectWriteText = false;
 	RenderUiImage(commandList, camera, m_SettingIconResource, GetSettingIconRectangle(width, height));
 	RenderUiImage(commandList, camera, m_ShopIconResource, GetShopIconRectangle(width, height));
 }

@@ -1,6 +1,69 @@
 ﻿// mouse and keyboard input handling for ShopUI.cpp
 // This file is intentionally included by ShopUI.cpp to keep helper functions in one translation unit.
 
+void CShopUI::UpdateSettingSliderFromCursor(int sliderIndex, float x, float width, float height)
+{
+	if (sliderIndex < 0 || sliderIndex > 4) return;
+	const XMFLOAT4 bar = GetSettingSliderBarRectangle(sliderIndex, width, height,
+		m_xmf2SettingBoardOffset.x, m_xmf2SettingBoardOffset.y);
+	const float ratio = (bar.z > bar.x) ? ((x - bar.x) / (bar.z - bar.x)) : 0.0f;
+	const float clampedRatio = min(max(ratio, 0.0f), 1.0f);
+	if (sliderIndex == 0)
+	{
+		m_nSettingPetSizePercent = 10u + static_cast<UINT>(clampedRatio * 90.0f + 0.5f);
+		return;
+	}
+	m_nSettingVolumePercents[sliderIndex - 1] =
+		static_cast<UINT>(clampedRatio * 100.0f + 0.5f);
+}
+
+bool CShopUI::ProcessSettingBoardClick(HWND hWnd, float x, float y, float width, float height)
+{
+	const XMFLOAT4 board = GetShopBoardRectangle(width, height,
+		m_xmf2SettingBoardOffset.x, m_xmf2SettingBoardOffset.y);
+	const XMFLOAT4 close = GetShopCloseRectangle(width, height,
+		m_xmf2SettingBoardOffset.x, m_xmf2SettingBoardOffset.y);
+	if (IsPointInRectangle(x, y, close))
+	{
+		g_pFramework->PlayClickSound();
+		const float halfWidth = (board.z - board.x) * 0.5f;
+		const float halfHeight = (board.w - board.y) * 0.5f;
+		m_bResetSettingPositionOnNextOpen = board.x < -halfWidth
+			|| board.z > width + halfWidth
+			|| board.y < -halfHeight
+			|| board.w > height + halfHeight;
+		m_bSettingActive = false;
+		m_bSettingBoardDragging = false;
+		m_nDraggingSettingSlider = -1;
+		return(true);
+	}
+	for (int i = 0; i < 3; ++i)
+	{
+		if (!IsPointInRectangle(x, y, GetSettingCheckBoxRectangle(i, width, height,
+			m_xmf2SettingBoardOffset.x, m_xmf2SettingBoardOffset.y))) continue;
+		g_pFramework->PlayClickSound();
+		m_bSettingPetOptions[i] = !m_bSettingPetOptions[i];
+		return(true);
+	}
+	for (int i = 0; i < 5; ++i)
+	{
+		const XMFLOAT4 bar = GetSettingSliderBarRectangle(i, width, height,
+			m_xmf2SettingBoardOffset.x, m_xmf2SettingBoardOffset.y);
+		const XMFLOAT4 handle = GetSettingSliderHandleRectangle(i, GetSettingSliderRatio(i),
+			width, height, m_xmf2SettingBoardOffset.x, m_xmf2SettingBoardOffset.y);
+		if (!IsPointInRectangle(x, y, bar) && !IsPointInRectangle(x, y, handle)) continue;
+		g_pFramework->PlayClickSound();
+		UpdateSettingSliderFromCursor(i, x, width, height);
+		m_nDraggingSettingSlider = i;
+		SetCapture(hWnd);
+		return(true);
+	}
+	m_bSettingBoardDragging = true;
+	m_xmf2SettingDragLastCursor = XMFLOAT2(x, y);
+	SetCapture(hWnd);
+	return(true);
+}
+
 bool CShopUI::ProcessShopUIClick(float x, float y, float width, float height, UINT money,
 	size_t petCount, size_t activePetIndex, const SHOP_TEXT_RENDER_CONTEXT& context,
 	bool networkConnected)
@@ -13,6 +76,7 @@ bool CShopUI::ProcessShopUIClick(float x, float y, float width, float height, UI
 		{
 			m_bSettingActive = false;
 			m_bSettingBoardDragging = false;
+			m_nDraggingSettingSlider = -1;
 		}
 		else
 		{
@@ -283,11 +347,28 @@ bool CShopUI::IsPointOverClickableButton(float x, float y, float width, float he
 	const bool inSettingBoard = m_bSettingActive && IsPointInRectangle(x, y, settingBoard);
 	const XMFLOAT4 settingClose = GetShopCloseRectangle(width, height,
 		m_xmf2SettingBoardOffset.x, m_xmf2SettingBoardOffset.y);
+	auto isOverSettingControl = [&]() -> bool
+	{
+		if (IsPointInRectangle(x, y, settingClose)) return(true);
+		for (int i = 0; i < 3; ++i)
+			if (IsPointInRectangle(x, y, GetSettingCheckBoxRectangle(i, width, height,
+				m_xmf2SettingBoardOffset.x, m_xmf2SettingBoardOffset.y)))
+				return(true);
+		for (int i = 0; i < 5; ++i)
+		{
+			const XMFLOAT4 bar = GetSettingSliderBarRectangle(i, width, height,
+				m_xmf2SettingBoardOffset.x, m_xmf2SettingBoardOffset.y);
+			const XMFLOAT4 handle = GetSettingSliderHandleRectangle(i, GetSettingSliderRatio(i),
+				width, height, m_xmf2SettingBoardOffset.x, m_xmf2SettingBoardOffset.y);
+			if (IsPointInRectangle(x, y, bar) || IsPointInRectangle(x, y, handle)) return(true);
+		}
+		return(false);
+	};
 
 	if (m_bSettingActive && m_bSettingBoardOnTop && inSettingBoard)
-		return(IsPointInRectangle(x, y, settingClose));
+		return(isOverSettingControl());
 	if (m_bSettingActive && !m_bShopActive && inSettingBoard)
-		return(IsPointInRectangle(x, y, settingClose));
+		return(isOverSettingControl());
 	if (m_bSettingActive && m_bShopActive && m_bSettingBoardOnTop && inShopBoard)
 		return(false);
 	if (m_bSettingActive && m_bShopActive && !m_bSettingBoardOnTop
@@ -589,27 +670,7 @@ bool CShopUI::OnProcessingMouseMessage(HWND hWnd, UINT message, WPARAM wParam, L
 			if (m_bSettingBoardOnTop)
 			{
 				if (inSettingBoard)
-				{
-					const XMFLOAT4 close = GetShopCloseRectangle(width, height,
-						m_xmf2SettingBoardOffset.x, m_xmf2SettingBoardOffset.y);
-					if (IsPointInRectangle(x, y, close))
-					{
-						g_pFramework->PlayClickSound();
-						const float halfWidth = (settingBoard.z - settingBoard.x) * 0.5f;
-						const float halfHeight = (settingBoard.w - settingBoard.y) * 0.5f;
-						m_bResetSettingPositionOnNextOpen = settingBoard.x < -halfWidth
-							|| settingBoard.z > width + halfWidth
-							|| settingBoard.y < -halfHeight
-							|| settingBoard.w > height + halfHeight;
-						m_bSettingActive = false;
-						m_bSettingBoardDragging = false;
-						return(true);
-					}
-					m_bSettingBoardDragging = true;
-					m_xmf2SettingDragLastCursor = XMFLOAT2(x, y);
-					SetCapture(hWnd);
-					return(true);
-				}
+					return(ProcessSettingBoardClick(hWnd, x, y, width, height));
 				if (inShopBoard)
 				{
 					m_bSettingBoardOnTop = false;
@@ -628,35 +689,12 @@ bool CShopUI::OnProcessingMouseMessage(HWND hWnd, UINT message, WPARAM wParam, L
 				if (!inShopBoard && inSettingBoard)
 				{
 					m_bSettingBoardOnTop = true;
-					m_bSettingBoardDragging = true;
-					m_xmf2SettingDragLastCursor = XMFLOAT2(x, y);
-					SetCapture(hWnd);
-					return(true);
+					return(ProcessSettingBoardClick(hWnd, x, y, width, height));
 				}
 			}
 		}
 		else if (m_bSettingActive && inSettingBoard)
-		{
-			const XMFLOAT4 close = GetShopCloseRectangle(width, height,
-				m_xmf2SettingBoardOffset.x, m_xmf2SettingBoardOffset.y);
-			if (IsPointInRectangle(x, y, close))
-			{
-				g_pFramework->PlayClickSound();
-				const float halfWidth = (settingBoard.z - settingBoard.x) * 0.5f;
-				const float halfHeight = (settingBoard.w - settingBoard.y) * 0.5f;
-				m_bResetSettingPositionOnNextOpen = settingBoard.x < -halfWidth
-					|| settingBoard.z > width + halfWidth
-					|| settingBoard.y < -halfHeight
-					|| settingBoard.w > height + halfHeight;
-				m_bSettingActive = false;
-				m_bSettingBoardDragging = false;
-				return(true);
-			}
-			m_bSettingBoardDragging = true;
-			m_xmf2SettingDragLastCursor = XMFLOAT2(x, y);
-			SetCapture(hWnd);
-			return(true);
-		}
+			return(ProcessSettingBoardClick(hWnd, x, y, width, height));
 
 		if (m_bShopActive && m_eShopPage == SHOP_PAGE::STOCK_MANAGEMENT)
 		{
@@ -714,6 +752,18 @@ bool CShopUI::OnProcessingMouseMessage(HWND hWnd, UINT message, WPARAM wParam, L
 		break;
 	}
 	case WM_MOUSEMOVE:
+		if (m_nDraggingSettingSlider >= 0)
+		{
+			const bool outside = x < 0.0f || y < 0.0f || x >= width || y >= height;
+			if (!(wParam & MK_LBUTTON) || outside)
+			{
+				m_nDraggingSettingSlider = -1;
+				if (GetCapture() == hWnd) ReleaseCapture();
+				return(true);
+			}
+			UpdateSettingSliderFromCursor(m_nDraggingSettingSlider, x, width, height);
+			return(true);
+		}
 		if (m_bPetScrollDragging)
 		{
 			const bool outside = x < 0.0f || y < 0.0f || x >= width || y >= height;
@@ -780,6 +830,12 @@ bool CShopUI::OnProcessingMouseMessage(HWND hWnd, UINT message, WPARAM wParam, L
 		}
 		break;
 	case WM_LBUTTONUP:
+		if (m_nDraggingSettingSlider >= 0)
+		{
+			m_nDraggingSettingSlider = -1;
+			if (GetCapture() == hWnd) ReleaseCapture();
+			return(true);
+		}
 		if (m_bStockIssueButtonPressed)
 		{
 			m_bStockIssueButtonPressed = false;
