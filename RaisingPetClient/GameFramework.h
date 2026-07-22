@@ -56,6 +56,7 @@ public:
 	void RequestSceneChange(SCENE_TYPE sceneType) { m_SceneManager.RequestSceneChange(sceneType); }
 	CClientNetworkManager& GetNetworkManager() { return m_NetworkManager; }
 	CFmodSoundManager& GetSoundManager() { return m_SoundManager; }
+	void PlayErrorSound();
 	void QueueDirectWriteText(const std::wstring& text, const XMFLOAT4& rectangle, float fontSize,
 		UINT color = 0xFF000000, bool horizontalCenter = false, bool verticalCenter = true);
 	void QueueDirectWriteSolidRectangle(const XMFLOAT4& rectangle, UINT color = 0xFF000000);

@@ -822,6 +822,8 @@ void CLoginScene::SpawnLoginErrorLog(float viewportWidth, float viewportHeight, 
 	log.elapsedTime = 0.0f;
 	log.type = type;
 	m_LoginErrorLogs.push_back(log);
+	if (type != 2)
+		g_pFramework->PlayErrorSound();
 }
 
 void CLoginScene::SpawnNicknameFailLog(float viewportWidth, float viewportHeight)
@@ -831,6 +833,7 @@ void CLoginScene::SpawnNicknameFailLog(float viewportWidth, float viewportHeight
 	log.elapsedTime = 0.0f;
 	log.type = 4;
 	m_LoginErrorLogs.push_back(log);
+	g_pFramework->PlayErrorSound();
 }
 
 void CLoginScene::EnterLoadingPage()

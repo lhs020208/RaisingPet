@@ -81,6 +81,7 @@ void CShopUI::RenderFinancialFailLogs(ID3D12GraphicsCommandList* commandList, CC
 			m_FinancialFailLogs[category].clear();
 			m_FinancialFailLogs[category].push_back(log);
 			m_bPendingFinancialFailLog[category] = false;
+			g_pFramework->PlayErrorSound();
 		}
 
 		for (const SHOP_NETWORK_ERROR_LOG& log : m_FinancialFailLogs[category])
@@ -104,6 +105,7 @@ void CShopUI::SpawnNetworkErrorLog(float width, float height, int slotIndex)
 	log.fElapsedTime = 0.0f;
 	m_NetworkErrorLogs.clear();
 	m_NetworkErrorLogs.push_back(log);
+	g_pFramework->PlayErrorSound();
 }
 
 void CShopUI::SpawnNetworkErrorLogAtNetworkIcon(float width, float height)
@@ -114,6 +116,7 @@ void CShopUI::SpawnNetworkErrorLogAtNetworkIcon(float width, float height)
 	log.fElapsedTime = 0.0f;
 	m_NetworkErrorLogs.clear();
 	m_NetworkErrorLogs.push_back(log);
+	g_pFramework->PlayErrorSound();
 }
 
 bool CShopUI::IsNetworkRequiredPage() const
@@ -176,6 +179,7 @@ void CShopUI::RenderStockIssueErrorLogs(ID3D12GraphicsCommandList* commandList, 
 		m_StockIssueErrorLogs.clear();
 		m_StockIssueErrorLogs.push_back(log);
 		m_bPendingStockIssueErrorLog = false;
+		g_pFramework->PlayErrorSound();
 	}
 
 	for (const SHOP_NETWORK_ERROR_LOG& log : m_StockIssueErrorLogs)
@@ -229,6 +233,7 @@ void CShopUI::RenderStockTradeFailLogs(ID3D12GraphicsCommandList* commandList, C
 			m_StockTradeFailLogs[action].clear();
 			m_StockTradeFailLogs[action].push_back(log);
 			m_bPendingStockTradeFailLog[action] = false;
+			g_pFramework->PlayErrorSound();
 		}
 
 		UI_IMAGE_RESOURCE& resource = (action == 0)

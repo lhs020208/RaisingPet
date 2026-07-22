@@ -5,6 +5,12 @@
 #include "stdafx.h"
 #include "GameFramework.h"
 
+namespace
+{
+const char* ERROR_SOUND_KEY = "ErrorSound";
+const char* ERROR_SOUND_FILE_PATH = "Assets\\Sound\\ErrorSound.mp3";
+}
+
 CGameFramework::CGameFramework()
 {
 	m_pdxgiFactory = NULL;
@@ -57,6 +63,7 @@ bool CGameFramework::OnCreate(HINSTANCE hInstance, HWND hMainWnd)
 	m_D2DTextRenderer.CreateObjects(m_pd3dDevice, m_pd3dCommandQueue,
 		m_ppd3dSwapChainBackBuffers, m_nSwapChainBuffers);
 	m_SoundManager.Initialize();
+	m_SoundManager.LoadSound(ERROR_SOUND_KEY, ERROR_SOUND_FILE_PATH);
 
 	BuildObjects();
 
@@ -446,6 +453,11 @@ void CGameFramework::ProcessSceneChange()
 void CGameFramework::ProcessInput()
 {
 	// Keep the native cursor visible and allow it to move while interacting with pets and UI.
+}
+
+void CGameFramework::PlayErrorSound()
+{
+	m_SoundManager.PlaySound(ERROR_SOUND_KEY);
 }
 
 void CGameFramework::AnimateObjects()
