@@ -32,6 +32,13 @@ private:
 	std::vector<PET_RENDER_RESOURCE> m_vPetResources;
 	UINT m_nActivePetIndex = 0;
 	CPet* m_pPointedPet = NULL;
+	CCamera* m_pLastPickCamera = NULL;
+	CPet* m_pMousePressedPet = NULL;
+	bool m_bPetDragCandidate = false;
+	bool m_bPetDragging = false;
+	XMFLOAT2 m_xmf2PetMouseDown = XMFLOAT2(0.0f, 0.0f);
+	XMFLOAT3 m_xmf3PetDragOffset = XMFLOAT3(0.0f, 0.0f, 0.0f);
+	float m_fPetDragPlaneZ = 0.0f;
 
 	ID3D12PipelineState* m_pd3dTextPipelineState = NULL;
 	ID3D12PipelineState* m_pd3dSolidUiPipelineState = NULL;

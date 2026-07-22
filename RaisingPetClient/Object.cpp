@@ -24,6 +24,9 @@ XMVECTOR RandomUnitVectorOnSphere()
 	}
 }
 
+constexpr float PET_MIN_MOVE_X = -45.0f;
+constexpr float PET_MAX_MOVE_X = 45.0f;
+
 CGameObject::CGameObject()
 {
 	m_xmf4x4World = Matrix4x4::Identity();
@@ -235,19 +238,24 @@ void CPet::Animate(float fTimeElapsed)
 	if (fTimeElapsed <= 0.0f) return;
 
 	UpdatePossession(fTimeElapsed);
+	if (m_bMovementAiPaused)
+	{
+		UpdateBoundingBox();
+		return;
+	}
 	UpdateMoveSpeed(fTimeElapsed);
 
 	XMFLOAT3 position = GetPosition();
 	position.x += m_fMoveDirection * m_fCurrentMoveSpeed * fTimeElapsed;
 	bool reachedMoveBoundary = false;
-	if (position.x <= -50.0f)
+	if (position.x <= PET_MIN_MOVE_X)
 	{
-		position.x = -50.0f;
+		position.x = PET_MIN_MOVE_X;
 		reachedMoveBoundary = (m_MoveState == MOVE_STATE::LEFT);
 	}
-	else if (position.x >= 50.0f)
+	else if (position.x >= PET_MAX_MOVE_X)
 	{
-		position.x = 50.0f;
+		position.x = PET_MAX_MOVE_X;
 		reachedMoveBoundary = (m_MoveState == MOVE_STATE::RIGHT);
 	}
 	SetPosition(position);
@@ -305,6 +313,7 @@ void CPet::CopyRuntimeStateFrom(const CPet& sourcePet)
 	m_fRotationElapsedTime = sourcePet.m_fRotationElapsedTime;
 	m_fRotationDuration = sourcePet.m_fRotationDuration;
 	m_bRotating = sourcePet.m_bRotating;
+	m_bMovementAiPaused = sourcePet.m_bMovementAiPaused;
 	m_nPay = sourcePet.m_nPay;
 	m_nMaxPossession = sourcePet.m_nMaxPossession;
 	m_nNowPossession = sourcePet.m_nNowPossession;
@@ -360,6 +369,29 @@ bool CPet::ConsumeAutoCollectRequest()
 	m_fFullPossessionElapsedTime = 0.0f;
 	return(true);
 }
+
+void CPet::SetMovementAiPaused(bool bPaused)
+{
+	if (m_bMovementAiPaused == bPaused) return;
+
+	m_bMovementAiPaused = bPaused;
+	if (m_bMovementAiPaused)
+	{
+		m_MoveState = MOVE_STATE::STOP;
+		m_fMoveDirection = 0.0f;
+		m_fCurrentMoveSpeed = 0.0f;
+		m_fSpeedStart = 0.0f;
+		m_fSpeedTarget = 0.0f;
+		m_fSpeedElapsedTime = 0.0f;
+		m_bSpeedTransitioning = false;
+		m_fStateRemainingTime = GetRandomStateDuration(MOVE_STATE::STOP);
+	}
+	else
+	{
+		m_fStateRemainingTime = GetRandomStateDuration(MOVE_STATE::STOP);
+	}
+}
+
 void CPet::DecideNextState()
 {
 	const float positionX = GetPosition().x;
@@ -370,9 +402,9 @@ void CPet::DecideNextState()
 	if (m_MoveState == MOVE_STATE::STOP)
 	{
 		// At either boundary, never select a direction that points outside the movement area.
-		if (positionX <= -50.0f)
+		if (positionX <= PET_MIN_MOVE_X)
 			nextState = (chance < 80) ? MOVE_STATE::RIGHT : MOVE_STATE::STOP;
-		else if (positionX >= 50.0f)
+		else if (positionX >= PET_MAX_MOVE_X)
 			nextState = (chance < 80) ? MOVE_STATE::LEFT : MOVE_STATE::STOP;
 		else if (chance < 40)
 			nextState = MOVE_STATE::LEFT;
@@ -383,7 +415,7 @@ void CPet::DecideNextState()
 	}
 	else if (m_MoveState == MOVE_STATE::LEFT)
 	{
-		if (positionX <= -50.0f)
+		if (positionX <= PET_MIN_MOVE_X)
 			nextState = MOVE_STATE::STOP;
 		else if (chance < 70)
 			nextState = MOVE_STATE::STOP;
@@ -394,7 +426,7 @@ void CPet::DecideNextState()
 	}
 	else
 	{
-		if (positionX >= 50.0f)
+		if (positionX >= PET_MAX_MOVE_X)
 			nextState = MOVE_STATE::STOP;
 		else if (chance < 70)
 			nextState = MOVE_STATE::STOP;

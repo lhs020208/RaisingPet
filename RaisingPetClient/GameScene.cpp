@@ -91,6 +91,65 @@ bool ReadBytes(const std::vector<unsigned char>& data, size_t& offset, UINT leng
 	offset += length;
 	return(true);
 }
+
+constexpr float PET_DRAG_MIN_X = -45.0f;
+constexpr float PET_DRAG_MAX_X = 45.0f;
+constexpr float PET_DRAG_MIN_Y = -28.0f;
+constexpr float PET_DRAG_MAX_Y = 15.0f;
+constexpr float PET_CLICK_DRAG_THRESHOLD_SQ = 16.0f;
+
+float ClampFloat(float value, float minimumValue, float maximumValue)
+{
+	if (value < minimumValue) return(minimumValue);
+	if (value > maximumValue) return(maximumValue);
+	return(value);
+}
+
+XMFLOAT3 ClampPetDragPosition(const XMFLOAT3& position)
+{
+	return(XMFLOAT3(
+		ClampFloat(position.x, PET_DRAG_MIN_X, PET_DRAG_MAX_X),
+		ClampFloat(position.y, PET_DRAG_MIN_Y, PET_DRAG_MAX_Y),
+		position.z));
+}
+
+bool GetMouseWorldPositionOnZPlane(int xClient, int yClient, CCamera* pCamera,
+	float fPlaneZ, XMFLOAT3& xmf3WorldPosition)
+{
+	if (!pCamera || pCamera->m_d3dViewport.Width <= 0.0f || pCamera->m_d3dViewport.Height <= 0.0f)
+		return(false);
+
+	XMFLOAT3 xmf3PickPosition;
+	xmf3PickPosition.x = (((2.0f * xClient) / pCamera->m_d3dViewport.Width) - 1.0f)
+		/ pCamera->m_xmf4x4Projection._11;
+	xmf3PickPosition.y = -(((2.0f * yClient) / pCamera->m_d3dViewport.Height) - 1.0f)
+		/ pCamera->m_xmf4x4Projection._22;
+	xmf3PickPosition.z = 1.0f;
+
+	const XMMATRIX xmmtxView = XMLoadFloat4x4(&pCamera->m_xmf4x4View);
+	const XMMATRIX xmmtxInverseView = XMMatrixInverse(NULL, xmmtxView);
+	const XMVECTOR xmvRayOrigin = XMVector3TransformCoord(XMVectorZero(), xmmtxInverseView);
+	const XMVECTOR xmvRayDirection = XMVector3Normalize(
+		XMVector3TransformNormal(XMLoadFloat3(&xmf3PickPosition), xmmtxInverseView));
+
+	XMFLOAT3 xmf3RayOrigin;
+	XMFLOAT3 xmf3RayDirection;
+	XMStoreFloat3(&xmf3RayOrigin, xmvRayOrigin);
+	XMStoreFloat3(&xmf3RayDirection, xmvRayDirection);
+
+	if (fabsf(xmf3RayDirection.z) < 0.00001f)
+		return(false);
+
+	const float fDistance = (fPlaneZ - xmf3RayOrigin.z) / xmf3RayDirection.z;
+	if (fDistance < 0.0f)
+		return(false);
+
+	xmf3WorldPosition = XMFLOAT3(
+		xmf3RayOrigin.x + xmf3RayDirection.x * fDistance,
+		xmf3RayOrigin.y + xmf3RayDirection.y * fDistance,
+		fPlaneZ);
+	return(true);
+}
 }
 
 static std::string FormatPossession(UINT nValue)
@@ -480,6 +539,12 @@ void CGameScene::BuildObjects(ID3D12Device* pd3dDevice, ID3D12GraphicsCommandLis
 
 void CGameScene::ReleaseObjects()
 {
+	m_pPointedPet = NULL;
+	m_pLastPickCamera = NULL;
+	m_pMousePressedPet = NULL;
+	m_bPetDragCandidate = false;
+	m_bPetDragging = false;
+
 	for (PET_RENDER_RESOURCE& petResource : m_vPetResources)
 	{
 		if (petResource.pPet) delete petResource.pPet;
@@ -699,6 +764,7 @@ void CGameScene::OnProcessingKeyboardMessage(HWND hWnd, UINT nMessageID, WPARAM 
 CGameObject* CGameScene::PickObjectPointedByCursor(int xClient, int yClient, CCamera* pCamera)
 {
 	m_pPointedPet = NULL;
+	m_pLastPickCamera = pCamera;
 	if (!pCamera || pCamera->m_d3dViewport.Width <= 0.0f || pCamera->m_d3dViewport.Height <= 0.0f)
 		return(NULL);
 	if (m_ShopUI.IsPointOver(static_cast<float>(xClient), static_cast<float>(yClient),
@@ -871,6 +937,9 @@ bool CGameScene::LoadLocalPlayerStatus()
 	}
 	m_nActivePetIndex = activePetIndex;
 	m_pPointedPet = NULL;
+	m_pMousePressedPet = NULL;
+	m_bPetDragCandidate = false;
+	m_bPetDragging = false;
 
 	CPet* activePet = m_vPetResources[m_nActivePetIndex].pPet;
 	if (!activePet) return(false);
@@ -998,6 +1067,68 @@ void CGameScene::RenderCoinEffects(ID3D12GraphicsCommandList* pd3dCommandList, C
 }
 void CGameScene::OnProcessingMouseMessage(HWND hWnd, UINT nMessageID, WPARAM wParam, LPARAM lParam)
 {
+	const float fMouseX = static_cast<float>(static_cast<short>(LOWORD(lParam)));
+	const float fMouseY = static_cast<float>(static_cast<short>(HIWORD(lParam)));
+
+	auto FinishPetMouseInteraction = [&](bool bCollectIfClick)
+	{
+		if (m_pMousePressedPet)
+		{
+			m_pMousePressedPet->SetMovementAiPaused(false);
+			if (bCollectIfClick)
+				CollectPetPossession(m_pMousePressedPet);
+		}
+		m_pMousePressedPet = NULL;
+		m_bPetDragCandidate = false;
+		m_bPetDragging = false;
+		if (GetCapture() == hWnd)
+			ReleaseCapture();
+	};
+
+	if (m_bPetDragCandidate || m_bPetDragging)
+	{
+		if (nMessageID == WM_MOUSEMOVE)
+		{
+			if (!(wParam & MK_LBUTTON))
+			{
+				FinishPetMouseInteraction(false);
+				return;
+			}
+
+			const float fDeltaX = fMouseX - m_xmf2PetMouseDown.x;
+			const float fDeltaY = fMouseY - m_xmf2PetMouseDown.y;
+			const float fDeltaSq = fDeltaX * fDeltaX + fDeltaY * fDeltaY;
+			if (!m_bPetDragging && fDeltaSq >= PET_CLICK_DRAG_THRESHOLD_SQ)
+				m_bPetDragging = true;
+
+			if (m_bPetDragging && m_pMousePressedPet)
+			{
+				XMFLOAT3 xmf3WorldPosition;
+				if (GetMouseWorldPositionOnZPlane(static_cast<int>(fMouseX), static_cast<int>(fMouseY),
+					m_pLastPickCamera, m_fPetDragPlaneZ, xmf3WorldPosition))
+				{
+					XMFLOAT3 xmf3PetPosition(
+						xmf3WorldPosition.x + m_xmf3PetDragOffset.x,
+						xmf3WorldPosition.y + m_xmf3PetDragOffset.y,
+						m_fPetDragPlaneZ);
+					xmf3PetPosition = ClampPetDragPosition(xmf3PetPosition);
+					m_pMousePressedPet->SetPosition(xmf3PetPosition);
+					m_pMousePressedPet->UpdateBoundingBox();
+				}
+			}
+			return;
+		}
+		if (nMessageID == WM_LBUTTONUP)
+		{
+			const float fDeltaX = fMouseX - m_xmf2PetMouseDown.x;
+			const float fDeltaY = fMouseY - m_xmf2PetMouseDown.y;
+			const bool bCollectIfClick = !m_bPetDragging
+				&& (fDeltaX * fDeltaX + fDeltaY * fDeltaY) < PET_CLICK_DRAG_THRESHOLD_SQ;
+			FinishPetMouseInteraction(bCollectIfClick);
+			return;
+		}
+	}
+
 	const bool bShopMessageProcessed = m_ShopUI.OnProcessingMouseMessage(hWnd, nMessageID, wParam, lParam,
 		m_nMoney, m_vPetResources.size(), m_nActivePetIndex, GetShopTextRenderContext(),
 		g_pFramework->GetNetworkManager().IsConnected());
@@ -1056,7 +1187,31 @@ void CGameScene::OnProcessingMouseMessage(HWND hWnd, UINT nMessageID, WPARAM wPa
 		return;
 
 	if (nMessageID == WM_LBUTTONDOWN && m_pPointedPet)
-		CollectPetPossession(m_pPointedPet);
+	{
+		m_pMousePressedPet = m_pPointedPet;
+		m_bPetDragCandidate = true;
+		m_bPetDragging = false;
+		m_xmf2PetMouseDown = XMFLOAT2(fMouseX, fMouseY);
+
+		const XMFLOAT3 xmf3PetPosition = m_pMousePressedPet->GetPosition();
+		m_fPetDragPlaneZ = xmf3PetPosition.z;
+		XMFLOAT3 xmf3WorldPosition;
+		if (GetMouseWorldPositionOnZPlane(static_cast<int>(fMouseX), static_cast<int>(fMouseY),
+			m_pLastPickCamera, m_fPetDragPlaneZ, xmf3WorldPosition))
+		{
+			m_xmf3PetDragOffset = XMFLOAT3(
+				xmf3PetPosition.x - xmf3WorldPosition.x,
+				xmf3PetPosition.y - xmf3WorldPosition.y,
+				0.0f);
+		}
+		else
+		{
+			m_xmf3PetDragOffset = XMFLOAT3(0.0f, 0.0f, 0.0f);
+		}
+		m_pMousePressedPet->SetMovementAiPaused(true);
+		SetCapture(hWnd);
+		return;
+	}
 }
 
 void CGameScene::ChangeActivePet(size_t petIndex)
@@ -1070,6 +1225,9 @@ void CGameScene::ChangeActivePet(size_t petIndex)
 	selectedResource.pPet->CopyRuntimeStateFrom(*currentResource.pPet);
 	m_nActivePetIndex = static_cast<UINT>(petIndex);
 	m_pPointedPet = NULL;
+	m_pMousePressedPet = NULL;
+	m_bPetDragCandidate = false;
+	m_bPetDragging = false;
 	SaveLocalPlayerStatus();
 }
 

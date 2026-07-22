@@ -74,6 +74,8 @@ public:
 	virtual void Animate(float fTimeElapsed) override;
 	void AnimateWithoutMovement(float fTimeElapsed);
 	void CopyRuntimeStateFrom(const CPet& sourcePet);
+	void SetMovementAiPaused(bool bPaused);
+	bool IsMovementAiPaused() const { return m_bMovementAiPaused; }
 
 private:
 	enum class MOVE_STATE
@@ -113,6 +115,7 @@ private:
 	float m_fRotationElapsedTime = 0.0f;
 	float m_fRotationDuration = 0.35f;
 	bool m_bRotating = false;
+	bool m_bMovementAiPaused = false;
 
 public:
 	string GetName() const { return m_sName; }
