@@ -7,6 +7,7 @@ bool CShopUI::ProcessFinancialClick(float x, float y, float width, float height,
 	for (int category = 0; category < 2; ++category)
 	{
 		if (!IsPointInRectangle(x, y, GetFinancialCategoryButtonRectangle(category, width, height))) continue;
+		g_pFramework->PlayClickSound();
 		m_nFinancialCategory = category;
 		return(true);
 	}
@@ -15,20 +16,29 @@ bool CShopUI::ProcessFinancialClick(float x, float y, float width, float height,
 	{
 		if (m_bFinancialProductActive[m_nFinancialCategory]) return(true);
 		int& index = m_nFinancialProductIndices[m_nFinancialCategory];
-		if (index > 0) --index;
+		if (index > 0)
+		{
+			g_pFramework->PlayClickSound();
+			--index;
+		}
 		return(true);
 	}
 	if (IsPointInRectangle(x, y, GetFinancialRightButtonRectangle(width, height)))
 	{
 		if (m_bFinancialProductActive[m_nFinancialCategory]) return(true);
 		int& index = m_nFinancialProductIndices[m_nFinancialCategory];
-		if (index < 9 && index < m_nFinancialMaximumProductIndices[m_nFinancialCategory]) ++index;
+		if (index < 9 && index < m_nFinancialMaximumProductIndices[m_nFinancialCategory])
+		{
+			g_pFramework->PlayClickSound();
+			++index;
+		}
 		return(true);
 	}
 	if (IsPointInRectangle(x, y, GetFinancialApplicationButtonRectangle(width, height, money, context)))
 	{
 		if (!IsFinancialApplicationButtonDisabled(money))
 		{
+			g_pFramework->PlayClickSound();
 			m_nPendingFinancialCategory = m_nFinancialCategory;
 			m_nPendingFinancialProductIndex = m_nFinancialProductIndices[m_nFinancialCategory];
 		}

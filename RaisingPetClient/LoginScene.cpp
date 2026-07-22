@@ -1097,6 +1097,7 @@ void CLoginScene::OnProcessingMouseMessage(HWND hWnd, UINT message, WPARAM wPara
 	{
 		if (PointInRectangle(x, y, GetDirectStartButtonRectangle(width, height)))
 		{
+			g_pFramework->PlayClickSound();
 			g_pFramework->GetNetworkManager().Disconnect();
 			g_pFramework->RequestSceneChange(SCENE_TYPE::GAME);
 		}
@@ -1112,6 +1113,7 @@ void CLoginScene::OnProcessingMouseMessage(HWND hWnd, UINT message, WPARAM wPara
 	{
 		if (PointInRectangle(x, y, GetStartButtonRectangle(width, height)))
 		{
+			g_pFramework->PlayClickSound();
 			const std::string nicknameUtf8 = WideStringToUtf8(m_Nickname);
 			if (IsBlankWideText(m_Nickname) || nicknameUtf8.empty() || nicknameUtf8.size() > 96 ||
 				!g_pFramework->GetNetworkManager().SendNicknameSetupRequest(nicknameUtf8))
@@ -1142,6 +1144,7 @@ void CLoginScene::OnProcessingMouseMessage(HWND hWnd, UINT message, WPARAM wPara
 	{
 		if (PointInRectangle(x, y, GetDirectStartButtonRectangle(width, height)))
 		{
+			g_pFramework->PlayClickSound();
 			g_pFramework->GetNetworkManager().Disconnect();
 			m_eLoginPage = LOGIN_PAGE::INPUT;
 			m_fLoadingElapsedTime = 0.0f;
@@ -1171,6 +1174,7 @@ void CLoginScene::OnProcessingMouseMessage(HWND hWnd, UINT message, WPARAM wPara
 	m_nActiveTextField = -1;
 	if (PointInRectangle(x, y, GetRegisterButtonRectangle(width, height)))
 	{
+		g_pFramework->PlayClickSound();
 		if (m_LoginId.empty() || m_LoginPassword.empty() ||
 			!g_pFramework->GetNetworkManager().StartRegister(m_LoginId, m_LoginPassword))
 		{
@@ -1181,6 +1185,7 @@ void CLoginScene::OnProcessingMouseMessage(HWND hWnd, UINT message, WPARAM wPara
 	}
 	else if (PointInRectangle(x, y, GetLoginButtonRectangle(false, width, height)))
 	{
+		g_pFramework->PlayClickSound();
 		if (m_LoginId.empty() || m_LoginPassword.empty() ||
 			!g_pFramework->GetNetworkManager().StartLogin(m_LoginId, m_LoginPassword))
 		{
@@ -1191,6 +1196,7 @@ void CLoginScene::OnProcessingMouseMessage(HWND hWnd, UINT message, WPARAM wPara
 	}
 	else if (PointInRectangle(x, y, GetLoginButtonRectangle(true, width, height)))
 	{
+		g_pFramework->PlayClickSound();
 		g_pFramework->GetNetworkManager().Disconnect();
 		g_pFramework->RequestSceneChange(SCENE_TYPE::GAME);
 	}

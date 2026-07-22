@@ -9,6 +9,8 @@ namespace
 {
 const char* ERROR_SOUND_KEY = "ErrorSound";
 const char* ERROR_SOUND_FILE_PATH = "Assets\\Sound\\ErrorSound.mp3";
+const char* CLICK_SOUND_KEY = "ClickSound";
+const char* CLICK_SOUND_FILE_PATH = "Assets\\Sound\\ClickSound.mp3";
 }
 
 CGameFramework::CGameFramework()
@@ -64,6 +66,7 @@ bool CGameFramework::OnCreate(HINSTANCE hInstance, HWND hMainWnd)
 		m_ppd3dSwapChainBackBuffers, m_nSwapChainBuffers);
 	m_SoundManager.Initialize();
 	m_SoundManager.LoadSound(ERROR_SOUND_KEY, ERROR_SOUND_FILE_PATH);
+	m_SoundManager.LoadSound(CLICK_SOUND_KEY, CLICK_SOUND_FILE_PATH);
 
 	BuildObjects();
 
@@ -458,6 +461,11 @@ void CGameFramework::ProcessInput()
 void CGameFramework::PlayErrorSound()
 {
 	m_SoundManager.PlaySound(ERROR_SOUND_KEY);
+}
+
+void CGameFramework::PlayClickSound()
+{
+	m_SoundManager.PlaySound(CLICK_SOUND_KEY);
 }
 
 void CGameFramework::AnimateObjects()

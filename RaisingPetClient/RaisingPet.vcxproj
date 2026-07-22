@@ -97,7 +97,8 @@
       <Command>copy /Y "$(ProjectDir)External\FMOD\lib\x64\fmodL.dll" "$(OutDir)"
 if not exist "$(OutDir)Assets\Sound\" mkdir "$(OutDir)Assets\Sound\"
 copy /Y "$(ProjectDir)Assets\Sound\CoinSound.mp3" "$(OutDir)Assets\Sound\"
-copy /Y "$(ProjectDir)Assets\Sound\ErrorSound.mp3" "$(OutDir)Assets\Sound\"</Command>
+copy /Y "$(ProjectDir)Assets\Sound\ErrorSound.mp3" "$(OutDir)Assets\Sound\"
+copy /Y "$(ProjectDir)Assets\Sound\ClickSound.mp3" "$(OutDir)Assets\Sound\"</Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
@@ -145,10 +146,12 @@ copy /Y "$(ProjectDir)Assets\Sound\ErrorSound.mp3" "$(OutDir)Assets\Sound\"</Com
 if not exist "$(OutDir)Assets\Sound\" mkdir "$(OutDir)Assets\Sound\"
 copy /Y "$(ProjectDir)Assets\Sound\CoinSound.mp3" "$(OutDir)Assets\Sound\"
 copy /Y "$(ProjectDir)Assets\Sound\ErrorSound.mp3" "$(OutDir)Assets\Sound\"
+copy /Y "$(ProjectDir)Assets\Sound\ClickSound.mp3" "$(OutDir)Assets\Sound\"
 if exist "$(ProjectDir)Executable\" copy /Y "$(ProjectDir)External\FMOD\lib\x64\fmod.dll" "$(ProjectDir)Executable\"
 if exist "$(ProjectDir)Executable\" if not exist "$(ProjectDir)Executable\Assets\Sound\" mkdir "$(ProjectDir)Executable\Assets\Sound\"
 if exist "$(ProjectDir)Executable\" copy /Y "$(ProjectDir)Assets\Sound\CoinSound.mp3" "$(ProjectDir)Executable\Assets\Sound\"
-if exist "$(ProjectDir)Executable\" copy /Y "$(ProjectDir)Assets\Sound\ErrorSound.mp3" "$(ProjectDir)Executable\Assets\Sound\"</Command>
+if exist "$(ProjectDir)Executable\" copy /Y "$(ProjectDir)Assets\Sound\ErrorSound.mp3" "$(ProjectDir)Executable\Assets\Sound\"
+if exist "$(ProjectDir)Executable\" copy /Y "$(ProjectDir)Assets\Sound\ClickSound.mp3" "$(ProjectDir)Executable\Assets\Sound\"</Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemGroup>
