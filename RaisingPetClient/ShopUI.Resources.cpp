@@ -611,11 +611,14 @@ XMFLOAT4 CShopUI::GetFinancialApplicationButtonRectangle(float width, float heig
 	UINT money, const SHOP_TEXT_RENDER_CONTEXT& context) const
 {
 	const XMFLOAT4 moneyRect = GetMoneyUiRectangle(width, height, money, context);
-	const float buttonHeight = moneyRect.w - moneyRect.y;
-	const float buttonWidth = buttonHeight * (447.0f / 217.0f);
+	const XMFLOAT4 confirm = GetPetConfirmationRectangle(width, height,
+		m_xmf2ShopBoardOffset.x, m_xmf2ShopBoardOffset.y);
+	const float buttonWidth = confirm.z - confirm.x;
+	const float buttonHeight = confirm.w - confirm.y;
 	const float gap = 8.0f;
-	return(XMFLOAT4(moneyRect.x - gap - buttonWidth, moneyRect.y,
-		moneyRect.x - gap, moneyRect.w));
+	const float top = moneyRect.y + ((moneyRect.w - moneyRect.y - buttonHeight) * 0.5f);
+	return(XMFLOAT4(moneyRect.x - gap - buttonWidth, top,
+		moneyRect.x - gap, top + buttonHeight));
 }
 
 XMFLOAT4 CShopUI::GetStockSlotRectangle(int index, float width, float height) const

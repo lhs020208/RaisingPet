@@ -186,28 +186,12 @@ XMFLOAT4 CShopUI::GetStockTargetQuantityRectangle(float width, float height) con
 XMFLOAT4 CShopUI::GetStockTargetBuyingButtonRectangle(float width, float height,
 	const SHOP_TEXT_RENDER_CONTEXT& context) const
 {
-	const XMFLOAT4 board = GetShopBoardRectangle(width, height,
-		m_xmf2ShopBoardOffset.x, m_xmf2ShopBoardOffset.y);
-	const float boardHeight = board.w - board.y;
-	const XMFLOAT4 moneyRect = GetMoneyUiRectangle(width, height, 0, context);
-	const float buttonHeight = boardHeight * 0.105f;
-	const float buttonWidth = buttonHeight * (294.0f / 216.0f);
-	const float buttonGap = 8.0f;
-	const float moneyGap = 22.0f;
-	const float totalButtonWidth = buttonWidth * 2.0f + buttonGap;
-	const float buyingLeft = moneyRect.x - moneyGap - totalButtonWidth;
-	const float buttonTop = board.w - boardHeight * 0.13f;
-	return(XMFLOAT4(buyingLeft, buttonTop,
-		buyingLeft + buttonWidth, buttonTop + buttonHeight));
+	return(GetStockTransactionBuyingButtonRectangle(width, height, context));
 }
 
 XMFLOAT4 CShopUI::GetStockTargetSellingButtonRectangle(float width, float height,
 	const SHOP_TEXT_RENDER_CONTEXT& context) const
 {
-	const XMFLOAT4 buying = GetStockTargetBuyingButtonRectangle(width, height, context);
-	const float buttonWidth = buying.z - buying.x;
-	const float buttonGap = 8.0f;
-	return(XMFLOAT4(buying.z + buttonGap, buying.y,
-		buying.z + buttonGap + buttonWidth, buying.w));
+	return(GetStockTransactionSellingButtonRectangle(width, height, context));
 }
 
