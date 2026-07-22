@@ -632,6 +632,7 @@ void CGameScene::Render(ID3D12GraphicsCommandList* pd3dCommandList, CCamera* pCa
 		PET_RENDER_RESOURCE& petResource = m_vPetResources[m_nActivePetIndex];
 		if (petResource.pPet && petResource.pd3dSrvDescriptorHeap)
 		{
+			petResource.pPet->SetScale(m_ShopUI.GetPetSizeScale());
 			ID3D12DescriptorHeap* ppd3dPetDescriptorHeaps[] = { petResource.pd3dSrvDescriptorHeap };
 			pd3dCommandList->SetDescriptorHeaps(1, ppd3dPetDescriptorHeaps);
 			pd3dCommandList->SetGraphicsRootDescriptorTable(3,
@@ -1553,6 +1554,7 @@ void CGameScene::Animate(float fElapsedTime)
 		CPet* pActivePet = m_vPetResources[m_nActivePetIndex].pPet;
 		if (pActivePet)
 		{
+			pActivePet->SetScale(m_ShopUI.GetPetSizeScale());
 			if (m_ShopUI.IsPetMovementEnabled())
 			{
 				if (!m_bPetDragging)

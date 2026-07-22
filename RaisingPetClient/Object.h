@@ -23,6 +23,7 @@ public:
 
 	XMFLOAT3						m_xmf3Color = XMFLOAT3(1.0f, 1.0f, 1.0f);
 	BoundingOrientedBox				m_xmOOBB = BoundingOrientedBox();
+	float							m_fScale = 1.0f;
 
 	void SetMesh(CMesh *pMesh);
 	void SetShader(CShader *pShader);
@@ -50,6 +51,8 @@ public:
 
 	void SetPosition(float x, float y, float z);
 	void SetPosition(XMFLOAT3 xmf3Position);
+	void SetScale(float fScale);
+	float GetScale() const { return m_fScale; }
 	void SetRotationTransform(XMFLOAT4X4* pmxf4x4Transform);
 
 	void SetColor(XMFLOAT3 xmf3Color) { m_xmf3Color = xmf3Color; }

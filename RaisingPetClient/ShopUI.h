@@ -120,6 +120,7 @@ public:
 	float GetClickVolumeScale() const;
 	float GetErrorVolumeScale() const;
 	float GetCoinVolumeScale() const;
+	float GetPetSizeScale() const;
 	void GetSettingValues(bool bPetOptions[3], UINT& nPetSizePercent, UINT nVolumePercents[4]) const;
 	void SetSettingValues(const bool bPetOptions[3], UINT nPetSizePercent, const UINT nVolumePercents[4]);
 	bool ConsumeSettingChangeRequest();

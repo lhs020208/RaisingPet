@@ -119,6 +119,26 @@ void CGameObject::SetPosition(XMFLOAT3 xmf3Position)
 	SetPosition(xmf3Position.x, xmf3Position.y, xmf3Position.z);
 }
 
+void CGameObject::SetScale(float fScale)
+{
+	if (fScale < 0.01f) fScale = 0.01f;
+	m_fScale = fScale;
+
+	const XMFLOAT3 xmf3Right = GetRight();
+	const XMFLOAT3 xmf3Up = GetUp();
+	const XMFLOAT3 xmf3Look = GetLook();
+	m_xmf4x4World._11 = xmf3Right.x * m_fScale;
+	m_xmf4x4World._12 = xmf3Right.y * m_fScale;
+	m_xmf4x4World._13 = xmf3Right.z * m_fScale;
+	m_xmf4x4World._21 = xmf3Up.x * m_fScale;
+	m_xmf4x4World._22 = xmf3Up.y * m_fScale;
+	m_xmf4x4World._23 = xmf3Up.z * m_fScale;
+	m_xmf4x4World._31 = xmf3Look.x * m_fScale;
+	m_xmf4x4World._32 = xmf3Look.y * m_fScale;
+	m_xmf4x4World._33 = xmf3Look.z * m_fScale;
+	UpdateBoundingBox();
+}
+
 XMFLOAT3 CGameObject::GetPosition()
 {
 	return(XMFLOAT3(m_xmf4x4World._41, m_xmf4x4World._42, m_xmf4x4World._43));
@@ -220,9 +240,9 @@ void CGameObject::GenerateRayForPicking(XMVECTOR& xmvPickPosition, XMMATRIX& xmm
 }
 void CGameObject::SetRotationTransform(XMFLOAT4X4* pmxf4x4Transform)
 {
-	m_xmf4x4World._11 = pmxf4x4Transform->_11; m_xmf4x4World._12 = pmxf4x4Transform->_12; m_xmf4x4World._13 = pmxf4x4Transform->_13;
-	m_xmf4x4World._21 = pmxf4x4Transform->_21; m_xmf4x4World._22 = pmxf4x4Transform->_22; m_xmf4x4World._23 = pmxf4x4Transform->_23;
-	m_xmf4x4World._31 = pmxf4x4Transform->_31; m_xmf4x4World._32 = pmxf4x4Transform->_32; m_xmf4x4World._33 = pmxf4x4Transform->_33;
+	m_xmf4x4World._11 = pmxf4x4Transform->_11 * m_fScale; m_xmf4x4World._12 = pmxf4x4Transform->_12 * m_fScale; m_xmf4x4World._13 = pmxf4x4Transform->_13 * m_fScale;
+	m_xmf4x4World._21 = pmxf4x4Transform->_21 * m_fScale; m_xmf4x4World._22 = pmxf4x4Transform->_22 * m_fScale; m_xmf4x4World._23 = pmxf4x4Transform->_23 * m_fScale;
+	m_xmf4x4World._31 = pmxf4x4Transform->_31 * m_fScale; m_xmf4x4World._32 = pmxf4x4Transform->_32 * m_fScale; m_xmf4x4World._33 = pmxf4x4Transform->_33 * m_fScale;
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -292,6 +312,7 @@ void CPet::CopyRuntimeStateFrom(const CPet& sourcePet)
 {
 	m_xmf4x4World = sourcePet.m_xmf4x4World;
 	m_xmOOBB = sourcePet.m_xmOOBB;
+	m_fScale = sourcePet.m_fScale;
 	m_MoveState = sourcePet.m_MoveState;
 	m_RandomEngine = sourcePet.m_RandomEngine;
 	m_fStateRemainingTime = sourcePet.m_fStateRemainingTime;

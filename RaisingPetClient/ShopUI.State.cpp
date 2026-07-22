@@ -205,6 +205,11 @@ float CShopUI::GetCoinVolumeScale() const
 	return(GetMasterVolumeScale() * static_cast<float>(m_nSettingVolumePercents[3]) / 100.0f);
 }
 
+float CShopUI::GetPetSizeScale() const
+{
+	return(static_cast<float>(m_nSettingPetSizePercent) / 50.0f);
+}
+
 void CShopUI::GetSettingValues(bool petOptions[3], UINT& petSizePercent, UINT volumePercents[4]) const
 {
 	for (int i = 0; i < 3; ++i)
