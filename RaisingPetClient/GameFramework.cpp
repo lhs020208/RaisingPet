@@ -363,6 +363,21 @@ LRESULT CALLBACK CGameFramework::OnProcessingWindowMessage(HWND hWnd, UINT nMess
 		case WM_MOUSEWHEEL:
 			OnProcessingMouseMessage(hWnd, nMessageID, wParam, lParam);
             break;
+		case WM_SETCURSOR:
+		{
+			if (LOWORD(lParam) == HTCLIENT)
+			{
+				POINT cursorPosition;
+				::GetCursorPos(&cursorPosition);
+				::ScreenToClient(hWnd, &cursorPosition);
+				if (IsPointOverClickableControl(cursorPosition.x, cursorPosition.y))
+				{
+					::SetCursor(::LoadCursor(NULL, IDC_HAND));
+					return(TRUE);
+				}
+			}
+			break;
+		}
         case WM_CHAR:
         case WM_KEYDOWN:
         case WM_KEYUP:
@@ -556,6 +571,20 @@ bool CGameFramework::IsPointOverPet(int xClient, int yClient)
 
 	return(pScene->PickObjectPointedByCursor(xClient, yClient, m_pCamera) != NULL);
 }
+
+bool CGameFramework::IsPointOverClickableControl(int xClient, int yClient)
+{
+	CScene* pScene = m_SceneManager.GetCurrentScene();
+	if (!m_hWnd || !pScene || !m_pCamera) return(false);
+
+	RECT clientRect;
+	::GetClientRect(m_hWnd, &clientRect);
+	POINT clientPoint = { xClient, yClient };
+	if (!::PtInRect(&clientRect, clientPoint)) return(false);
+
+	return(pScene->IsPointOverClickableControl(xClient, yClient, m_pCamera));
+}
+
 void CGameFramework::UpdateMouseTransparency()
 {
 	if (!m_hWnd || !m_SceneManager.GetCurrentScene() || !m_pCamera) return;

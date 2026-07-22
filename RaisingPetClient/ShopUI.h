@@ -86,6 +86,9 @@ public:
 		size_t nActivePetIndex, const std::vector<SHOP_PET_RENDER_RESOURCE>& pets,
 		const SHOP_TEXT_RENDER_CONTEXT& textContext, bool bNetworkConnected);
 	bool IsPointOver(float x, float y, float fViewportWidth, float fViewportHeight) const;
+	bool IsPointOverClickableButton(float x, float y, float fViewportWidth, float fViewportHeight,
+		UINT nMoney, size_t nPetCount, size_t nActivePetIndex,
+		const SHOP_TEXT_RENDER_CONTEXT& textContext, bool bNetworkConnected) const;
 	bool OnProcessingMouseMessage(HWND hWnd, UINT nMessageID, WPARAM wParam, LPARAM lParam,
 		UINT nMoney, size_t nPetCount, size_t nActivePetIndex,
 		const SHOP_TEXT_RENDER_CONTEXT& textContext, bool bNetworkConnected);

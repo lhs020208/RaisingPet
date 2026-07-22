@@ -34,9 +34,10 @@ public:
     void BuildObjects();
     void ReleaseObjects();
 
-    void ProcessInput();
+	void ProcessInput();
     void AnimateObjects();
 	bool IsPointOverPet(int xClient, int yClient);
+	bool IsPointOverClickableControl(int xClient, int yClient);
 	void UpdateMouseTransparency();
     void FrameAdvance();
 

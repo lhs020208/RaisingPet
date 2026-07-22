@@ -17,6 +17,8 @@ public:
 	virtual void Animate(float fTimeElapsed) override;
 	virtual CGameObject* PickObjectPointedByCursor(int xClient, int yClient,
 		CCamera* pCamera) override;
+	virtual bool IsPointOverClickableControl(int xClient, int yClient,
+		CCamera* pCamera) override;
 
 private:
 	struct UI_IMAGE_RESOURCE

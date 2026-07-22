@@ -1436,3 +1436,29 @@ CGameObject* CLoginScene::PickObjectPointedByCursor(int x, int y, CCamera* camer
 		GetBoardRectangle(camera->m_d3dViewport.Width, camera->m_d3dViewport.Height))
 		? &m_UiHitObject : NULL;
 }
+
+bool CLoginScene::IsPointOverClickableControl(int x, int y, CCamera* camera)
+{
+	if (!camera) return(false);
+	SetLoginBoardOffset(m_xmf2BoardOffset);
+	const float width = camera->m_d3dViewport.Width;
+	const float height = camera->m_d3dViewport.Height;
+	const float fx = static_cast<float>(x);
+	const float fy = static_cast<float>(y);
+
+	switch (m_eLoginPage)
+	{
+	case LOGIN_PAGE::LOADING:
+		return(PointInRectangle(fx, fy, GetDirectStartButtonRectangle(width, height)));
+	case LOGIN_PAGE::NICKNAME:
+		return(PointInRectangle(fx, fy, GetStartButtonRectangle(width, height)));
+	case LOGIN_PAGE::REGISTER:
+		return(PointInRectangle(fx, fy, GetDirectStartButtonRectangle(width, height)));
+	case LOGIN_PAGE::INPUT:
+		return(PointInRectangle(fx, fy, GetRegisterButtonRectangle(width, height))
+			|| PointInRectangle(fx, fy, GetLoginButtonRectangle(false, width, height))
+			|| PointInRectangle(fx, fy, GetLoginButtonRectangle(true, width, height)));
+	default:
+		return(false);
+	}
+}

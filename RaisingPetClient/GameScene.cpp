@@ -806,6 +806,17 @@ CGameObject* CGameScene::PickObjectPointedByCursor(int xClient, int yClient, CCa
 	m_pPointedPet = pActivePet;
 	return(m_pPointedPet);
 }
+
+bool CGameScene::IsPointOverClickableControl(int xClient, int yClient, CCamera* pCamera)
+{
+	if (!pCamera) return(false);
+	return(m_ShopUI.IsPointOverClickableButton(static_cast<float>(xClient),
+		static_cast<float>(yClient), pCamera->m_d3dViewport.Width,
+		pCamera->m_d3dViewport.Height, m_nMoney, m_vPetResources.size(),
+		m_nActivePetIndex, GetShopTextRenderContext(),
+		g_pFramework->GetNetworkManager().IsConnected()));
+}
+
 void CGameScene::SpawnCoinEffects(CPet* pPet, UINT nPossessionBeforeCollection)
 {
 	if (!pPet || nPossessionBeforeCollection == 0) return;

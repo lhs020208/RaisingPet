@@ -123,6 +123,10 @@ CGameObject* CScene::PickObjectPointedByCursor(int xClient, int yClient, CCamera
 {
 	return(NULL);
 }
+bool CScene::IsPointOverClickableControl(int xClient, int yClient, CCamera* pCamera)
+{
+	return(false);
+}
 
 bool CScene::ProcessInput()
 {

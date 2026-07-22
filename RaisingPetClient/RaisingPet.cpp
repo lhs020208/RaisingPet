@@ -135,6 +135,10 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 		::ScreenToClient(hWnd, &clientPoint);
 		return(gGameFramework.IsPointOverPet(clientPoint.x, clientPoint.y) ? HTCLIENT : HTTRANSPARENT);
 	}
+	case WM_SETCURSOR:
+		if (gGameFramework.OnProcessingWindowMessage(hWnd, message, wParam, lParam))
+			return(TRUE);
+		return(::DefWindowProc(hWnd, message, wParam, lParam));
 	case WM_SIZE:
 	case WM_LBUTTONDOWN:
 	case WM_LBUTTONUP:

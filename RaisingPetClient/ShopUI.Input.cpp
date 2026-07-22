@@ -246,6 +246,95 @@ bool CShopUI::ProcessShopUIClick(float x, float y, float width, float height, UI
 	return(false);
 }
 
+bool CShopUI::IsPointOverClickableButton(float x, float y, float width, float height,
+	UINT money, size_t petCount, size_t, const SHOP_TEXT_RENDER_CONTEXT& context,
+	bool networkConnected) const
+{
+	if (IsPointInRectangle(x, y, GetShopIconRectangle(width, height))) return(true);
+	if (!m_bShopActive) return(false);
+
+	if (IsPointInRectangle(x, y,
+		GetShopCloseRectangle(width, height, m_xmf2ShopBoardOffset.x, m_xmf2ShopBoardOffset.y)))
+		return(true);
+	if (IsPointInRectangle(x, y,
+		GetShopBackRectangle(width, height, m_xmf2ShopBoardOffset.x, m_xmf2ShopBoardOffset.y)))
+		return(true);
+
+	if (m_eShopPage == SHOP_PAGE::SHOP_MENU)
+	{
+		for (int i = 0; i < 4; ++i)
+		{
+			if (!IsPointInRectangle(x, y, GetShopSlotRectangle(i, width, height,
+				m_xmf2ShopBoardOffset.x, m_xmf2ShopBoardOffset.y))) continue;
+			return(networkConnected || (i != 2 && i != 3));
+		}
+		return(false);
+	}
+	if (m_eShopPage == SHOP_PAGE::PET_CHANGE)
+	{
+		return(m_nSelectedPetIndex < petCount
+			&& IsPointInRectangle(x, y, GetPetConfirmationRectangle(width, height,
+				m_xmf2ShopBoardOffset.x, m_xmf2ShopBoardOffset.y)));
+	}
+	if (m_eShopPage == SHOP_PAGE::PET_ENHANCE)
+	{
+		for (int type = 0; type < 2; ++type)
+			if (IsPointInRectangle(x, y, GetEnhanceButtonRectangle(type, width, height)))
+				return(true);
+		return(false);
+	}
+	if (m_eShopPage == SHOP_PAGE::BANK)
+	{
+		for (int category = 0; category < 2; ++category)
+			if (IsPointInRectangle(x, y, GetFinancialCategoryButtonRectangle(category, width, height)))
+				return(true);
+		if (IsPointInRectangle(x, y, GetFinancialLeftButtonRectangle(width, height)))
+			return(!m_bFinancialProductActive[m_nFinancialCategory]
+				&& m_nFinancialProductIndices[m_nFinancialCategory] > 0);
+		if (IsPointInRectangle(x, y, GetFinancialRightButtonRectangle(width, height)))
+			return(!m_bFinancialProductActive[m_nFinancialCategory]
+				&& m_nFinancialProductIndices[m_nFinancialCategory] < 9
+				&& m_nFinancialProductIndices[m_nFinancialCategory]
+					< m_nFinancialMaximumProductIndices[m_nFinancialCategory]);
+		if (IsPointInRectangle(x, y,
+			GetFinancialApplicationButtonRectangle(width, height, money, context)))
+			return(!IsFinancialApplicationButtonDisabled(money));
+		return(false);
+	}
+	if (m_eShopPage == SHOP_PAGE::STOCK_MENU)
+	{
+		return(IsPointInRectangle(x, y, GetStockSlotRectangle(0, width, height))
+			|| IsPointInRectangle(x, y, GetStockSlotRectangle(1, width, height)));
+	}
+	if (m_eShopPage == SHOP_PAGE::STOCK_MANAGEMENT)
+	{
+		if (IsPointInRectangle(x, y, GetStockIssuanceButtonRectangle(width, height)))
+			return(!m_bStockIssued && !m_wstrStockName.empty());
+		if (IsPointInRectangle(x, y, GetStockGraphButtonRectangle(width, height)))
+			return(m_bStockIssued);
+		return(false);
+	}
+	if (m_eShopPage == SHOP_PAGE::STOCK_TRANSACTION)
+	{
+		if (m_StockTransactionInfos.empty()) return(false);
+		if (IsPointInRectangle(x, y, GetStockTransactionBuyingButtonRectangle(width, height, context)))
+			return(!IsStockTradeButtonDisabled(0, money));
+		if (IsPointInRectangle(x, y, GetStockTransactionSellingButtonRectangle(width, height, context)))
+			return(!IsStockTradeButtonDisabled(1, money));
+		return(IsPointInRectangle(x, y, GetStockTransactionGraphButtonRectangle(width, height)));
+	}
+	if (m_eShopPage == SHOP_PAGE::STOCK_SEE_TARGET_GRAPH)
+	{
+		if (m_StockTransactionInfos.empty()) return(false);
+		if (IsPointInRectangle(x, y, GetStockTargetBuyingButtonRectangle(width, height, context)))
+			return(!IsStockTradeButtonDisabled(0, money));
+		if (IsPointInRectangle(x, y, GetStockTargetSellingButtonRectangle(width, height, context)))
+			return(!IsStockTradeButtonDisabled(1, money));
+		return(false);
+	}
+	return(false);
+}
+
 bool CShopUI::OnProcessingKeyboardMessage(HWND hWnd, UINT message, WPARAM wParam, LPARAM)
 {
 	if (m_bShopActive && (m_eShopPage == SHOP_PAGE::STOCK_TRANSACTION
