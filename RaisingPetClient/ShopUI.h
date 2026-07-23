@@ -95,6 +95,7 @@ public:
 	bool OnProcessingKeyboardMessage(HWND hWnd, UINT nMessageID, WPARAM wParam, LPARAM lParam);
 	bool ConsumePetConfirmationRequest(size_t& nSelectedPetIndex);
 	bool ConsumePetEnhancementRequest(int& nEnhancementType);
+	bool ConsumeExitRequest();
 	bool ConsumeFinancialProductRequest(int& nCategory, int& nProductIndex);
 	bool ConsumeStockIssueRequest(std::wstring& stockName);
 	bool ConsumeStockManagementInfoRequest();
@@ -161,6 +162,7 @@ private:
 	UI_IMAGE_RESOURCE m_SettingCheckResource;
 	UI_IMAGE_RESOURCE m_SettingSliderBarResource;
 	UI_IMAGE_RESOURCE m_SettingSliderHandleResource;
+	UI_IMAGE_RESOURCE m_SettingEndButtonResource;
 	UI_IMAGE_RESOURCE m_ShopBoardResource;
 	UI_IMAGE_RESOURCE m_PageTitleResource;
 	UI_IMAGE_RESOURCE m_ShopCloseIconResource;
@@ -234,6 +236,7 @@ private:
 	UINT m_nSettingPetSizePercent = 50;
 	UINT m_nSettingVolumePercents[4] = { 100, 100, 100, 100 };
 	bool m_bPendingSettingChangeRequest = false;
+	bool m_bPendingExitRequest = false;
 	int m_nDraggingSettingSlider = -1;
 	size_t m_nPetScrollOffset = 0;
 	size_t m_nCachedPetCount = 0;

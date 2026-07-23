@@ -22,6 +22,13 @@ bool CShopUI::ConsumePetEnhancementRequest(int& enhancementType)
 	return(true);
 }
 
+bool CShopUI::ConsumeExitRequest()
+{
+	if (!m_bPendingExitRequest) return(false);
+	m_bPendingExitRequest = false;
+	return(true);
+}
+
 bool CShopUI::ConsumeFinancialProductRequest(int& category, int& productIndex)
 {
 	if (m_nPendingFinancialCategory < 0 || m_nPendingFinancialProductIndex < 0) return(false);

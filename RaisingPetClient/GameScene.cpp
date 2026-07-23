@@ -825,7 +825,6 @@ void CGameScene::OnProcessingKeyboardMessage(HWND hWnd, UINT nMessageID, WPARAM 
 		case VK_SPACE:
 			break;
 		case VK_ESCAPE:
-			::PostQuitMessage(0);
 			break;
 		default:
 			break;
@@ -1311,6 +1310,11 @@ void CGameScene::OnProcessingMouseMessage(HWND hWnd, UINT nMessageID, WPARAM wPa
 	{
 		ApplyShopSettingsToFramework();
 		SaveLocalPlayerStatus();
+	}
+	if (m_ShopUI.ConsumeExitRequest())
+	{
+		::PostQuitMessage(0);
+		return;
 	}
 	size_t nConfirmedPetIndex = 0;
 	if (m_ShopUI.ConsumePetConfirmationRequest(nConfirmedPetIndex))

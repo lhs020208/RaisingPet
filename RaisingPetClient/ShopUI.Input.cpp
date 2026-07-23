@@ -32,6 +32,8 @@ bool CShopUI::ProcessSettingBoardClick(HWND hWnd, float x, float y, float width,
 		m_xmf2SettingBoardOffset.x, m_xmf2SettingBoardOffset.y);
 	const XMFLOAT4 close = GetShopCloseRectangle(width, height,
 		m_xmf2SettingBoardOffset.x, m_xmf2SettingBoardOffset.y);
+	const XMFLOAT4 endButton = GetSettingEndButtonRectangle(width, height,
+		m_xmf2SettingBoardOffset.x, m_xmf2SettingBoardOffset.y);
 	if (IsPointInRectangle(x, y, close))
 	{
 		PlayUiClickSound();
@@ -42,6 +44,14 @@ bool CShopUI::ProcessSettingBoardClick(HWND hWnd, float x, float y, float width,
 			|| board.y < -halfHeight
 			|| board.w > height + halfHeight;
 		m_bSettingActive = false;
+		m_bSettingBoardDragging = false;
+		m_nDraggingSettingSlider = -1;
+		return(true);
+	}
+	if (IsPointInRectangle(x, y, endButton))
+	{
+		PlayUiClickSound();
+		m_bPendingExitRequest = true;
 		m_bSettingBoardDragging = false;
 		m_nDraggingSettingSlider = -1;
 		return(true);
@@ -354,9 +364,12 @@ bool CShopUI::IsPointOverClickableButton(float x, float y, float width, float he
 	const bool inSettingBoard = m_bSettingActive && IsPointInRectangle(x, y, settingBoard);
 	const XMFLOAT4 settingClose = GetShopCloseRectangle(width, height,
 		m_xmf2SettingBoardOffset.x, m_xmf2SettingBoardOffset.y);
+	const XMFLOAT4 settingEndButton = GetSettingEndButtonRectangle(width, height,
+		m_xmf2SettingBoardOffset.x, m_xmf2SettingBoardOffset.y);
 	auto isOverSettingControl = [&]() -> bool
 	{
 		if (IsPointInRectangle(x, y, settingClose)) return(true);
+		if (IsPointInRectangle(x, y, settingEndButton)) return(true);
 		for (int i = 0; i < 3; ++i)
 			if (IsPointInRectangle(x, y, GetSettingCheckBoxRectangle(i, width, height,
 				m_xmf2SettingBoardOffset.x, m_xmf2SettingBoardOffset.y)))

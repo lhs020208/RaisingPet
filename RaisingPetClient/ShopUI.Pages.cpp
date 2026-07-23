@@ -267,6 +267,9 @@ void CShopUI::RenderSettingBoard(ID3D12GraphicsCommandList* commandList, CCamera
 	RenderUiImage(commandList, camera, m_ShopCloseIconResource,
 		GetShopCloseRectangle(width, height,
 			m_xmf2SettingBoardOffset.x, m_xmf2SettingBoardOffset.y));
+	RenderUiImage(commandList, camera, m_SettingEndButtonResource,
+		GetSettingEndButtonRectangle(width, height,
+			m_xmf2SettingBoardOffset.x, m_xmf2SettingBoardOffset.y));
 }
 
 void CShopUI::RenderStockTransactionPage(ID3D12GraphicsCommandList* commandList, CCamera* camera,

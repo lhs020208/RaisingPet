@@ -340,6 +340,18 @@ XMFLOAT4 GetSettingSliderPercentRectangle(int index, float width, float height,
 	return(XMFLOAT4(left, centerY - textHeight * 0.5f, left + textWidth, centerY + textHeight * 0.5f));
 }
 
+XMFLOAT4 GetSettingEndButtonRectangle(float width, float height,
+	float offsetX = 0.0f, float offsetY = 0.0f)
+{
+	const XMFLOAT4 board = GetShopBoardRectangle(width, height, offsetX, offsetY);
+	const XMFLOAT4 close = GetShopCloseRectangle(width, height, offsetX, offsetY);
+	const float buttonHeight = (close.w - close.y) * 1.05f;
+	const float buttonWidth = buttonHeight * (447.0f / 216.0f);
+	const float right = board.z - gShopUiLayout.fBoardRightPadding;
+	const float bottom = board.w - gShopUiLayout.fMoneyBottomPadding;
+	return(XMFLOAT4(right - buttonWidth, bottom - buttonHeight, right, bottom));
+}
+
 XMFLOAT4 GetShopSlotRectangle(int index, float width, float height, float offsetX = 0.0f, float offsetY = 0.0f)
 {
 	const XMFLOAT4 board = GetShopBoardRectangle(width, height, offsetX, offsetY);

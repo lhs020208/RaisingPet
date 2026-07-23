@@ -88,6 +88,7 @@ void CShopUI::BuildObjects(ID3D12Device* device, ID3D12GraphicsCommandList* comm
 	loadImage(L"Assets/Image/Setting/Check.dds", m_SettingCheckResource);
 	loadImage(L"Assets/Image/Setting/SliderBar.dds", m_SettingSliderBarResource);
 	loadImage(L"Assets/Image/Setting/SliderHandle.dds", m_SettingSliderHandleResource);
+	loadImage(L"Assets/Image/Setting/EndButton.dds", m_SettingEndButtonResource);
 	loadImage(L"Assets/Image/Shop/ShopBoard.dds", m_ShopBoardResource);
 	loadImage(L"Assets/Image/Shop/PageTitle.dds", m_PageTitleResource);
 	loadImage(L"Assets/Image/Shop/ShopCloseIcon.dds", m_ShopCloseIconResource);
@@ -169,7 +170,7 @@ void CShopUI::ReleaseObjects()
 	UI_IMAGE_RESOURCE* images[] = { &m_ShopIconResource, &m_SettingIconResource,
 		&m_SettingsResource, &m_SettingCheckBoxResource, &m_SettingCheckResource,
 		&m_SettingSliderBarResource, &m_SettingSliderHandleResource,
-		&m_ShopBoardResource, &m_PageTitleResource,
+		&m_SettingEndButtonResource, &m_ShopBoardResource, &m_PageTitleResource,
 		&m_ShopCloseIconResource, &m_ShopBackSpaceIconResource, &m_ShopSlotResources[0],
 		&m_ShopSlotResources[1], &m_ShopSlotResources[2], &m_ShopSlotResources[3],
 		&m_EmptySquareResources[0], &m_EmptySquareResources[1], &m_PetConfirmationButtonResource,
@@ -272,7 +273,7 @@ void CShopUI::ReleaseUploadBuffers()
 	UI_IMAGE_RESOURCE* images[] = { &m_ShopIconResource, &m_SettingIconResource,
 		&m_SettingsResource, &m_SettingCheckBoxResource, &m_SettingCheckResource,
 		&m_SettingSliderBarResource, &m_SettingSliderHandleResource,
-		&m_ShopBoardResource, &m_PageTitleResource,
+		&m_SettingEndButtonResource, &m_ShopBoardResource, &m_PageTitleResource,
 		&m_ShopCloseIconResource, &m_ShopBackSpaceIconResource, &m_ShopSlotResources[0],
 		&m_ShopSlotResources[1], &m_ShopSlotResources[2], &m_ShopSlotResources[3],
 		&m_EmptySquareResources[0], &m_EmptySquareResources[1], &m_PetConfirmationButtonResource,
