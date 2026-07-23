@@ -150,7 +150,6 @@ void CShopUI::ReturnToShopMenuAfterNetworkDisconnected(float width, float height
 {
 	m_eShopPage = SHOP_PAGE::SHOP_MENU;
 	m_nSelectedShopSlot = -1;
-	m_nPressedEnhanceButton = -1;
 	m_bShopBoardDragging = false;
 	m_bPetScrollDragging = false;
 	m_bStockNameInputActive = false;

@@ -190,7 +190,6 @@ void CGameScene::BuildObjects(ID3D12Device* pd3dDevice, ID3D12GraphicsCommandLis
 	const PET_ASSET_DESC petAssets[] =
 	{
 		{ "TheCA", "Assets/TheCA/TheCAMesh.bin", L"Assets/TheCA/TheCATexture.dds"},
-		{ "Touma", "Assets/Touma/ToumaMesh.bin", L"Assets/Touma/ToumaTexture.dds"},
 		{ "Janmang", "Assets/Janmang/JanmangMesh.bin", L"Assets/Janmang/JanmangTexture.dds"},
 		{ "Poideu", "Assets/Poideu/PoideuMesh.bin", L"Assets/Poideu/PoideuTexture.dds"},
 		{ "Rune", "Assets/Rune/RuneMesh.bin", L"Assets/Rune/RuneTexture.dds"},
@@ -882,7 +881,9 @@ bool CGameScene::IsPointOverClickableControl(int xClient, int yClient, CCamera* 
 	return(m_ShopUI.IsPointOverClickableButton(static_cast<float>(xClient),
 		static_cast<float>(yClient), pCamera->m_d3dViewport.Width,
 		pCamera->m_d3dViewport.Height, m_nMoney, m_vPetResources.size(),
-		m_nActivePetIndex, GetShopTextRenderContext(),
+		m_nActivePetIndex,
+		(m_nActivePetIndex < m_vPetResources.size()) ? m_vPetResources[m_nActivePetIndex].pPet : NULL,
+		GetShopTextRenderContext(),
 		g_pFramework->GetNetworkManager().IsConnected()));
 }
 
@@ -1302,7 +1303,9 @@ void CGameScene::OnProcessingMouseMessage(HWND hWnd, UINT nMessageID, WPARAM wPa
 	}
 
 	const bool bShopMessageProcessed = m_ShopUI.OnProcessingMouseMessage(hWnd, nMessageID, wParam, lParam,
-		m_nMoney, m_vPetResources.size(), m_nActivePetIndex, GetShopTextRenderContext(),
+		m_nMoney, m_vPetResources.size(), m_nActivePetIndex,
+		(m_nActivePetIndex < m_vPetResources.size()) ? m_vPetResources[m_nActivePetIndex].pPet : NULL,
+		GetShopTextRenderContext(),
 		g_pFramework->GetNetworkManager().IsConnected());
 	if (m_ShopUI.ConsumeSettingChangeRequest())
 	{

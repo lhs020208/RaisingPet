@@ -1,35 +1,47 @@
 ﻿// shop page rendering for ShopUI.cpp
 // This file is intentionally included by ShopUI.cpp to keep helper functions in one translation unit.
 
+UINT CShopUI::GetNextEnhancementValue(UINT value, int type) const
+{
+	const UINT maxValue = (type == 0) ? 1000 : 10000;
+	if (value >= maxValue) return value;
+	UINT64 enhanced = 0;
+	if (type == 0)
+		enhanced = (value < 100) ? static_cast<UINT64>(value) + 1
+			: (static_cast<UINT64>(value) * 101 + 99) / 100;
+	else
+		enhanced = (value < 1000) ? static_cast<UINT64>(value) + 10
+			: (static_cast<UINT64>(value) * 101 + 99) / 100;
+	if (enhanced > maxValue) enhanced = maxValue;
+	return static_cast<UINT>(enhanced);
+}
+
+UINT CShopUI::GetEnhancementPrice(UINT value, int type) const
+{
+	const UINT maxValue = (type == 0) ? 1000 : 10000;
+	if (value >= maxValue) return UINT_MAX;
+	const UINT64 price = (type == 0)
+		? 100 + (static_cast<UINT64>(value) * value * 7 + 9) / 10
+		: 50 + (static_cast<UINT64>(value) * 3 + 1) / 2;
+	return static_cast<UINT>((price > UINT_MAX) ? UINT_MAX : price);
+}
+
+bool CShopUI::IsEnhanceButtonDisabled(CPet* activePet, UINT money, int type) const
+{
+	if (!activePet || (type != 0 && type != 1)) return(true);
+	const UINT currentValue = (type == 0) ? activePet->GetPay() : activePet->GetMaxPossession();
+	const UINT nextValue = GetNextEnhancementValue(currentValue, type);
+	if (nextValue == currentValue) return(true);
+	const UINT price = GetEnhancementPrice(currentValue, type);
+	return(price == UINT_MAX || money < price);
+}
+
 void CShopUI::RenderEnhancementPage(ID3D12GraphicsCommandList* commandList, CCamera* camera,
 	CPet* activePet, UINT money, const SHOP_TEXT_RENDER_CONTEXT& context)
 {
 	if (!activePet) return;
 	const float width = camera->m_d3dViewport.Width;
 	const float height = camera->m_d3dViewport.Height;
-	auto nextValue = [](UINT value, int type) -> UINT
-	{
-		const UINT maxValue = (type == 0) ? 1000 : 10000;
-		if (value >= maxValue) return value;
-		UINT64 enhanced = 0;
-		if (type == 0)
-			enhanced = (value < 100) ? static_cast<UINT64>(value) + 1
-				: (static_cast<UINT64>(value) * 101 + 99) / 100;
-		else
-			enhanced = (value < 1000) ? static_cast<UINT64>(value) + 10
-				: (static_cast<UINT64>(value) * 101 + 99) / 100;
-		if (enhanced > maxValue) enhanced = maxValue;
-		return static_cast<UINT>(enhanced);
-	};
-	auto enhancementPrice = [](UINT value, int type) -> UINT
-	{
-		const UINT maxValue = (type == 0) ? 1000 : 10000;
-		if (value >= maxValue) return UINT_MAX;
-		const UINT64 price = (type == 0)
-			? 100 + (static_cast<UINT64>(value) * value * 7 + 9) / 10
-			: 50 + (static_cast<UINT64>(value) * 3 + 1) / 2;
-		return static_cast<UINT>((price > UINT_MAX) ? UINT_MAX : price);
-	};
 	auto measureText = [&context](const std::string& text, float scale) -> float
 	{
 		if (!context.pGlyphResources) return(0.0f);
@@ -67,7 +79,7 @@ void CShopUI::RenderEnhancementPage(ID3D12GraphicsCommandList* commandList, CCam
 		const float frameLeft = (panel.x + panel.z - frameWidth) * 0.5f;
 		const float frameTops[2] = { panel.y + panelHeight * 0.30f, panel.y + panelHeight * 0.56f };
 		const bool maxEnhanced = (type == 0) ? (currentValues[type] >= 1000) : (currentValues[type] >= 10000);
-		const UINT values[2] = { currentValues[type], nextValue(currentValues[type], type) };
+		const UINT values[2] = { currentValues[type], GetNextEnhancementValue(currentValues[type], type) };
 		for (int frameIndex = 0; frameIndex < 2; ++frameIndex)
 		{
 			const XMFLOAT4 frame(frameLeft, frameTops[frameIndex], frameLeft + frameWidth,
@@ -86,12 +98,13 @@ void CShopUI::RenderEnhancementPage(ID3D12GraphicsCommandList* commandList, CCam
 			RenderTextLine(commandList, camera, text, textLeft, textTop, scale, 0x00000000, context);
 		}
 
-		const UINT buttonTint = (m_nPressedEnhanceButton == type) ? 0x00BFBFBF : 0x00FFFFFF;
+		const bool buttonDisabled = IsEnhanceButtonDisabled(activePet, money, type);
+		const UINT buttonTint = buttonDisabled ? 0x00BFBFBF : 0x00FFFFFF;
 		RenderUiImage(commandList, camera, m_PetEnhanceButtonResource,
 			GetEnhanceButtonRectangle(type, width, height), buttonTint);
 		const XMFLOAT4 priceFrame = GetEnhancePriceRectangle(type, width, height);
 		RenderUiImage(commandList, camera, m_PetEnhancePriceFrameResource, priceFrame);
-		const UINT price = enhancementPrice(currentValues[type], type);
+		const UINT price = GetEnhancementPrice(currentValues[type], type);
 		const std::string priceText = maxEnhanced ? "-" : (FormatPossession(price) + "$");
 		const float priceScale = 0.12f;
 		const float priceLeft = (priceFrame.x + priceFrame.z - measureText(priceText, priceScale)) * 0.5f;
@@ -99,7 +112,7 @@ void CShopUI::RenderEnhancementPage(ID3D12GraphicsCommandList* commandList, CCam
 		const float priceTop = priceFrame.y + ((priceFrame.w - priceFrame.y - priceVisibleHeight) * 0.5f)
 			+ 129.0f * priceScale - (priceFrame.w - priceFrame.y) * 0.38f;
 		RenderTextLine(commandList, camera, priceText, priceLeft, priceTop, priceScale,
-			(!maxEnhanced && money < price) ? 0x00FF0000 : 0x00000000, context);
+			(!maxEnhanced && buttonDisabled) ? 0x00FF0000 : 0x00000000, context);
 	}
 }
 

@@ -87,10 +87,10 @@ public:
 		const SHOP_TEXT_RENDER_CONTEXT& textContext, bool bNetworkConnected);
 	bool IsPointOver(float x, float y, float fViewportWidth, float fViewportHeight) const;
 	bool IsPointOverClickableButton(float x, float y, float fViewportWidth, float fViewportHeight,
-		UINT nMoney, size_t nPetCount, size_t nActivePetIndex,
+		UINT nMoney, size_t nPetCount, size_t nActivePetIndex, CPet* pActivePet,
 		const SHOP_TEXT_RENDER_CONTEXT& textContext, bool bNetworkConnected) const;
 	bool OnProcessingMouseMessage(HWND hWnd, UINT nMessageID, WPARAM wParam, LPARAM lParam,
-		UINT nMoney, size_t nPetCount, size_t nActivePetIndex,
+		UINT nMoney, size_t nPetCount, size_t nActivePetIndex, CPet* pActivePet,
 		const SHOP_TEXT_RENDER_CONTEXT& textContext, bool bNetworkConnected);
 	bool OnProcessingKeyboardMessage(HWND hWnd, UINT nMessageID, WPARAM wParam, LPARAM lParam);
 	bool ConsumePetConfirmationRequest(size_t& nSelectedPetIndex);
@@ -246,7 +246,6 @@ private:
 	size_t m_nPreviewPetIndex = static_cast<size_t>(-1);
 	CPet* m_pPreviewPet = NULL;
 	CCamera m_PreviewPetCamera;
-	int m_nPressedEnhanceButton = -1;
 	int m_nPendingEnhancementType = -1;
 	bool m_bPendingLoginSceneReturnRequest = false;
 	int m_nFinancialCategory = 0;
@@ -328,6 +327,9 @@ private:
 		const XMFLOAT4& panel, const std::vector<SHOP_PET_RENDER_RESOURCE>& pets);
 	void RenderEnhancementPage(ID3D12GraphicsCommandList* pd3dCommandList, CCamera* pCamera,
 		CPet* pActivePet, UINT nMoney, const SHOP_TEXT_RENDER_CONTEXT& textContext);
+	UINT GetNextEnhancementValue(UINT nValue, int nType) const;
+	UINT GetEnhancementPrice(UINT nValue, int nType) const;
+	bool IsEnhanceButtonDisabled(CPet* pActivePet, UINT nMoney, int nType) const;
 	XMFLOAT4 GetEnhanceButtonRectangle(int nType, float fViewportWidth, float fViewportHeight) const;
 	XMFLOAT4 GetEnhancePriceRectangle(int nType, float fViewportWidth, float fViewportHeight) const;
 	void RenderFinancialPage(ID3D12GraphicsCommandList* pd3dCommandList, CCamera* pCamera,

@@ -322,7 +322,6 @@ void CShopUI::DeactivateShop(float width, float height, size_t activePetIndex)
 	m_bPetScrollDragging = false;
 	m_bStockNameInputActive = false;
 	m_bStockIssueButtonPressed = false;
-	m_nPressedEnhanceButton = -1;
 	ResetSelectedPet(activePetIndex, m_nCachedPetCount);
 }
 

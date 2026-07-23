@@ -132,7 +132,6 @@ bool CShopUI::ProcessShopUIClick(float x, float y, float width, float height, UI
 		else if (m_eShopPage == SHOP_PAGE::STOCK_SEE_MYGRAPH)
 		{
 			m_eShopPage = SHOP_PAGE::STOCK_MANAGEMENT;
-			m_nPressedEnhanceButton = -1;
 			m_bStockNameInputActive = false;
 			m_bStockIssueButtonPressed = false;
 		}
@@ -146,7 +145,6 @@ bool CShopUI::ProcessShopUIClick(float x, float y, float width, float height, UI
 			|| m_eShopPage == SHOP_PAGE::STOCK_CANT_PUBLISH)
 		{
 			m_eShopPage = SHOP_PAGE::STOCK_MENU;
-			m_nPressedEnhanceButton = -1;
 			m_bStockNameInputActive = false;
 			m_bStockIssueButtonPressed = false;
 		}
@@ -154,7 +152,6 @@ bool CShopUI::ProcessShopUIClick(float x, float y, float width, float height, UI
 		{
 			m_eShopPage = SHOP_PAGE::SHOP_MENU;
 			m_nSelectedShopSlot = -1;
-			m_nPressedEnhanceButton = -1;
 			m_bStockNameInputActive = false;
 			m_bStockIssueButtonPressed = false;
 			ResetSelectedPet(activePetIndex, petCount);
@@ -343,7 +340,7 @@ bool CShopUI::ProcessShopUIClick(float x, float y, float width, float height, UI
 }
 
 bool CShopUI::IsPointOverClickableButton(float x, float y, float width, float height,
-	UINT money, size_t petCount, size_t, const SHOP_TEXT_RENDER_CONTEXT& context,
+	UINT money, size_t petCount, size_t, CPet* activePet, const SHOP_TEXT_RENDER_CONTEXT& context,
 	bool networkConnected) const
 {
 	if (IsPointInRectangle(x, y, GetShopIconRectangle(width, height))) return(true);
@@ -413,7 +410,8 @@ bool CShopUI::IsPointOverClickableButton(float x, float y, float width, float he
 	if (m_eShopPage == SHOP_PAGE::PET_ENHANCE)
 	{
 		for (int type = 0; type < 2; ++type)
-			if (IsPointInRectangle(x, y, GetEnhanceButtonRectangle(type, width, height)))
+			if (!IsEnhanceButtonDisabled(activePet, money, type)
+				&& IsPointInRectangle(x, y, GetEnhanceButtonRectangle(type, width, height)))
 				return(true);
 		return(false);
 	}
@@ -593,7 +591,8 @@ bool CShopUI::OnProcessingKeyboardMessage(HWND hWnd, UINT message, WPARAM wParam
 }
 
 bool CShopUI::OnProcessingMouseMessage(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam,
-	UINT money, size_t nPetCount, size_t activePetIndex, const SHOP_TEXT_RENDER_CONTEXT& context,
+	UINT money, size_t nPetCount, size_t activePetIndex, CPet* activePet,
+	const SHOP_TEXT_RENDER_CONTEXT& context,
 	bool networkConnected)
 {
 	RECT client;
@@ -733,8 +732,11 @@ bool CShopUI::OnProcessingMouseMessage(HWND hWnd, UINT message, WPARAM wParam, L
 			for (int type = 0; type < 2; ++type)
 			{
 				if (!IsPointInRectangle(x, y, GetEnhanceButtonRectangle(type, width, height))) continue;
-				m_nPressedEnhanceButton = type;
-				SetCapture(hWnd);
+				if (!IsEnhanceButtonDisabled(activePet, money, type))
+				{
+					PlayUiClickSound();
+					m_nPendingEnhancementType = type;
+				}
 				return(true);
 			}
 		}
@@ -856,19 +858,6 @@ bool CShopUI::OnProcessingMouseMessage(HWND hWnd, UINT message, WPARAM wParam, L
 				PlayUiClickSound();
 				m_wstrPendingStockIssueName = m_wstrStockName;
 				m_bPendingStockIssueRequest = true;
-			}
-			if (GetCapture() == hWnd) ReleaseCapture();
-			return(true);
-		}
-		if (m_nPressedEnhanceButton >= 0)
-		{
-			const int pressedButton = m_nPressedEnhanceButton;
-			m_nPressedEnhanceButton = -1;
-			if (m_bShopActive && m_eShopPage == SHOP_PAGE::PET_ENHANCE
-				&& IsPointInRectangle(x, y, GetEnhanceButtonRectangle(pressedButton, width, height)))
-			{
-				PlayUiClickSound();
-				m_nPendingEnhancementType = pressedButton;
 			}
 			if (GetCapture() == hWnd) ReleaseCapture();
 			return(true);
