@@ -253,10 +253,12 @@ void RunStockPriceUpdateServer(std::vector<ClientSession>& sessions,
 
 	while (true) {
 		const auto now = std::chrono::system_clock::now();
-		const auto currentHour =
-			std::chrono::time_point_cast<std::chrono::hours>(now);
-		const auto nextHour = currentHour + std::chrono::hours(1);
-		std::this_thread::sleep_until(nextHour);
+		const auto currentMinute =
+			std::chrono::time_point_cast<std::chrono::minutes>(now);
+		const auto minutesSinceEpoch =
+			std::chrono::duration_cast<std::chrono::minutes>(currentMinute.time_since_epoch()).count();
+		const auto minutesToNextUpdate = 10 - (minutesSinceEpoch % 10);
+		std::this_thread::sleep_until(currentMinute + std::chrono::minutes(minutesToNextUpdate));
 
 		int updatedCount = 0;
 		std::string failureReason;
