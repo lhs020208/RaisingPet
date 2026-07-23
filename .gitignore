@@ -493,3 +493,4 @@ RaisingPetClient/External/FMOD/
 # RaisingPet generated runtime copies
 RaisingPetClient/Executable/fmod*.dll
 RaisingPetClient/Executable/Assets/Sound/
+RaisingPetClient/Dist/
